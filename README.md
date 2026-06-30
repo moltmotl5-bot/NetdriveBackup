@@ -36,7 +36,8 @@ cd AutoSwitchBackup2
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # 編輯 NCCM_ADMIN_USER / NCCM_ADMIN_PASS
+cp .env.example .env   # 編輯 NCCM_ADMIN_USER / NCCM_ADMIN_PASS（密碼 ≥12 字元）
+chmod 600 .env
 streamlit run app.py
 ```
 
@@ -57,14 +58,14 @@ docker build -t autoswitchbackup2-nccm:latest .
 
 ### 2. 執行容器
 
-登入帳密用環境變數；備份資料掛載到 host 的 `output/`：
+登入帳密請用 **`--env-file`**（勿在命令列寫 `-e NCCM_ADMIN_PASS=明文`）；備份資料掛載到 host 的 `output/`：
 
 ```bash
+# 專案目錄建立 .env（內容見 .env.example），chmod 600 .env
 docker run -d \
   --name nccm-portal \
   -p 8501:8501 \
-  -e NCCM_ADMIN_USER=admin \
-  -e NCCM_ADMIN_PASS='請改成強密碼' \
+  --env-file .env \
   -v "$(pwd)/output:/app/output" \
   autoswitchbackup2-nccm:latest
 ```
@@ -123,7 +124,10 @@ output/
 
 ## 資安
 
-* 勿將 `.env` 提交至 Git
+* 勿將 `.env` 提交至 Git；建議 `chmod 600 .env`
+* **入口帳密**僅來自環境變數 `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS`（無程式內預設密碼；密碼須 ≥12 字元）
+* 登入成功／失敗寫入 `nccm_auth.log`（不含密碼）；可改 `NCCM_AUDIT_LOG` 路徑
+* Docker 請用 `--env-file .env`，避免密碼出現在 shell 歷史或 `docker inspect`
 * SSH 設備帳密僅在備份頁面輸入，不寫入磁碟
 
 ## 授權
