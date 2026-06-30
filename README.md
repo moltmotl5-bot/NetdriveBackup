@@ -45,10 +45,6 @@ output/
             └── lldp.txt
 ```
 
-## 與 AutoSwitchBackup 主專案差異
-
-主專案 (`../AutoSwitchBackup`) 另含 `parse_topology.py`、`drawio.py`、各類 `test_*`／驗證腳本及完整 `output` 樣本。本副本**僅同步維運入口**；進階拓撲或實驗功能請在主專案開發後再手動複製必要檔案至此。
-
 ## 資安
 
 * 勿將 `.env` 提交至 Git（已列入 `.gitignore`）
