@@ -237,6 +237,20 @@ def _vendor_from_device_path(device_path: str) -> str:
         content = f.read()
     if "Cisco IOS Software" in content or "Cisco Nexus" in content or "NX-OS" in content:
         return "Cisco"
+    if "FortiOS" in content or "FortiGate" in content:
+        return "Fortinet"
+    if "Cisco Controller" in content or (
+        "Product Name" in content and "Wireless" in content
+    ):
+        return "Cisco"
+    if "VRP (R) software" in content and (
+        "AC6605" in content
+        or "AC6005" in content
+        or "AC6800" in content
+        or "WLAN" in content
+        or "AirEngine" in content
+    ):
+        return "Huawei"
     if "VRP (R) software" in content or "Huawei" in content or "elabel" in content:
         return "Huawei"
     return "Unknown"

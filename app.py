@@ -124,6 +124,91 @@ def build_inventory():
                                     re.IGNORECASE,
                                 )
 
+                        elif "FortiOS" in content or "FortiGate" in content:
+                            vendor = "Fortinet"
+                            match_ver = re.search(
+                                r"Version:\s*FortiOS\s+v([^,\s]+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            if match_ver:
+                                sw_version = match_ver.group(1)
+                            serials_list = re.findall(
+                                r"Serial-Number:\s*(\S+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            models_list = re.findall(
+                                r"(FortiGate-[\w-]+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            if not models_list:
+                                plat = re.search(
+                                    r"Platform Type:\s*(\S+)",
+                                    content,
+                                    re.IGNORECASE,
+                                )
+                                if plat:
+                                    models_list = [plat.group(1)]
+
+                        elif (
+                            "Cisco Controller" in content
+                            or (
+                                "Product Name" in content
+                                and "Wireless" in content
+                            )
+                        ):
+                            vendor = "Cisco"
+                            match_ver = re.search(
+                                r"Product Version\.{2,}\s*([^\r\n]+)",
+                                content,
+                            )
+                            if match_ver:
+                                sw_version = match_ver.group(1).strip()
+                            else:
+                                match_ver = re.search(
+                                    r"Version\.{2,}\s*([^\r\n]+)",
+                                    content,
+                                )
+                                if match_ver:
+                                    sw_version = match_ver.group(1).strip()
+                            serials_list = re.findall(
+                                r"Serial Number\.{2,}\s*([A-Za-z0-9]+)",
+                                content,
+                            )
+                            models_list = re.findall(
+                                r"Product Name\.{2,}\s*([^\r\n]+)",
+                                content,
+                            )
+                            if models_list:
+                                models_list = [m.strip() for m in models_list]
+
+                        elif "VRP (R) software" in content and (
+                            "AC6605" in content
+                            or "AC6005" in content
+                            or "AC6800" in content
+                            or "WLAN" in content
+                            or "AirEngine" in content
+                        ):
+                            vendor = "Huawei"
+                            match_ver = re.search(
+                                r"VRP\s*\(R\)\s*software,\s*Version\s+([^\s(]+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            if match_ver:
+                                sw_version = match_ver.group(1)
+                            serials_list = re.findall(
+                                r"(?:ESN|BarCode)[:=](\S+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            models_list = re.findall(
+                                r"(?:AC\d{4}|AirEngine[\w-]+)",
+                                content,
+                            )
+
                         elif "VRP (R) software" in content or "Huawei" in content or "elabel" in content:
                             vendor = "Huawei"
                             match_ver = re.search(r'Version\s+([^(\s]+)', content)
@@ -315,6 +400,30 @@ else:
                                     'config': 'display current-configuration', 'interfaces': 'display interface brief',
                                     'version_info': 'display elabel', 'cdp': 'display cdp neighbor', 'lldp': 'display lldp neighbor brief'
                                 }
+                            elif vendor == 'fortinet':
+                                device_type = 'fortinet'
+                                commands = {
+                                    'config': 'show full-configuration',
+                                    'version_info': 'get system status',
+                                    'interfaces': 'get system interface physical',
+                                }
+                            elif vendor in ('cisco_wlc', 'cisco-wlc'):
+                                device_type = 'cisco_wlc'
+                                commands = {
+                                    'config': 'show running-config',
+                                    'version_info': 'show sysinfo',
+                                    'interfaces': 'show interface summary',
+                                    'cdp': 'show cdp neighbors',
+                                    'lldp': 'show lldp neighbors',
+                                }
+                            elif vendor in ('huawei_wlc', 'huawei-wlc'):
+                                device_type = 'huawei'
+                                commands = {
+                                    'config': 'display current-configuration',
+                                    'version_info': 'display version',
+                                    'interfaces': 'display interface brief',
+                                    'lldp': 'display lldp neighbor brief',
+                                }
                             else:
                                 failed_list.append({'Site': site, 'IP': target_ip, 'Reason': f"未知的廠牌: {vendor}"})
                                 update_logs(f"❌ 錯誤: {target_ip} 未知的廠牌設定")
@@ -326,6 +435,8 @@ else:
                                 'username': username, 'password': password,
                                 'timeout': 10, 'auth_timeout': 10
                             }
+                            if vendor == 'fortinet':
+                                netmiko_device['read_timeout'] = 120
 
                             try:
                                 with ConnectHandler(**netmiko_device) as net_connect:

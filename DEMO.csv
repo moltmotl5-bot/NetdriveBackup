@@ -1,3 +1,6 @@
 Site,IP,Vendor
 site1,192.168.1.1,cisco
 site2,192.168.1.2,huawei
+site3,192.168.1.3,fortinet
+site4,192.168.1.4,cisco_wlc
+site5,192.168.1.5,huawei_wlc
