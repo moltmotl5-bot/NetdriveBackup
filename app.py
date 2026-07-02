@@ -510,8 +510,6 @@ else:
                                 'username': username, 'password': password,
                                 'timeout': 10, 'auth_timeout': 10
                             }
-                            if vendor == 'fortinet':
-                                netmiko_device['read_timeout'] = 120
 
                             try:
                                 with ConnectHandler(**netmiko_device) as net_connect:
@@ -527,7 +525,17 @@ else:
                                         os.makedirs(backup_folder)
 
                                     for cmd_type, cmd_string in commands.items():
-                                        output_result = net_connect.send_command(cmd_string)
+                                        if vendor == 'fortinet':
+                                            try:
+                                                output_result = net_connect.send_command(
+                                                    cmd_string, read_timeout=120
+                                                )
+                                            except TypeError:
+                                                output_result = net_connect.send_command(
+                                                    cmd_string, delay_factor=4
+                                                )
+                                        else:
+                                            output_result = net_connect.send_command(cmd_string)
                                         file_name = os.path.join(backup_folder, f"{cmd_type}.txt")
                                         with open(file_name, "w", encoding="utf-8") as f:
                                             f.write(output_result)
