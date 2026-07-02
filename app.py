@@ -429,11 +429,11 @@ def _resolve_vendor_profile(vendor: str) -> tuple[str, dict]:
         }
     if vendor == "cisco_wlc":
         return "cisco_wlc", {
-            "config": "show run-config",
             "version_info": "show sysinfo",
             "interfaces": "show interface summary",
             "cdp": "show cdp neighbors",
             "lldp": "show lldp neighbors",
+            "config": "show run-config",
         }
     if vendor in ("huawei_wlc",):
         return "huawei", {
@@ -571,6 +571,26 @@ def _fetch_cisco_wlc_run_config(net_connect) -> str:
     )
 
 
+def _send_cisco_wlc_plain(net_connect, cmd_string: str) -> str:
+    """WLC often breaks send_command echo matching; prefer timing / cmd_verify=False."""
+    try:
+        net_connect.clear_buffer()
+    except Exception:
+        pass
+    try:
+        return net_connect.send_command(
+            cmd_string,
+            read_timeout=180,
+            cmd_verify=False,
+            strip_prompt=True,
+            strip_command=True,
+        )
+    except ReadTimeout:
+        return net_connect.send_command_timing(
+            cmd_string, delay_factor=4, max_loops=800, strip_prompt=True
+        )
+
+
 def _send_cisco_wlc_command(net_connect, cmd_type: str, cmd_string: str) -> str:
     """Use Netmiko WLC helpers for paging / 'Press Enter' / 'display next' prompts."""
     if cmd_type == "config":
@@ -582,10 +602,14 @@ def _send_cisco_wlc_command(net_connect, cmd_type: str, cmd_string: str) -> str:
             text = net_connect.send_command_w_enter(
                 run_cmd, delay_factor=6, max_loops=6000
             )
+        try:
+            net_connect.clear_buffer()
+        except Exception:
+            pass
         return text
     if cmd_type == "interfaces" and hasattr(net_connect, "_send_command_w_yes"):
-        return net_connect._send_command_w_yes(cmd_string, delay_factor=2)
-    return net_connect.send_command(cmd_string, read_timeout=180)
+        return net_connect._send_command_w_yes(cmd_string, delay_factor=3)
+    return _send_cisco_wlc_plain(net_connect, cmd_string)
 
 
 def _prepare_cisco_wlc_session(net_connect) -> None:
