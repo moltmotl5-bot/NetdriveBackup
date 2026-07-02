@@ -227,6 +227,32 @@ NAV_LABELS = {
     NAV_NEIGHBORS: "🔗 CDP/LLDP 鄰居 (CDP/LLDP neighbors table)",
 }
 
+CONFIG_PREVIEW_VISIBLE_LINES = 20
+
+
+def _render_running_config_preview(config_text: str) -> None:
+    """Show config in a fixed-height frame; scroll inside for the rest."""
+    line_px = 21
+    preview_height = CONFIG_PREVIEW_VISIBLE_LINES * line_px
+    st.caption(
+        f"預覽約 {CONFIG_PREVIEW_VISIBLE_LINES} 行高度，請在框內向下捲動查看完整 Running-Configuration。"
+    )
+    try:
+        st.code(
+            config_text,
+            language="text",
+            line_numbers=True,
+            height=preview_height,
+        )
+    except TypeError:
+        st.text_area(
+            "Running-Configuration",
+            value=config_text,
+            height=preview_height,
+            disabled=True,
+            label_visibility="collapsed",
+        )
+
 # ==========================================
 # 1. 全域配置與功能函數
 # ==========================================
@@ -790,7 +816,7 @@ else:
                                         config_text = f.read()
 
                                     st.markdown(f"**版本：** `{selected_ts}`")
-                                    st.code(config_text, language="text")
+                                    _render_running_config_preview(config_text)
                                     st.download_button(
                                         label="⬇️ 下載此版本 config.txt",
                                         data=config_text,
