@@ -429,11 +429,10 @@ def _resolve_vendor_profile(vendor: str) -> tuple[str, dict]:
         }
     if vendor == "cisco_wlc":
         return "cisco_wlc", {
-            "version_info": "show sysinfo",
-            "interfaces": "show interface summary",
+            "version_info": "show inventory",
+            "ap_cdp": "show ap cdp neighbors all",
             "cdp": "show cdp neighbors",
-            "lldp": "show lldp neighbors",
-            "config": "show run-config",
+            "config": "show run-config no-ap",
         }
     if vendor in ("huawei_wlc",):
         return "huawei", {
@@ -446,7 +445,7 @@ def _resolve_vendor_profile(vendor: str) -> tuple[str, dict]:
 
 
 def _is_aireos_wlc_prompt(prompt: str) -> bool:
-    """Cisco AireOS WLC user EXEC prompt, e.g. '(H3-LB2-WLC1) >'."""
+    """Cisco AireOS WLC user EXEC prompt, e.g. '(hostname) >'."""
     return bool(re.match(r"^\([^)]+\)\s*>\s*$", (prompt or "").strip()))
 
 
@@ -524,9 +523,8 @@ def _netmiko_connect_params(
     return params
 
 
-def _fetch_cisco_wlc_run_config(net_connect) -> str:
-    """Stream show run-config; handle WLC 'Press Enter' / inventory interstitials (5520)."""
-    cmd = "show run-config"
+def _fetch_cisco_wlc_run_config(net_connect, cmd: str) -> str:
+    """Stream WLC run-config; handle 'Press Enter' / inventory interstitials."""
     net_connect.write_channel(net_connect.normalize_cmd(cmd))
     chunks: list[str] = []
     deadline = time.time() + 2400
@@ -594,13 +592,10 @@ def _send_cisco_wlc_plain(net_connect, cmd_string: str) -> str:
 def _send_cisco_wlc_command(net_connect, cmd_type: str, cmd_string: str) -> str:
     """Use Netmiko WLC helpers for paging / 'Press Enter' / 'display next' prompts."""
     if cmd_type == "config":
-        text = _fetch_cisco_wlc_run_config(net_connect)
+        text = _fetch_cisco_wlc_run_config(net_connect, cmd_string)
         if len(text.strip()) < 80:
-            run_cmd = "show run-config"
-            if "running-config" in cmd_string:
-                run_cmd = "show run-config"
             text = net_connect.send_command_w_enter(
-                run_cmd, delay_factor=6, max_loops=6000
+                cmd_string, delay_factor=6, max_loops=6000
             )
         try:
             net_connect.clear_buffer()
@@ -786,6 +781,25 @@ def build_inventory():
                             models_list = re.findall(
                                 r"Product Name\.{2,}\s*([^\r\n]+)",
                                 content,
+                            )
+                            if models_list:
+                                models_list = [m.strip() for m in models_list]
+
+                        elif re.search(
+                            r"PID:\s*\S+.*SN:\s*\S+",
+                            content,
+                            re.IGNORECASE | re.DOTALL,
+                        ):
+                            vendor = "Cisco"
+                            models_list = re.findall(
+                                r"PID:\s*([^,\r\n]+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            serials_list = re.findall(
+                                r"SN:\s*([A-Za-z0-9]+)",
+                                content,
+                                re.IGNORECASE,
                             )
                             if models_list:
                                 models_list = [m.strip() for m in models_list]
