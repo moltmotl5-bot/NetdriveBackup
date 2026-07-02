@@ -137,14 +137,21 @@ def _netmiko_session_log_path(target_ip: str, attempt: int) -> str:
 
 
 @lru_cache(maxsize=1)
-def _netmiko_connect_param_names() -> frozenset[str]:
-    return frozenset(inspect.signature(ConnectHandler.__init__).parameters) - {"self"}
+def _netmiko_init_param_names() -> frozenset[str]:
+    from netmiko.base_connection import BaseConnection
+
+    return frozenset(inspect.signature(BaseConnection.__init__).parameters) - {"self"}
 
 
-def _filter_netmiko_params(params: dict) -> tuple[dict, list[str]]:
-    allowed = _netmiko_connect_param_names()
+def _sanitize_netmiko_params(params: dict) -> tuple[dict, list[str]]:
+    """Drop kwargs this Netmiko version does not accept (never remove device_type)."""
+    allowed = _netmiko_init_param_names() | frozenset({"device_type"})
     dropped = sorted(k for k in params if k not in allowed)
-    return {k: v for k, v in params.items() if k in allowed}, dropped
+    clean = {k: v for k, v in params.items() if k in allowed}
+    clean.pop("session_log_record", None)  # legacy typo guard
+    if "session_log_record" in params:
+        dropped.append("session_log_record")
+    return clean, dropped
 
 
 def _tcp_probe(host: str, port: int, timeout: float) -> socket.socket:
@@ -179,11 +186,13 @@ def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, r
                 params.pop("disabled_algorithms", None)
         session_log = _netmiko_session_log_path(target_ip, attempt)
         params["session_log"] = session_log
-        if "session_log_record_writes" in _netmiko_connect_param_names():
+        if "session_log_record_writes" in _netmiko_init_param_names():
             params["session_log_record_writes"] = True
-        params, dropped = _filter_netmiko_params(params)
+        params, dropped = _sanitize_netmiko_params(params)
         if dropped:
-            run_log.info("Netmiko ignored params for %s: %s", target_ip, ", ".join(dropped))
+            run_log.info("Netmiko dropped params for %s: %s", target_ip, ", ".join(dropped))
+        if "device_type" not in params or not params["device_type"]:
+            raise ValueError(f"Missing device_type for {target_ip} (vendor={vendor})")
         meta = (
             f"type={params.get('device_type')} port={port} "
             f"conn_timeout={params.get('conn_timeout')} banner={params.get('banner_timeout')}"
@@ -366,6 +375,21 @@ def _send_fortinet_command(net_connect, cmd_string: str, *, long_output: bool = 
     if long_output and cmd_string.strip() == "show full-configuration":
         return _fortinet_fetch_full_configuration(net_connect)
     return net_connect.send_command(cmd_string, read_timeout=120)
+
+
+def _normalize_vendor(raw: str) -> str:
+    v = str(raw).strip().lower().replace(" ", "_")
+    v = v.replace("-", "_")
+    while "__" in v:
+        v = v.replace("__", "_")
+    aliases = {
+        "wlc": "cisco_wlc",
+        "cisco_wlc": "cisco_wlc",
+        "aireos": "cisco_wlc",
+        "fortigate": "fortinet",
+        "forti": "fortinet",
+    }
+    return aliases.get(v, v)
 
 
 def _netmiko_connect_params(
@@ -801,7 +825,7 @@ else:
                             for index, row in df.iterrows():
                                 site = str(row['Site']).strip()
                                 target_ip = str(row['IP']).strip()
-                                vendor = str(row['Vendor']).strip().lower()
+                                vendor = _normalize_vendor(row["Vendor"])
 
                                 current_count = index + 1
                                 status_text.info(f"⏳ 正在處理: [{site}] {target_ip} ({vendor}) ... ({current_count}/{total_devices})")
