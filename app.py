@@ -7,6 +7,8 @@ import re
 import secrets
 import socket
 import time
+import inspect
+from functools import lru_cache
 from pathlib import Path
 from dotenv import load_dotenv
 from netmiko import ConnectHandler
@@ -134,6 +136,17 @@ def _netmiko_session_log_path(target_ip: str, attempt: int) -> str:
     return os.path.join(OUTPUT_LOG_DIR, f"netmiko_{safe_ip}_{ts}{suffix}.log")
 
 
+@lru_cache(maxsize=1)
+def _netmiko_connect_param_names() -> frozenset[str]:
+    return frozenset(inspect.signature(ConnectHandler.__init__).parameters) - {"self"}
+
+
+def _filter_netmiko_params(params: dict) -> tuple[dict, list[str]]:
+    allowed = _netmiko_connect_param_names()
+    dropped = sorted(k for k in params if k not in allowed)
+    return {k: v for k, v in params.items() if k in allowed}, dropped
+
+
 def _tcp_probe(host: str, port: int, timeout: float) -> socket.socket:
     sock = socket.create_connection((host, port), timeout=timeout)
     sock.settimeout(timeout)
@@ -166,7 +179,11 @@ def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, r
                 params.pop("disabled_algorithms", None)
         session_log = _netmiko_session_log_path(target_ip, attempt)
         params["session_log"] = session_log
-        params["session_log_record"] = True
+        if "session_log_record_writes" in _netmiko_connect_param_names():
+            params["session_log_record_writes"] = True
+        params, dropped = _filter_netmiko_params(params)
+        if dropped:
+            run_log.info("Netmiko ignored params for %s: %s", target_ip, ", ".join(dropped))
         meta = (
             f"type={params.get('device_type')} port={port} "
             f"conn_timeout={params.get('conn_timeout')} banner={params.get('banner_timeout')}"
