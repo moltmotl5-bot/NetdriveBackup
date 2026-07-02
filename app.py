@@ -569,6 +569,42 @@ def _fetch_cisco_wlc_run_config(net_connect, cmd: str) -> str:
     )
 
 
+def _wlc_file_with_header(cmd: str, body: str) -> str:
+    """So saved .txt clearly matches the CLI command (AireOS echoes differ from filename)."""
+    body = (body or "").strip()
+    first = body.splitlines()[0].strip().lower() if body else ""
+    cmd_l = cmd.strip().lower()
+    if first and (first == cmd_l or first.startswith(cmd_l.split()[0])):
+        body = "\n".join(body.splitlines()[1:]).strip()
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return f"# NCCM command: {cmd}\n# captured: {ts}\n\n{body}\n"
+
+
+def _trim_wlc_config_output(text: str) -> str:
+    """AireOS often prepends System Inventory / notices before run-config body."""
+    if not text:
+        return text
+    out = text
+    out = re.sub(
+        r"System Inventory.*?(?=\n!|\nversion |\nBuilding Configuration|\nap )",
+        "",
+        out,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    out = re.sub(
+        r"Notice!.*?Press Enter to continue\.\s*",
+        "",
+        out,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    lines = out.splitlines()
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if s.startswith("!") or re.match(r"^(version|ap |wlan|interface )", s, re.I):
+            return "\n".join(lines[i:]).strip()
+    return out.strip()
+
+
 def _send_cisco_wlc_plain(net_connect, cmd_string: str) -> str:
     """WLC often breaks send_command echo matching; prefer timing / cmd_verify=False."""
     try:
@@ -592,15 +628,33 @@ def _send_cisco_wlc_plain(net_connect, cmd_string: str) -> str:
 def _send_cisco_wlc_command(net_connect, cmd_type: str, cmd_string: str) -> str:
     """Use Netmiko WLC helpers for paging / 'Press Enter' / 'display next' prompts."""
     if cmd_type == "config":
-        text = _fetch_cisco_wlc_run_config(net_connect, cmd_string)
-        if len(text.strip()) < 80:
-            text = net_connect.send_command_w_enter(
-                cmd_string, delay_factor=6, max_loops=6000
-            )
         try:
             net_connect.clear_buffer()
         except Exception:
             pass
+        text = ""
+        if hasattr(net_connect, "send_command_w_enter"):
+            text = net_connect.send_command_w_enter(
+                cmd_string, delay_factor=6, max_loops=8000
+            )
+        if len((text or "").strip()) < 200:
+            text = _fetch_cisco_wlc_run_config(net_connect, cmd_string)
+        text = _trim_wlc_config_output(text)
+        try:
+            net_connect.clear_buffer()
+        except Exception:
+            pass
+        return text
+    if cmd_type in ("ap_cdp", "cdp") and hasattr(net_connect, "send_command_w_enter"):
+        try:
+            net_connect.clear_buffer()
+        except Exception:
+            pass
+        text = net_connect.send_command_w_enter(
+            cmd_string, delay_factor=4, max_loops=5000
+        )
+        if len((text or "").strip()) < 30:
+            text = _send_cisco_wlc_plain(net_connect, cmd_string)
         return text
     if cmd_type == "interfaces" and hasattr(net_connect, "_send_command_w_yes"):
         return net_connect._send_command_w_yes(cmd_string, delay_factor=3)
@@ -689,6 +743,14 @@ def build_inventory():
                 if os.path.exists(version_file):
                     with open(version_file, "r", encoding="utf-8") as f:
                         content = f.read()
+                        if content.lstrip().startswith("# NCCM command:"):
+                            content = re.sub(
+                                r"^# NCCM command:.*?\n\n",
+                                "",
+                                content,
+                                count=1,
+                                flags=re.DOTALL,
+                            )
 
                         if (
                             "Cisco IOS Software" in content
@@ -1098,6 +1160,9 @@ else:
                                             elif vendor == "cisco_wlc":
                                                 output_result = _send_cisco_wlc_command(
                                                     net_connect, cmd_type, cmd_string
+                                                )
+                                                output_result = _wlc_file_with_header(
+                                                    cmd_string, output_result
                                                 )
                                             else:
                                                 output_result = net_connect.send_command(cmd_string)
