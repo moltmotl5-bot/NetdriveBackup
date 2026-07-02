@@ -188,7 +188,7 @@ def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, r
             elif attempt >= 2:
                 params.pop("disabled_algorithms", None)
         session_log = _netmiko_session_log_path(target_ip, attempt)
-        if wlc or os.getenv("NCCM_NETMIKO_SESSION_LOG", "").strip().lower() in (
+        if os.getenv("NCCM_NETMIKO_SESSION_LOG", "").strip().lower() in (
             "1",
             "true",
             "yes",
