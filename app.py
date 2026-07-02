@@ -673,10 +673,12 @@ def _prepare_cisco_wlc_session(net_connect) -> None:
 NAV_BACKUP = "backup"
 NAV_INVENTORY = "inventory"
 NAV_NEIGHBORS = "neighbors"
+NAV_INTERFACE_MAP = "interface_map"
 NAV_LABELS = {
     NAV_BACKUP: "🚀 批次備份作業 (Backup Engine)",
     NAV_INVENTORY: "📊 設備總表與版控 (Inventory & Versioning)",
     NAV_NEIGHBORS: "🔗 CDP/LLDP 鄰居 (CDP/LLDP neighbors table)",
+    NAV_INTERFACE_MAP: "🗺️ Device Interface Map",
 }
 
 CONFIG_PREVIEW_VISIBLE_LINES = 20
@@ -999,6 +1001,16 @@ else:
             key="nav_btn_neighbors",
         ):
             st.session_state["nav_page"] = NAV_NEIGHBORS
+            st.rerun()
+        if st.button(
+            NAV_LABELS[NAV_INTERFACE_MAP],
+            width="stretch",
+            type="primary"
+            if st.session_state["nav_page"] == NAV_INTERFACE_MAP
+            else "secondary",
+            key="nav_btn_interface_map",
+        ):
+            st.session_state["nav_page"] = NAV_INTERFACE_MAP
             st.rerun()
         st.divider()
         if st.button("🚪 登出系統", width="stretch"):
@@ -1491,3 +1503,151 @@ else:
                             width="stretch",
                             key="neighbors_neighbor_table",
                         )
+
+    # ==========================================
+    # Device Interface Map
+    # ==========================================
+    elif nav_page == NAV_INTERFACE_MAP:
+        from interface_map import load_device_interface_table
+
+        st.markdown("從最新備份的 `interfaces.txt` 解析埠位狀態；無介面檔時改從 `config.txt` 擷取 interface/description。")
+
+        if not os.path.exists(OUTPUT_DIR):
+            st.warning("⚠️ `output` 資料夾不存在。請先執行備份任務產生資料！")
+        else:
+            df = build_inventory()
+            if df.empty:
+                st.info("📭 暫無設備資料。請先執行備份任務。")
+            else:
+                col1, col2, col3 = st.columns([2, 2, 1])
+                with col1:
+                    search_term = st.text_input(
+                        "🔍 搜尋設備 (IP/Hostname/Model)",
+                        placeholder="輸入關鍵字...",
+                        key="iface_map_search",
+                    )
+                with col2:
+                    site_filter = st.selectbox(
+                        "📍 篩選 Site",
+                        ["全部"] + sorted(df["Site"].unique().tolist()),
+                        key="iface_map_site",
+                    )
+                with col3:
+                    vendor_filter = st.selectbox(
+                        "🏭 篩選廠牌",
+                        ["全部"] + sorted(df["Vendor"].unique().tolist()),
+                        key="iface_map_vendor",
+                    )
+
+                filtered_df = df.copy()
+                if search_term:
+                    mask = (
+                        filtered_df["IP"].str.contains(search_term, case=False, na=False)
+                        | filtered_df["Hostname"].str.contains(
+                            search_term, case=False, na=False
+                        )
+                        | filtered_df["Model"].str.contains(
+                            search_term, case=False, na=False
+                        )
+                    )
+                    filtered_df = filtered_df[mask]
+                if site_filter != "全部":
+                    filtered_df = filtered_df[filtered_df["Site"] == site_filter]
+                if vendor_filter != "全部":
+                    filtered_df = filtered_df[filtered_df["Vendor"] == vendor_filter]
+
+                filtered_df = filtered_df.reset_index(drop=True)
+                display_df = filtered_df.drop(columns=["Path"])
+
+                iface_table_event = st.dataframe(
+                    display_df,
+                    column_config={
+                        "Site": "Site",
+                        "Vendor": "廠牌",
+                        "Model": "型號",
+                        "IP": "IP 位址",
+                        "Hostname": "主機名稱",
+                        "Software Version": "軟體版本",
+                        "Serial Number": "序列號",
+                    },
+                    hide_index=True,
+                    width="stretch",
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="interface_map_device_table",
+                )
+
+                st.caption(
+                    f"顯示 {len(filtered_df)} 筆記錄（總共 {len(df)} 筆）· 點選一列以查看介面表"
+                )
+
+                selected_rows = []
+                if iface_table_event is not None and getattr(
+                    iface_table_event, "selection", None
+                ):
+                    selected_rows = list(iface_table_event.selection.rows or [])
+
+                if selected_rows:
+                    row_idx = selected_rows[0]
+                    if 0 <= row_idx < len(filtered_df):
+                        row = filtered_df.iloc[row_idx]
+                        device_path = row["Path"]
+                        device_label = f"{row['Hostname']} ({row['IP']})"
+                        vendor = str(row.get("Vendor", ""))
+
+                        st.divider()
+                        st.subheader(f"🗺️ Interface Map — {device_label}")
+
+                        dates = []
+                        if os.path.isdir(device_path):
+                            dates = sorted(
+                                [
+                                    d
+                                    for d in os.listdir(device_path)
+                                    if os.path.isdir(os.path.join(device_path, d))
+                                ],
+                                reverse=True,
+                            )
+                        selected_ts = dates[0] if dates else None
+                        if len(dates) > 1:
+                            selected_ts = st.selectbox(
+                                "備份版本",
+                                dates,
+                                index=0,
+                                key=f"iface_map_ts_{row['IP']}",
+                            )
+
+                        ts, iface_df, source_note = load_device_interface_table(
+                            device_path,
+                            vendor,
+                            snapshot=selected_ts,
+                        )
+
+                        if ts:
+                            st.caption(f"資料來源：{source_note} · 備份時間 `{ts}`")
+                        else:
+                            st.warning("此設備尚無備份快照。")
+
+                        if vendor.lower() == "cisco" and "missing" in source_note:
+                            st.info(
+                                "Cisco WLC 備份未含 `interfaces.txt`；若為控制器，介面資訊可能僅見於 `config.txt` 的 interface 區段。"
+                            )
+
+                        if iface_df.empty:
+                            st.info("無法解析介面資料。請確認已備份且含 `interfaces.txt`（交換器／路由器）。")
+                        else:
+                            st.dataframe(
+                                iface_df,
+                                column_config={
+                                    "Port": "Port",
+                                    "Description": "Description",
+                                    "Status": "Status",
+                                    "Vlan": "Vlan",
+                                    "Speed": "Speed",
+                                    "Type": "Type",
+                                },
+                                hide_index=True,
+                                width="stretch",
+                                key="interface_map_port_table",
+                            )
+                            st.caption(f"共 **{len(iface_df)}** 個介面／埠位")
