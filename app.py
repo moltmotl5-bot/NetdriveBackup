@@ -1,10 +1,12 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import logging
 import os
 import re
 import secrets
 import time
+from pathlib import Path
 from dotenv import load_dotenv
 from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
@@ -88,6 +90,95 @@ if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
 OUTPUT_DIR = "output"
+OUTPUT_LOG_DIR = os.path.join(OUTPUT_DIR, "log")
+
+
+class BackupRunLog:
+    """Write UI backup lines + netmiko/paramiko DEBUG to output/log."""
+
+    def __init__(self, run_id: str):
+        os.makedirs(OUTPUT_LOG_DIR, exist_ok=True)
+        self.path = os.path.join(OUTPUT_LOG_DIR, f"backup_{run_id}.log")
+        self._handler = logging.FileHandler(self.path, encoding="utf-8")
+        self._handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        self._attached: list[logging.Logger] = []
+        for name in ("netmiko", "paramiko", "nccm.backup"):
+            lg = logging.getLogger(name)
+            lg.setLevel(logging.DEBUG)
+            lg.addHandler(self._handler)
+            self._attached.append(lg)
+        self.app = logging.getLogger("nccm.backup")
+        self.app.info("Backup run started run_id=%s", run_id)
+
+    def info(self, message: str) -> None:
+        self.app.info(message)
+
+    def exception(self, message: str, *args) -> None:
+        self.app.exception(message, *args)
+
+    def close(self) -> None:
+        for lg in self._attached:
+            lg.removeHandler(self._handler)
+        self._handler.close()
+
+
+def _netmiko_session_log_path(target_ip: str, attempt: int) -> str:
+    os.makedirs(OUTPUT_LOG_DIR, exist_ok=True)
+    safe_ip = re.sub(r"[^0-9a-zA-Z._-]", "_", target_ip)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    suffix = f"_try{attempt + 1}" if attempt else ""
+    return os.path.join(OUTPUT_LOG_DIR, f"netmiko_{safe_ip}_{ts}{suffix}.log")
+
+
+def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, run_log):
+    wlc = vendor in ("cisco_wlc", "cisco-wlc")
+    max_attempts = 3 if wlc else 1
+    last_exc = None
+    for attempt in range(max_attempts):
+        params = dict(device_params)
+        if wlc:
+            params.update(
+                conn_timeout=90 + attempt * 45,
+                banner_timeout=45 + attempt * 20,
+                auth_timeout=120 + attempt * 30,
+                timeout=180,
+            )
+        session_log = _netmiko_session_log_path(target_ip, attempt)
+        params["session_log"] = session_log
+        params["session_log_record"] = True
+        meta = (
+            f"type={params.get('device_type')} conn_timeout={params.get('conn_timeout')} "
+            f"banner={params.get('banner_timeout')}"
+        )
+        update_logs(f"🔌 {target_ip} 連線 {attempt + 1}/{max_attempts} ({meta})")
+        run_log.info("Connect %s attempt %s %s log=%s", target_ip, attempt + 1, meta, session_log)
+        try:
+            conn = ConnectHandler(**params)
+            update_logs(f"✅ {target_ip} 已連線 · session log: {session_log}")
+            run_log.info("Connected %s", target_ip)
+            return conn
+        except NetmikoAuthenticationException:
+            raise
+        except Exception as exc:
+            last_exc = exc
+            short = str(exc).split("\n")[0]
+            update_logs(f"❌ {target_ip} 連線失敗: {short}")
+            update_logs(f"   → Netmiko log: {session_log}")
+            run_log.exception("Connect failed %s: %s", target_ip, short)
+            if os.path.isfile(session_log):
+                try:
+                    tail = Path(session_log).read_text(encoding="utf-8", errors="replace")[-4000:]
+                    run_log.info("session_log tail:\n%s", tail)
+                except OSError:
+                    pass
+            if attempt + 1 < max_attempts:
+                delay = 5 * (attempt + 1)
+                update_logs(f"⏳ {delay}s 後重試 {target_ip}…")
+                time.sleep(delay)
+    raise last_exc
+
 
 _FORTINET_DISABLE_PAGING = [
     "config system console",
@@ -239,12 +330,15 @@ def _netmiko_connect_params(
     }
     if vendor in ("cisco_wlc", "cisco-wlc"):
         params.update(
-            timeout=120,
-            auth_timeout=90,
-            conn_timeout=60,
-            banner_timeout=30,
+            timeout=180,
+            auth_timeout=120,
+            conn_timeout=90,
+            banner_timeout=45,
             fast_cli=False,
-            global_delay_factor=3,
+            global_delay_factor=4,
+            use_keys=False,
+            allow_agent=False,
+            ssh_strict=False,
         )
     elif vendor == "fortinet":
         params.update(conn_timeout=30, timeout=90, auth_timeout=45)
@@ -308,6 +402,8 @@ def build_inventory():
         return pd.DataFrame()
 
     for site in os.listdir(OUTPUT_DIR):
+        if site == "log":
+            continue
         site_path = os.path.join(OUTPUT_DIR, site)
         if not os.path.isdir(site_path): continue
 
@@ -628,138 +724,163 @@ else:
                         log_container = st.container(height=300)
                         log_placeholder = log_container.empty()
                         live_logs = []
+                        run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        backup_run_log = BackupRunLog(run_id)
 
                         def update_logs(message):
                             time_str = datetime.datetime.now().strftime("%H:%M:%S")
                             live_logs.append(f"[{time_str}] {message}")
                             if len(live_logs) > 500:
                                 live_logs.pop(0)
-                            log_placeholder.code("\\n".join(live_logs), language="bash")
+                            log_placeholder.code("\n".join(live_logs), language="bash")
+                            backup_run_log.info(message)
 
-                        for index, row in df.iterrows():
-                            site = str(row['Site']).strip()
-                            target_ip = str(row['IP']).strip()
-                            vendor = str(row['Vendor']).strip().lower()
+                        update_logs(f"📁 主日誌: {backup_run_log.path}")
+                        update_logs(f"📁 Netmiko 每台: {OUTPUT_LOG_DIR}/netmiko_<IP>_*.log")
 
-                            current_count = index + 1
-                            status_text.info(f"⏳ 正在處理: [{site}] {target_ip} ({vendor}) ... ({current_count}/{total_devices})")
-                            update_logs(f"開始嘗試連線至 {target_ip} ({vendor})...")
+                        try:
+                            for index, row in df.iterrows():
+                                site = str(row['Site']).strip()
+                                target_ip = str(row['IP']).strip()
+                                vendor = str(row['Vendor']).strip().lower()
 
-                            if vendor == 'cisco':
-                                device_type = 'cisco_ios'
-                                commands = {
-                                    'config': 'show running-config', 'interfaces': 'show interface status',
-                                    'version_info': 'show version', 'cdp': 'show cdp neighbors', 'lldp': 'show lldp neighbors'
-                                }
-                            elif vendor == 'huawei':
-                                device_type = 'huawei'
-                                commands = {
-                                    'config': 'display current-configuration', 'interfaces': 'display interface brief',
-                                    'version_info': 'display elabel', 'cdp': 'display cdp neighbor', 'lldp': 'display lldp neighbor brief'
-                                }
-                            elif vendor == 'fortinet':
-                                device_type = 'fortinet'
-                                commands = {
-                                    'config': 'show full-configuration',
-                                    'version_info': 'get system status',
-                                    'interfaces': 'get system interface physical',
-                                }
-                            elif vendor in ('cisco_wlc', 'cisco-wlc'):
-                                device_type = 'cisco_wlc'
-                                commands = {
-                                    'config': 'show run-config',
-                                    'version_info': 'show sysinfo',
-                                    'interfaces': 'show interface summary',
-                                    'cdp': 'show cdp neighbors',
-                                    'lldp': 'show lldp neighbors',
-                                }
-                            elif vendor in ('huawei_wlc', 'huawei-wlc'):
-                                device_type = 'huawei'
-                                commands = {
-                                    'config': 'display current-configuration',
-                                    'version_info': 'display version',
-                                    'interfaces': 'display interface brief',
-                                    'lldp': 'display lldp neighbor brief',
-                                }
-                            else:
-                                failed_list.append({'Site': site, 'IP': target_ip, 'Reason': f"未知的廠牌: {vendor}"})
-                                update_logs(f"❌ 錯誤: {target_ip} 未知的廠牌設定")
-                                progress_bar.progress(current_count / total_devices)
-                                continue
+                                current_count = index + 1
+                                status_text.info(f"⏳ 正在處理: [{site}] {target_ip} ({vendor}) ... ({current_count}/{total_devices})")
+                                update_logs(f"開始嘗試連線至 {target_ip} ({vendor})...")
 
-                            netmiko_device = _netmiko_connect_params(
-                                device_type, target_ip, username, password, vendor
-                            )
+                                if vendor == 'cisco':
+                                    device_type = 'cisco_ios'
+                                    commands = {
+                                        'config': 'show running-config', 'interfaces': 'show interface status',
+                                        'version_info': 'show version', 'cdp': 'show cdp neighbors', 'lldp': 'show lldp neighbors'
+                                    }
+                                elif vendor == 'huawei':
+                                    device_type = 'huawei'
+                                    commands = {
+                                        'config': 'display current-configuration', 'interfaces': 'display interface brief',
+                                        'version_info': 'display elabel', 'cdp': 'display cdp neighbor', 'lldp': 'display lldp neighbor brief'
+                                    }
+                                elif vendor == 'fortinet':
+                                    device_type = 'fortinet'
+                                    commands = {
+                                        'config': 'show full-configuration',
+                                        'version_info': 'get system status',
+                                        'interfaces': 'get system interface physical',
+                                    }
+                                elif vendor in ('cisco_wlc', 'cisco-wlc'):
+                                    device_type = 'cisco_wlc'
+                                    commands = {
+                                        'config': 'show run-config',
+                                        'version_info': 'show sysinfo',
+                                        'interfaces': 'show interface summary',
+                                        'cdp': 'show cdp neighbors',
+                                        'lldp': 'show lldp neighbors',
+                                    }
+                                elif vendor in ('huawei_wlc', 'huawei-wlc'):
+                                    device_type = 'huawei'
+                                    commands = {
+                                        'config': 'display current-configuration',
+                                        'version_info': 'display version',
+                                        'interfaces': 'display interface brief',
+                                        'lldp': 'display lldp neighbor brief',
+                                    }
+                                else:
+                                    failed_list.append({'Site': site, 'IP': target_ip, 'Reason': f"未知的廠牌: {vendor}"})
+                                    update_logs(f"❌ 錯誤: {target_ip} 未知的廠牌設定")
+                                    progress_bar.progress(current_count / total_devices)
+                                    continue
 
-                            try:
-                                with ConnectHandler(**netmiko_device) as net_connect:
-                                    raw_prompt = net_connect.find_prompt()
-                                    hostname = raw_prompt.replace('#', '').replace('>', '').replace('[', '').replace(']', '').strip()
+                                netmiko_device = _netmiko_connect_params(
+                                    device_type, target_ip, username, password, vendor
+                                )
 
-                                    master_folder = "output"
-                                    base_folder = f"{target_ip}_{hostname}"
-                                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
-                                    backup_folder = os.path.join(master_folder, site, base_folder, timestamp)
+                                try:
+                                    net_connect = _open_netmiko_connection(
+                                        netmiko_device,
+                                        vendor=vendor,
+                                        target_ip=target_ip,
+                                        update_logs=update_logs,
+                                        run_log=backup_run_log,
+                                    )
+                                    try:
+                                        raw_prompt = net_connect.find_prompt()
+                                        hostname = raw_prompt.replace('#', '').replace('>', '').replace('[', '').replace(']', '').strip()
 
-                                    if not os.path.exists(backup_folder):
-                                        os.makedirs(backup_folder)
+                                        master_folder = "output"
+                                        base_folder = f"{target_ip}_{hostname}"
+                                        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+                                        backup_folder = os.path.join(master_folder, site, base_folder, timestamp)
 
-                                    if vendor == 'fortinet':
-                                        _fortinet_prepare_session(net_connect)
+                                        if not os.path.exists(backup_folder):
+                                            os.makedirs(backup_folder)
 
-                                    for cmd_type, cmd_string in commands.items():
                                         if vendor == 'fortinet':
-                                            output_result = _send_fortinet_command(
-                                                net_connect,
-                                                cmd_string,
-                                                long_output=(cmd_type == 'config'),
-                                            )
-                                            if cmd_type == 'config':
-                                                line_count = output_result.count("\n") + (1 if output_result else 0)
-                                                update_logs(
-                                                    f"ℹ️ {target_ip} FortiGate config.txt 約 {line_count} 行"
+                                            _fortinet_prepare_session(net_connect)
+
+                                        for cmd_type, cmd_string in commands.items():
+                                            if vendor == 'fortinet':
+                                                output_result = _send_fortinet_command(
+                                                    net_connect,
+                                                    cmd_string,
+                                                    long_output=(cmd_type == 'config'),
                                                 )
-                                        elif vendor in ('cisco_wlc', 'cisco-wlc'):
-                                            output_result = _send_cisco_wlc_command(
-                                                net_connect, cmd_type, cmd_string
-                                            )
-                                        else:
-                                            output_result = net_connect.send_command(cmd_string)
-                                        file_name = os.path.join(backup_folder, f"{cmd_type}.txt")
-                                        with open(file_name, "w", encoding="utf-8") as f:
-                                            f.write(output_result)
+                                                if cmd_type == 'config':
+                                                    line_count = output_result.count("\n") + (1 if output_result else 0)
+                                                    update_logs(
+                                                        f"ℹ️ {target_ip} FortiGate config.txt 約 {line_count} 行"
+                                                    )
+                                            elif vendor in ('cisco_wlc', 'cisco-wlc'):
+                                                output_result = _send_cisco_wlc_command(
+                                                    net_connect, cmd_type, cmd_string
+                                                )
+                                            else:
+                                                output_result = net_connect.send_command(cmd_string)
+                                            file_name = os.path.join(backup_folder, f"{cmd_type}.txt")
+                                            with open(file_name, "w", encoding="utf-8") as f:
+                                                f.write(output_result)
 
-                                    success_list.append({'Site': site, 'IP': target_ip, 'Hostname': hostname, 'Status': '✅ 成功'})
-                                    update_logs(f"✅ 成功: {hostname} ({target_ip}) 備份完成！")
+                                        success_list.append({'Site': site, 'IP': target_ip, 'Hostname': hostname, 'Status': '✅ 成功'})
+                                        update_logs(f"✅ 成功: {hostname} ({target_ip}) 備份完成！")
 
-                                    auth_fail_count = 0
+                                        auth_fail_count = 0
+                                    finally:
+                                        try:
+                                            net_connect.disconnect()
+                                        except Exception:
+                                            pass
 
-                            except NetmikoAuthenticationException:
-                                failed_list.append({'Site': site, 'IP': target_ip, 'Reason': "認證失敗"})
-                                update_logs(f"❌ 錯誤: {target_ip} 帳號密碼認證失敗")
-                                auth_fail_count += 1
+                                except NetmikoAuthenticationException:
+                                    failed_list.append({'Site': site, 'IP': target_ip, 'Reason': "認證失敗"})
+                                    update_logs(f"❌ 錯誤: {target_ip} 帳號密碼認證失敗")
+                                    backup_run_log.exception("Auth failed %s", target_ip)
+                                    auth_fail_count += 1
 
-                                if auth_fail_count >= 3:
-                                    update_logs("🚨 連續 3 台設備認證失敗！懷疑全域密碼輸入錯誤，系統自動中止任務。")
-                                    st.error("🚨 偵測到連續密碼錯誤，為節省等待時間，備份已自動強制中斷，請檢查密碼！")
-                                    break
+                                    if auth_fail_count >= 3:
+                                        update_logs("🚨 連續 3 台設備認證失敗！懷疑全域密碼輸入錯誤，系統自動中止任務。")
+                                        st.error("🚨 偵測到連續密碼錯誤，為節省等待時間，備份已自動強制中斷，請檢查密碼！")
+                                        break
 
-                            except NetmikoTimeoutException:
-                                failed_list.append({'Site': site, 'IP': target_ip, 'Reason': "連線逾時"})
-                                update_logs(f"❌ 錯誤: {target_ip} 連線逾時")
-                            except Exception as e:
-                                error_msg = str(e).split('\\n')[0]
-                                failed_list.append({'Site': site, 'IP': target_ip, 'Reason': error_msg})
-                                update_logs(f"❌ 錯誤: {target_ip} 未預期異常 ({error_msg})")
+                                except NetmikoTimeoutException as e:
+                                    failed_list.append({'Site': site, 'IP': target_ip, 'Reason': "連線逾時"})
+                                    update_logs(f"❌ 錯誤: {target_ip} 連線逾時 ({str(e).split(chr(10))[0]})")
+                                    backup_run_log.exception("Timeout %s", target_ip)
+                                except Exception as e:
+                                    error_msg = str(e).split('\n')[0]
+                                    failed_list.append({'Site': site, 'IP': target_ip, 'Reason': error_msg})
+                                    update_logs(f"❌ 錯誤: {target_ip} 未預期異常 ({error_msg})")
+                                    backup_run_log.exception("Error %s", target_ip)
 
-                            progress_bar.progress(current_count / total_devices)
+                                progress_bar.progress(current_count / total_devices)
 
-                        build_inventory.clear()
+                            build_inventory.clear()
 
-                        if auth_fail_count >= 3:
-                            status_text.error(f"🛑 任務中止。共執行了 {current_count} 台。")
-                        else:
-                            status_text.success(f"🎉 備份完成！成功: {len(success_list)} 台，失敗: {len(failed_list)} 台")
+                            if auth_fail_count >= 3:
+                                status_text.error(f"🛑 任務中止。共執行了 {current_count} 台。")
+                            else:
+                                status_text.success(f"🎉 備份完成！成功: {len(success_list)} 台，失敗: {len(failed_list)} 台")
+                        finally:
+                            backup_run_log.info("Backup run finished log=%s", backup_run_log.path)
+                            backup_run_log.close()
 
     # ==========================================
     # 設備總表與版控
