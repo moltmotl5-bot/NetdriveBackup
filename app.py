@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import os
 import re
+import secrets
 from dotenv import load_dotenv
 from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
@@ -14,9 +15,72 @@ load_dotenv()  # 讀取同目錄下的 .env 檔案
 
 st.set_page_config(page_title="Network Backup Portal", page_icon="🛡️", layout="wide")
 
-# 從環境變數讀取帳密，若未設定則使用預設值作為防呆
-VALID_USER = os.getenv("NCCM_ADMIN_USER", "admin")
-VALID_PASS = os.getenv("NCCM_ADMIN_PASS", "NCCM@2026")
+_WEAK_PORTAL_PASSWORDS = frozenset({
+    "NCCM@2026",
+    "password",
+    "changeme",
+    "admin",
+    "your_admin_password",
+    "REPLACE_WITH_12CHAR_MIN",
+})
+
+
+def _portal_credential_errors(user: str, password: str) -> list[str]:
+    errors: list[str] = []
+    if not user:
+        errors.append("缺少環境變數 `NCCM_ADMIN_USER`（請設定 .env 或 `--env-file`）。")
+    if not password:
+        errors.append("缺少環境變數 `NCCM_ADMIN_PASS`。")
+    elif len(password) < 12:
+        errors.append("`NCCM_ADMIN_PASS` 長度須至少 12 字元。")
+    elif password in _WEAK_PORTAL_PASSWORDS:
+        errors.append("`NCCM_ADMIN_PASS` 不可使用範例或已知弱密碼。")
+    elif password == user:
+        errors.append("`NCCM_ADMIN_PASS` 不可與帳號相同。")
+    return errors
+
+
+def _client_ip() -> str:
+    try:
+        headers = getattr(st.context, "headers", None)
+        if headers and hasattr(headers, "get"):
+            for key in ("X-Forwarded-For", "X-Real-Ip", "Remote-Addr"):
+                val = headers.get(key) or headers.get(key.lower())
+                if val:
+                    return str(val).split(",")[0].strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _audit_portal_login(username: str, success: bool) -> None:
+    log_path = os.getenv("NCCM_AUDIT_LOG", "nccm_auth.log")
+    safe_user = username.replace("\n", "").replace("\r", "")[:128]
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    line = (
+        f"{ts} ip={_client_ip()} user={safe_user!r} "
+        f"event=portal_login success={success}\n"
+    )
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(line)
+    except OSError:
+        pass
+
+
+def _load_portal_credentials() -> tuple[str, str]:
+    user = (os.getenv("NCCM_ADMIN_USER") or "").strip()
+    password = os.getenv("NCCM_ADMIN_PASS") or ""
+    errors = _portal_credential_errors(user, password)
+    if errors:
+        st.error("無法啟動：入口憑證未通過安全檢查")
+        for msg in errors:
+            st.caption(msg)
+        st.stop()
+    return user, password
+
+
+VALID_USER, VALID_PASS = _load_portal_credentials()
 
 # 初始化 session_state 來追蹤登入狀態
 if "logged_in" not in st.session_state:
@@ -124,6 +188,91 @@ def build_inventory():
                                     re.IGNORECASE,
                                 )
 
+                        elif "FortiOS" in content or "FortiGate" in content:
+                            vendor = "Fortinet"
+                            match_ver = re.search(
+                                r"Version:\s*FortiOS\s+v([^,\s]+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            if match_ver:
+                                sw_version = match_ver.group(1)
+                            serials_list = re.findall(
+                                r"Serial-Number:\s*(\S+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            models_list = re.findall(
+                                r"(FortiGate-[\w-]+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            if not models_list:
+                                plat = re.search(
+                                    r"Platform Type:\s*(\S+)",
+                                    content,
+                                    re.IGNORECASE,
+                                )
+                                if plat:
+                                    models_list = [plat.group(1)]
+
+                        elif (
+                            "Cisco Controller" in content
+                            or (
+                                "Product Name" in content
+                                and "Wireless" in content
+                            )
+                        ):
+                            vendor = "Cisco"
+                            match_ver = re.search(
+                                r"Product Version\.{2,}\s*([^\r\n]+)",
+                                content,
+                            )
+                            if match_ver:
+                                sw_version = match_ver.group(1).strip()
+                            else:
+                                match_ver = re.search(
+                                    r"Version\.{2,}\s*([^\r\n]+)",
+                                    content,
+                                )
+                                if match_ver:
+                                    sw_version = match_ver.group(1).strip()
+                            serials_list = re.findall(
+                                r"Serial Number\.{2,}\s*([A-Za-z0-9]+)",
+                                content,
+                            )
+                            models_list = re.findall(
+                                r"Product Name\.{2,}\s*([^\r\n]+)",
+                                content,
+                            )
+                            if models_list:
+                                models_list = [m.strip() for m in models_list]
+
+                        elif "VRP (R) software" in content and (
+                            "AC6605" in content
+                            or "AC6005" in content
+                            or "AC6800" in content
+                            or "WLAN" in content
+                            or "AirEngine" in content
+                        ):
+                            vendor = "Huawei"
+                            match_ver = re.search(
+                                r"VRP\s*\(R\)\s*software,\s*Version\s+([^\s(]+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            if match_ver:
+                                sw_version = match_ver.group(1)
+                            serials_list = re.findall(
+                                r"(?:ESN|BarCode)[:=](\S+)",
+                                content,
+                                re.IGNORECASE,
+                            )
+                            models_list = re.findall(
+                                r"(?:AC\d{4}|AirEngine[\w-]+)",
+                                content,
+                            )
+
                         elif "VRP (R) software" in content or "Huawei" in content or "elabel" in content:
                             vendor = "Huawei"
                             match_ver = re.search(r'Version\s+([^(\s]+)', content)
@@ -180,11 +329,22 @@ if not st.session_state["logged_in"]:
         submit_btn = st.form_submit_button("登入系統", type="primary")
 
         if submit_btn:
-            if input_user == VALID_USER and input_pwd == VALID_PASS:
+            entered_user = input_user.strip()
+            user_ok = secrets.compare_digest(
+                entered_user.encode("utf-8"),
+                VALID_USER.encode("utf-8"),
+            )
+            pass_ok = secrets.compare_digest(
+                input_pwd.encode("utf-8"),
+                VALID_PASS.encode("utf-8"),
+            )
+            if user_ok and pass_ok:
+                _audit_portal_login(entered_user, True)
                 st.session_state["logged_in"] = True
                 st.success("登入成功！正在載入系統...")
                 st.rerun()
             else:
+                _audit_portal_login(entered_user, False)
                 st.error("❌ 帳號或密碼錯誤，請重新輸入。")
 
 # ==========================================
@@ -315,6 +475,30 @@ else:
                                     'config': 'display current-configuration', 'interfaces': 'display interface brief',
                                     'version_info': 'display elabel', 'cdp': 'display cdp neighbor', 'lldp': 'display lldp neighbor brief'
                                 }
+                            elif vendor == 'fortinet':
+                                device_type = 'fortinet'
+                                commands = {
+                                    'config': 'show full-configuration',
+                                    'version_info': 'get system status',
+                                    'interfaces': 'get system interface physical',
+                                }
+                            elif vendor in ('cisco_wlc', 'cisco-wlc'):
+                                device_type = 'cisco_wlc'
+                                commands = {
+                                    'config': 'show running-config',
+                                    'version_info': 'show sysinfo',
+                                    'interfaces': 'show interface summary',
+                                    'cdp': 'show cdp neighbors',
+                                    'lldp': 'show lldp neighbors',
+                                }
+                            elif vendor in ('huawei_wlc', 'huawei-wlc'):
+                                device_type = 'huawei'
+                                commands = {
+                                    'config': 'display current-configuration',
+                                    'version_info': 'display version',
+                                    'interfaces': 'display interface brief',
+                                    'lldp': 'display lldp neighbor brief',
+                                }
                             else:
                                 failed_list.append({'Site': site, 'IP': target_ip, 'Reason': f"未知的廠牌: {vendor}"})
                                 update_logs(f"❌ 錯誤: {target_ip} 未知的廠牌設定")
@@ -326,6 +510,8 @@ else:
                                 'username': username, 'password': password,
                                 'timeout': 10, 'auth_timeout': 10
                             }
+                            if vendor == 'fortinet':
+                                netmiko_device['read_timeout'] = 120
 
                             try:
                                 with ConnectHandler(**netmiko_device) as net_connect:

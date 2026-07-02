@@ -168,11 +168,11 @@ output/
     </li>
     <li>
       <strong>第一次執行</strong>（本機 <code>output</code> 掛載進容器，備份會寫在 host 上）：
-      <pre><code>docker run -d \
+      <pre><code>chmod 600 .env
+docker run -d \
   --name nccm-portal \
   -p 8501:8501 \
-  -e NCCM_ADMIN_USER=admin \
-  -e NCCM_ADMIN_PASS='請改成強密碼' \
+  --env-file .env \
   -v "$(pwd)/output:/app/output" \
   autoswitchbackup2-nccm:latest</code></pre>
     </li>

@@ -1,13 +1,18 @@
 # AutoSwitchBackup2 — 企業級網路設備 NCCM（精簡部署版）
 
-本目錄為 **AutoSwitchBackup** 專案的**可部署副本**，僅含執行 Streamlit 入口與 CDP/LLDP 鄰居功能所需檔案。
+本目錄為現行 **NCCM 維運專案**（**AutoSwitchBackup** 舊版已封存，由本 repo 取代）。
 
 **GitHub：** https://github.com/moltmotl5-bot/AutoSwitchBackup2
 
 ## 功能
 
-* **批次備份：** Cisco / Huawei（Netmiko），輸出至 `output/`
-* **設備總表與版控：** 解析 `version_info.txt`（含 **Cisco NX-OS**，例如 `Nexus9000 C9504`）
+* **批次備份：** Netmiko 連線，支援下列 CSV `Vendor` 值：
+  * `cisco` — Cisco IOS / NX-OS
+  * `huawei` — Huawei 交換
+  * `fortinet` — FortiGate（`get system status` 等）
+  * `cisco_wlc` / `cisco-wlc` — Cisco 無線控制器
+  * `huawei_wlc` / `huawei-wlc` — Huawei AC/WLAN
+* **設備總表與版控：** 解析 `version_info.txt`（含 **Cisco NX-OS**、FortiOS、WLC 等）
 * **CDP/LLDP 鄰居：** 側欄第三項；Cisco 且 CDP 成功時不併入 LLDP
 
 ## 目錄內容
@@ -31,7 +36,8 @@ cd AutoSwitchBackup2
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # 編輯 NCCM_ADMIN_USER / NCCM_ADMIN_PASS
+cp .env.example .env   # 編輯 NCCM_ADMIN_USER / NCCM_ADMIN_PASS（密碼 ≥12 字元）
+chmod 600 .env
 streamlit run app.py
 ```
 
@@ -52,14 +58,14 @@ docker build -t autoswitchbackup2-nccm:latest .
 
 ### 2. 執行容器
 
-登入帳密用環境變數；備份資料掛載到 host 的 `output/`：
+登入帳密請用 **`--env-file`**（勿在命令列寫 `-e NCCM_ADMIN_PASS=明文`）；備份資料掛載到 host 的 `output/`：
 
 ```bash
+# 專案目錄建立 .env（內容見 .env.example），chmod 600 .env
 docker run -d \
   --name nccm-portal \
   -p 8501:8501 \
-  -e NCCM_ADMIN_USER=admin \
-  -e NCCM_ADMIN_PASS='請改成強密碼' \
+  --env-file .env \
   -v "$(pwd)/output:/app/output" \
   autoswitchbackup2-nccm:latest
 ```
@@ -100,17 +106,32 @@ output/
             └── lldp.txt
 ```
 
-## 與 AutoSwitchBackup 主專案差異
+## 設備清單 CSV
 
-主專案另含拓撲繪圖、測試腳本等；本 repo **僅維運入口 + Docker 部署**。
+上傳欄位需含 **Site**、**IP**、**Vendor**（見 `DEMO.csv`）。
+
+| Vendor 值 | 說明 |
+|-----------|------|
+| `cisco` | Cisco 交換／路由 |
+| `huawei` | Huawei 交換 |
+| `fortinet` | FortiGate |
+| `cisco_wlc` | Cisco WLC |
+| `huawei_wlc` | Huawei AC/WLAN |
+
+## 與封存專案差異
+
+舊 **AutoSwitchBackup**（Archive）曾含 draw.io 拓撲、`parse_topology`、大量 `test_*` 腳本。本 repo 聚焦 **備份 + 總表 + 鄰居 + Docker**；拓撲等功能將在新分支上另行開發。
 
 ## 資安
 
-* 勿將 `.env` 提交至 Git
+* 勿將 `.env` 提交至 Git；建議 `chmod 600 .env`
+* **入口帳密**僅來自環境變數 `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS`（無程式內預設密碼；密碼須 ≥12 字元）
+* 登入成功／失敗寫入 `nccm_auth.log`（不含密碼）；可改 `NCCM_AUDIT_LOG` 路徑
+* Docker 請用 `--env-file .env`，避免密碼出現在 shell 歷史或 `docker inspect`
 * SSH 設備帳密僅在備份頁面輸入，不寫入磁碟
 
 ## 授權
 
 MIT（與主專案相同）
 
-*最後更新：2026-06-30 — Dockerfile、README Docker 章節*
+*最後更新：2026-06-30 — 多廠牌備份／總表解析（Fortinet、Cisco/Huawei WLC）*
