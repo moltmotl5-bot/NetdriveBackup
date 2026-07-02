@@ -102,33 +102,32 @@ OUTPUT_LOG_DIR = os.path.join(OUTPUT_DIR, "log")
 
 
 class BackupRunLog:
-    """Write UI backup lines + netmiko/paramiko DEBUG to output/log."""
+    """Write only ERROR-level lines to output/log/backup_*.log (UI uses update_logs)."""
 
     def __init__(self, run_id: str):
         os.makedirs(OUTPUT_LOG_DIR, exist_ok=True)
         self.path = os.path.join(OUTPUT_LOG_DIR, f"backup_{run_id}.log")
         self._handler = logging.FileHandler(self.path, encoding="utf-8")
+        self._handler.setLevel(logging.ERROR)
         self._handler.setFormatter(
             logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
         )
-        self._attached: list[logging.Logger] = []
-        for name in ("netmiko", "paramiko", "nccm.backup"):
-            lg = logging.getLogger(name)
-            lg.setLevel(logging.DEBUG)
-            lg.addHandler(self._handler)
-            self._attached.append(lg)
         self.app = logging.getLogger("nccm.backup")
-        self.app.info("Backup run started run_id=%s", run_id)
+        self.app.setLevel(logging.ERROR)
+        self.app.propagate = False
+        self.app.addHandler(self._handler)
 
     def info(self, message: str, *args) -> None:
-        self.app.info(message, *args)
+        """No-op: informational lines stay in the Streamlit UI only."""
+
+    def error(self, message: str, *args) -> None:
+        self.app.error(message, *args)
 
     def exception(self, message: str, *args) -> None:
         self.app.exception(message, *args)
 
     def close(self) -> None:
-        for lg in self._attached:
-            lg.removeHandler(self._handler)
+        self.app.removeHandler(self._handler)
         self._handler.close()
 
 
@@ -189,12 +188,17 @@ def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, r
             elif attempt >= 2:
                 params.pop("disabled_algorithms", None)
         session_log = _netmiko_session_log_path(target_ip, attempt)
-        params["session_log"] = session_log
-        if "session_log_record_writes" in _netmiko_init_param_names():
-            params["session_log_record_writes"] = True
+        if wlc or os.getenv("NCCM_NETMIKO_SESSION_LOG", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            params["session_log"] = session_log
+            if "session_log_record_writes" in _netmiko_init_param_names():
+                params["session_log_record_writes"] = True
         params, dropped = _sanitize_netmiko_params(params)
         if dropped:
-            run_log.info("Netmiko dropped params for %s: %s", target_ip, ", ".join(dropped))
+            run_log.error("Netmiko dropped params for %s: %s", target_ip, ", ".join(dropped))
         if "device_type" not in params or not params["device_type"]:
             raise ValueError(f"Missing device_type for {target_ip} (vendor={vendor})")
         meta = (
@@ -202,14 +206,12 @@ def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, r
             f"conn_timeout={params.get('conn_timeout')} banner={params.get('banner_timeout')}"
         )
         update_logs(f"🔌 {target_ip} 連線 {attempt + 1}/{max_attempts} ({meta})")
-        run_log.info("Connect %s attempt %s %s log=%s", target_ip, attempt + 1, meta, session_log)
         try:
             if wlc:
                 try:
                     tcp_sock = _tcp_probe(target_ip, port, timeout=float(params["conn_timeout"]))
                     params["sock"] = tcp_sock
                     update_logs(f"✓ {target_ip}:{port} TCP 已通")
-                    run_log.info("TCP ok %s:%s", target_ip, port)
                 except OSError as sock_err:
                     update_logs(f"❌ {target_ip}:{port} TCP 無法連線: {sock_err}")
                     run_log.exception("TCP failed %s:%s", target_ip, port)
@@ -217,8 +219,10 @@ def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, r
                         f"TCP to {target_ip}:{port} failed: {sock_err}"
                     ) from sock_err
             conn = ConnectHandler(**params)
-            update_logs(f"✅ {target_ip} 已連線 · session log: {session_log}")
-            run_log.info("Connected %s prompt=%r", target_ip, conn.find_prompt())
+            if os.getenv("NCCM_NETMIKO_SESSION_LOG", "").strip().lower() in ("1", "true", "yes"):
+                update_logs(f"✅ {target_ip} 已連線 · session log: {session_log}")
+            else:
+                update_logs(f"✅ {target_ip} 已連線")
             return conn
         except NetmikoAuthenticationException:
             if tcp_sock:
@@ -239,9 +243,9 @@ def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, r
             run_log.exception("Connect failed %s: %s", target_ip, full)
             if os.path.isfile(session_log):
                 try:
-                    tail = Path(session_log).read_text(encoding="utf-8", errors="replace")[-6000:]
-                    run_log.info("session_log tail:\n%s", tail)
-                    update_logs(f"   (session log 約 {len(tail)} 字元已寫入主日誌)")
+                    tail = Path(session_log).read_text(encoding="utf-8", errors="replace")[-8000:]
+                    run_log.error("session_log tail %s:\n%s", session_log, tail)
+                    update_logs(f"   → Netmiko session: {session_log}")
                 except OSError:
                     pass
             if attempt + 1 < max_attempts:
@@ -520,18 +524,77 @@ def _netmiko_connect_params(
     return params
 
 
+def _fetch_cisco_wlc_run_config(net_connect) -> str:
+    """Stream show run-config; handle WLC 'Press Enter' / inventory interstitials (5520)."""
+    cmd = "show run-config"
+    net_connect.write_channel(net_connect.normalize_cmd(cmd))
+    chunks: list[str] = []
+    deadline = time.time() + 2400
+    idle_rounds = 0
+    last_enter = 0.0
+    while time.time() < deadline:
+        data = net_connect.read_channel()
+        if data:
+            idle_rounds = 0
+            chunks.append(data)
+            blob = "".join(chunks)
+            lower = data.lower()
+            if "press enter" in lower or "press any key" in lower:
+                if time.time() - last_enter > 0.4:
+                    net_connect.write_channel(net_connect.RETURN)
+                    last_enter = time.time()
+                    time.sleep(0.8)
+            elif "display the next" in lower:
+                net_connect.write_channel("y")
+            elif "--more--" in lower.replace(" ", ""):
+                net_connect.write_channel(" ")
+            if "802.11b advanced configuration" in lower:
+                time.sleep(25)
+            if re.search(r"\)\s*>\s*$", blob[-400:]):
+                time.sleep(1.5)
+                extra = net_connect.read_channel()
+                if extra:
+                    chunks.append(extra)
+                elif len(blob) > 500:
+                    break
+        else:
+            idle_rounds += 1
+            time.sleep(0.25)
+            if idle_rounds >= 24 and chunks:
+                break
+    raw = "".join(chunks)
+    return net_connect._sanitize_output(
+        raw,
+        strip_command=True,
+        command_string=cmd,
+        strip_prompt=True,
+    )
+
+
 def _send_cisco_wlc_command(net_connect, cmd_type: str, cmd_string: str) -> str:
     """Use Netmiko WLC helpers for paging / 'Press Enter' / 'display next' prompts."""
     if cmd_type == "config":
-        run_cmd = cmd_string
-        if "running-config" in cmd_string:
+        text = _fetch_cisco_wlc_run_config(net_connect)
+        if len(text.strip()) < 80:
             run_cmd = "show run-config"
-        return net_connect.send_command_w_enter(
-            run_cmd, delay_factor=4, max_loops=4000
-        )
+            if "running-config" in cmd_string:
+                run_cmd = "show run-config"
+            text = net_connect.send_command_w_enter(
+                run_cmd, delay_factor=6, max_loops=6000
+            )
+        return text
     if cmd_type == "interfaces" and hasattr(net_connect, "_send_command_w_yes"):
         return net_connect._send_command_w_yes(cmd_string, delay_factor=2)
-    return net_connect.send_command(cmd_string, read_timeout=120)
+    return net_connect.send_command(cmd_string, read_timeout=180)
+
+
+def _prepare_cisco_wlc_session(net_connect) -> None:
+    try:
+        net_connect.send_command_timing(
+            "config paging disable", delay_factor=4, max_loops=400
+        )
+    except Exception:
+        pass
 
 
 NAV_BACKUP = "backup"
@@ -910,11 +973,8 @@ else:
                             if len(live_logs) > 500:
                                 live_logs.pop(0)
                             log_placeholder.code("\n".join(live_logs), language="bash")
-                            backup_run_log.info(message)
 
-                        update_logs(f"📁 主日誌: {backup_run_log.path}")
-                        update_logs(f"📁 Netmiko 每台: {OUTPUT_LOG_DIR}/netmiko_<IP>_*.log")
-                        update_logs(f"📁 輸出根目錄: {OUTPUT_DIR}")
+                        update_logs(f"📁 錯誤日誌: {backup_run_log.path}（僅記錄 ERROR）")
 
                         try:
                             for index, row in df.iterrows():
@@ -982,6 +1042,8 @@ else:
 
                                         if vendor == 'fortinet':
                                             _fortinet_prepare_session(net_connect)
+                                        elif vendor == "cisco_wlc":
+                                            _prepare_cisco_wlc_session(net_connect)
 
                                         for cmd_type, cmd_string in commands.items():
                                             if vendor == 'fortinet':
@@ -1030,6 +1092,10 @@ else:
                                     failed_list.append({'Site': site, 'IP': target_ip, 'Reason': "連線逾時"})
                                     update_logs(f"❌ 錯誤: {target_ip} 連線逾時 ({str(e).split(chr(10))[0]})")
                                     backup_run_log.exception("Timeout %s", target_ip)
+                                except ReadTimeout as e:
+                                    failed_list.append({'Site': site, 'IP': target_ip, 'Reason': "讀取逾時 (ReadTimeout)"})
+                                    update_logs(f"❌ 錯誤: {target_ip} ReadTimeout — 請確認 Vendor=cisco_wlc")
+                                    backup_run_log.exception("ReadTimeout %s", target_ip)
                                 except Exception as e:
                                     error_msg = str(e).split('\n')[0]
                                     failed_list.append({'Site': site, 'IP': target_ip, 'Reason': error_msg})
@@ -1045,7 +1111,12 @@ else:
                             else:
                                 status_text.success(f"🎉 備份完成！成功: {len(success_list)} 台，失敗: {len(failed_list)} 台")
                         finally:
-                            backup_run_log.info("Backup run finished log=%s", backup_run_log.path)
+                            if failed_list:
+                                backup_run_log.error(
+                                    "Backup run finished failures=%s log=%s",
+                                    len(failed_list),
+                                    backup_run_log.path,
+                                )
                             backup_run_log.close()
 
     # ==========================================
