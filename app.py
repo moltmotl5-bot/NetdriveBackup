@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import secrets
+import socket
 import time
 from pathlib import Path
 from dotenv import load_dotenv
@@ -89,7 +90,8 @@ VALID_USER, VALID_PASS = _load_portal_credentials()
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
-OUTPUT_DIR = "output"
+_APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.path.join(_APP_ROOT, "output")
 OUTPUT_LOG_DIR = os.path.join(OUTPUT_DIR, "log")
 
 
@@ -112,8 +114,8 @@ class BackupRunLog:
         self.app = logging.getLogger("nccm.backup")
         self.app.info("Backup run started run_id=%s", run_id)
 
-    def info(self, message: str) -> None:
-        self.app.info(message)
+    def info(self, message: str, *args) -> None:
+        self.app.info(message, *args)
 
     def exception(self, message: str, *args) -> None:
         self.app.exception(message, *args)
@@ -132,49 +134,88 @@ def _netmiko_session_log_path(target_ip: str, attempt: int) -> str:
     return os.path.join(OUTPUT_LOG_DIR, f"netmiko_{safe_ip}_{ts}{suffix}.log")
 
 
+def _tcp_probe(host: str, port: int, timeout: float) -> socket.socket:
+    sock = socket.create_connection((host, port), timeout=timeout)
+    sock.settimeout(timeout)
+    return sock
+
+
 def _open_netmiko_connection(device_params, *, vendor, target_ip, update_logs, run_log):
     wlc = vendor in ("cisco_wlc", "cisco-wlc")
-    max_attempts = 3 if wlc else 1
+    max_attempts = 4 if wlc else 1
     last_exc = None
+    port = int(device_params.get("port") or 22)
+
     for attempt in range(max_attempts):
         params = dict(device_params)
+        params.pop("sock", None)
+        tcp_sock = None
         if wlc:
+            ct = 120 + attempt * 60
             params.update(
-                conn_timeout=90 + attempt * 45,
-                banner_timeout=45 + attempt * 20,
-                auth_timeout=120 + attempt * 30,
-                timeout=180,
+                conn_timeout=ct,
+                banner_timeout=60 + attempt * 30,
+                auth_timeout=150 + attempt * 45,
+                timeout=240,
+                blocking_timeout=60,
             )
+            if attempt == 1:
+                params["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-512", "rsa-sha2-256"]}
+                update_logs(f"ℹ️ {target_ip} 嘗試 legacy SSH host key (rsa-sha1)…")
+            elif attempt >= 2:
+                params.pop("disabled_algorithms", None)
         session_log = _netmiko_session_log_path(target_ip, attempt)
         params["session_log"] = session_log
         params["session_log_record"] = True
         meta = (
-            f"type={params.get('device_type')} conn_timeout={params.get('conn_timeout')} "
-            f"banner={params.get('banner_timeout')}"
+            f"type={params.get('device_type')} port={port} "
+            f"conn_timeout={params.get('conn_timeout')} banner={params.get('banner_timeout')}"
         )
         update_logs(f"🔌 {target_ip} 連線 {attempt + 1}/{max_attempts} ({meta})")
         run_log.info("Connect %s attempt %s %s log=%s", target_ip, attempt + 1, meta, session_log)
         try:
+            if wlc:
+                try:
+                    tcp_sock = _tcp_probe(target_ip, port, timeout=float(params["conn_timeout"]))
+                    params["sock"] = tcp_sock
+                    update_logs(f"✓ {target_ip}:{port} TCP 已通")
+                    run_log.info("TCP ok %s:%s", target_ip, port)
+                except OSError as sock_err:
+                    update_logs(f"❌ {target_ip}:{port} TCP 無法連線: {sock_err}")
+                    run_log.exception("TCP failed %s:%s", target_ip, port)
+                    raise NetmikoTimeoutException(
+                        f"TCP to {target_ip}:{port} failed: {sock_err}"
+                    ) from sock_err
             conn = ConnectHandler(**params)
             update_logs(f"✅ {target_ip} 已連線 · session log: {session_log}")
-            run_log.info("Connected %s", target_ip)
+            run_log.info("Connected %s prompt=%r", target_ip, conn.find_prompt())
             return conn
         except NetmikoAuthenticationException:
+            if tcp_sock:
+                tcp_sock.close()
             raise
         except Exception as exc:
+            if tcp_sock:
+                try:
+                    tcp_sock.close()
+                except OSError:
+                    pass
             last_exc = exc
+            full = repr(exc)
             short = str(exc).split("\n")[0]
             update_logs(f"❌ {target_ip} 連線失敗: {short}")
-            update_logs(f"   → Netmiko log: {session_log}")
-            run_log.exception("Connect failed %s: %s", target_ip, short)
+            update_logs(f"   → 主日誌: {run_log.path}")
+            update_logs(f"   → Netmiko: {session_log}")
+            run_log.exception("Connect failed %s: %s", target_ip, full)
             if os.path.isfile(session_log):
                 try:
-                    tail = Path(session_log).read_text(encoding="utf-8", errors="replace")[-4000:]
+                    tail = Path(session_log).read_text(encoding="utf-8", errors="replace")[-6000:]
                     run_log.info("session_log tail:\n%s", tail)
+                    update_logs(f"   (session log 約 {len(tail)} 字元已寫入主日誌)")
                 except OSError:
                     pass
             if attempt + 1 < max_attempts:
-                delay = 5 * (attempt + 1)
+                delay = 8 * (attempt + 1)
                 update_logs(f"⏳ {delay}s 後重試 {target_ip}…")
                 time.sleep(delay)
     raise last_exc
@@ -737,6 +778,7 @@ else:
 
                         update_logs(f"📁 主日誌: {backup_run_log.path}")
                         update_logs(f"📁 Netmiko 每台: {OUTPUT_LOG_DIR}/netmiko_<IP>_*.log")
+                        update_logs(f"📁 輸出根目錄: {OUTPUT_DIR}")
 
                         try:
                             for index, row in df.iterrows():
@@ -806,7 +848,7 @@ else:
                                         raw_prompt = net_connect.find_prompt()
                                         hostname = raw_prompt.replace('#', '').replace('>', '').replace('[', '').replace(']', '').strip()
 
-                                        master_folder = "output"
+                                        master_folder = OUTPUT_DIR
                                         base_folder = f"{target_ip}_{hostname}"
                                         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
                                         backup_folder = os.path.join(master_folder, site, base_folder, timestamp)
