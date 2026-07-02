@@ -218,6 +218,51 @@ def _send_fortinet_command(net_connect, cmd_string: str, *, long_output: bool = 
         return _fortinet_fetch_full_configuration(net_connect)
     return net_connect.send_command(cmd_string, read_timeout=120)
 
+
+def _netmiko_connect_params(
+    device_type: str,
+    host: str,
+    username: str,
+    password: str,
+    vendor: str,
+) -> dict:
+    """Per-vendor SSH timeouts (WLC login is slow; needs larger conn_timeout)."""
+    params = {
+        "device_type": device_type,
+        "host": host,
+        "username": username,
+        "password": password,
+        "timeout": 30,
+        "auth_timeout": 30,
+        "conn_timeout": 20,
+        "banner_timeout": 20,
+    }
+    if vendor in ("cisco_wlc", "cisco-wlc"):
+        params.update(
+            timeout=120,
+            auth_timeout=90,
+            conn_timeout=60,
+            banner_timeout=30,
+            fast_cli=False,
+            global_delay_factor=3,
+        )
+    elif vendor == "fortinet":
+        params.update(conn_timeout=30, timeout=90, auth_timeout=45)
+    return params
+
+
+def _send_cisco_wlc_command(net_connect, cmd_type: str, cmd_string: str) -> str:
+    """Use Netmiko WLC helpers for paging / 'Press Enter' / 'display next' prompts."""
+    if cmd_type == "config":
+        run_cmd = cmd_string
+        if "running-config" in cmd_string:
+            run_cmd = "show run-config"
+        return net_connect.send_command_w_enter(run_cmd, delay_factor=2)
+    if cmd_type == "interfaces" and hasattr(net_connect, "_send_command_w_yes"):
+        return net_connect._send_command_w_yes(cmd_string, delay_factor=2)
+    return net_connect.send_command(cmd_string, read_timeout=120)
+
+
 NAV_BACKUP = "backup"
 NAV_INVENTORY = "inventory"
 NAV_NEIGHBORS = "neighbors"
@@ -622,7 +667,7 @@ else:
                             elif vendor in ('cisco_wlc', 'cisco-wlc'):
                                 device_type = 'cisco_wlc'
                                 commands = {
-                                    'config': 'show running-config',
+                                    'config': 'show run-config',
                                     'version_info': 'show sysinfo',
                                     'interfaces': 'show interface summary',
                                     'cdp': 'show cdp neighbors',
@@ -642,11 +687,9 @@ else:
                                 progress_bar.progress(current_count / total_devices)
                                 continue
 
-                            netmiko_device = {
-                                'device_type': device_type, 'host': target_ip,
-                                'username': username, 'password': password,
-                                'timeout': 10, 'auth_timeout': 10
-                            }
+                            netmiko_device = _netmiko_connect_params(
+                                device_type, target_ip, username, password, vendor
+                            )
 
                             try:
                                 with ConnectHandler(**netmiko_device) as net_connect:
@@ -676,6 +719,10 @@ else:
                                                 update_logs(
                                                     f"ℹ️ {target_ip} FortiGate config.txt 約 {line_count} 行"
                                                 )
+                                        elif vendor in ('cisco_wlc', 'cisco-wlc'):
+                                            output_result = _send_cisco_wlc_command(
+                                                net_connect, cmd_type, cmd_string
+                                            )
                                         else:
                                             output_result = net_connect.send_command(cmd_string)
                                         file_name = os.path.join(backup_folder, f"{cmd_type}.txt")
