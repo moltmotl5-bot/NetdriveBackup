@@ -12,7 +12,11 @@ from functools import lru_cache
 from pathlib import Path
 from dotenv import load_dotenv
 from netmiko import ConnectHandler
-from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
+from netmiko.exceptions import (
+    NetmikoAuthenticationException,
+    NetmikoTimeoutException,
+    ReadTimeout,
+)
 
 # ==========================================
 # 0. 載入環境變數與網頁基本設定 (必須在最上方)
@@ -377,7 +381,7 @@ def _send_fortinet_command(net_connect, cmd_string: str, *, long_output: bool = 
     return net_connect.send_command(cmd_string, read_timeout=120)
 
 
-def _normalize_vendor(raw: str) -> str:
+def _normalize_vendor(raw: str, hostname: str = "") -> str:
     v = str(raw).strip().lower().replace(" ", "_")
     v = v.replace("-", "_")
     while "__" in v:
@@ -389,7 +393,96 @@ def _normalize_vendor(raw: str) -> str:
         "fortigate": "fortinet",
         "forti": "fortinet",
     }
-    return aliases.get(v, v)
+    v = aliases.get(v, v)
+    if v == "cisco" and hostname and re.search(r"wlc", hostname, re.IGNORECASE):
+        return "cisco_wlc"
+    return v
+
+
+def _resolve_vendor_profile(vendor: str) -> tuple[str, dict]:
+    """Return (device_type, commands) for a normalized vendor key."""
+    if vendor == "cisco":
+        return "cisco_ios", {
+            "config": "show running-config",
+            "interfaces": "show interface status",
+            "version_info": "show version",
+            "cdp": "show cdp neighbors",
+            "lldp": "show lldp neighbors",
+        }
+    if vendor == "huawei":
+        return "huawei", {
+            "config": "display current-configuration",
+            "interfaces": "display interface brief",
+            "version_info": "display elabel",
+            "cdp": "display cdp neighbor",
+            "lldp": "display lldp neighbor brief",
+        }
+    if vendor == "fortinet":
+        return "fortinet", {
+            "config": "show full-configuration",
+            "version_info": "get system status",
+            "interfaces": "get system interface physical",
+        }
+    if vendor == "cisco_wlc":
+        return "cisco_wlc", {
+            "config": "show run-config",
+            "version_info": "show sysinfo",
+            "interfaces": "show interface summary",
+            "cdp": "show cdp neighbors",
+            "lldp": "show lldp neighbors",
+        }
+    if vendor in ("huawei_wlc",):
+        return "huawei", {
+            "config": "display current-configuration",
+            "version_info": "display version",
+            "interfaces": "display interface brief",
+            "lldp": "display lldp neighbor brief",
+        }
+    raise ValueError(f"未知的廠牌: {vendor}")
+
+
+def _is_aireos_wlc_prompt(prompt: str) -> bool:
+    """Cisco AireOS WLC user EXEC prompt, e.g. '(H3-LB2-WLC1) >'."""
+    return bool(re.match(r"^\([^)]+\)\s*>\s*$", (prompt or "").strip()))
+
+
+def _hostname_from_prompt(prompt: str) -> str:
+    m = re.match(r"^\(([^)]+)\)", (prompt or "").strip())
+    if m:
+        return m.group(1)
+    return (
+        (prompt or "")
+        .replace("#", "")
+        .replace(">", "")
+        .replace("[", "")
+        .replace("]", "")
+        .strip()
+    )
+
+
+def _reconnect_as_cisco_wlc(
+    net_connect,
+    *,
+    target_ip: str,
+    username: str,
+    password: str,
+    update_logs,
+    run_log,
+):
+    try:
+        net_connect.disconnect()
+    except Exception:
+        pass
+    params = _netmiko_connect_params(
+        "cisco_wlc", target_ip, username, password, "cisco_wlc"
+    )
+    return _open_netmiko_connection(
+        params,
+        vendor="cisco_wlc",
+        target_ip=target_ip,
+        update_logs=update_logs,
+        run_log=run_log,
+    )
 
 
 def _netmiko_connect_params(
@@ -433,7 +526,9 @@ def _send_cisco_wlc_command(net_connect, cmd_type: str, cmd_string: str) -> str:
         run_cmd = cmd_string
         if "running-config" in cmd_string:
             run_cmd = "show run-config"
-        return net_connect.send_command_w_enter(run_cmd, delay_factor=2)
+        return net_connect.send_command_w_enter(
+            run_cmd, delay_factor=4, max_loops=4000
+        )
     if cmd_type == "interfaces" and hasattr(net_connect, "_send_command_w_yes"):
         return net_connect._send_command_w_yes(cmd_string, delay_factor=2)
     return net_connect.send_command(cmd_string, read_timeout=120)
@@ -825,49 +920,20 @@ else:
                             for index, row in df.iterrows():
                                 site = str(row['Site']).strip()
                                 target_ip = str(row['IP']).strip()
-                                vendor = _normalize_vendor(row["Vendor"])
+                                hostname_hint = ""
+                                for _col in ("Hostname", "hostname", "Name"):
+                                    if _col in row.index and str(row.get(_col, "")).strip():
+                                        hostname_hint = str(row[_col]).strip()
+                                        break
+                                vendor = _normalize_vendor(row["Vendor"], hostname_hint)
 
                                 current_count = index + 1
                                 status_text.info(f"⏳ 正在處理: [{site}] {target_ip} ({vendor}) ... ({current_count}/{total_devices})")
                                 update_logs(f"開始嘗試連線至 {target_ip} ({vendor})...")
 
-                                if vendor == 'cisco':
-                                    device_type = 'cisco_ios'
-                                    commands = {
-                                        'config': 'show running-config', 'interfaces': 'show interface status',
-                                        'version_info': 'show version', 'cdp': 'show cdp neighbors', 'lldp': 'show lldp neighbors'
-                                    }
-                                elif vendor == 'huawei':
-                                    device_type = 'huawei'
-                                    commands = {
-                                        'config': 'display current-configuration', 'interfaces': 'display interface brief',
-                                        'version_info': 'display elabel', 'cdp': 'display cdp neighbor', 'lldp': 'display lldp neighbor brief'
-                                    }
-                                elif vendor == 'fortinet':
-                                    device_type = 'fortinet'
-                                    commands = {
-                                        'config': 'show full-configuration',
-                                        'version_info': 'get system status',
-                                        'interfaces': 'get system interface physical',
-                                    }
-                                elif vendor in ('cisco_wlc', 'cisco-wlc'):
-                                    device_type = 'cisco_wlc'
-                                    commands = {
-                                        'config': 'show run-config',
-                                        'version_info': 'show sysinfo',
-                                        'interfaces': 'show interface summary',
-                                        'cdp': 'show cdp neighbors',
-                                        'lldp': 'show lldp neighbors',
-                                    }
-                                elif vendor in ('huawei_wlc', 'huawei-wlc'):
-                                    device_type = 'huawei'
-                                    commands = {
-                                        'config': 'display current-configuration',
-                                        'version_info': 'display version',
-                                        'interfaces': 'display interface brief',
-                                        'lldp': 'display lldp neighbor brief',
-                                    }
-                                else:
+                                try:
+                                    device_type, commands = _resolve_vendor_profile(vendor)
+                                except ValueError:
                                     failed_list.append({'Site': site, 'IP': target_ip, 'Reason': f"未知的廠牌: {vendor}"})
                                     update_logs(f"❌ 錯誤: {target_ip} 未知的廠牌設定")
                                     progress_bar.progress(current_count / total_devices)
@@ -887,7 +953,24 @@ else:
                                     )
                                     try:
                                         raw_prompt = net_connect.find_prompt()
-                                        hostname = raw_prompt.replace('#', '').replace('>', '').replace('[', '').replace(']', '').strip()
+                                        if _is_aireos_wlc_prompt(raw_prompt) and vendor != "cisco_wlc":
+                                            update_logs(
+                                                f"ℹ️ {target_ip} 偵測 AireOS WLC 提示符，改用 cisco_wlc 驅動"
+                                                f"（CSV 建議 Vendor=cisco_wlc）"
+                                            )
+                                            vendor = "cisco_wlc"
+                                            device_type, commands = _resolve_vendor_profile(vendor)
+                                            net_connect = _reconnect_as_cisco_wlc(
+                                                net_connect,
+                                                target_ip=target_ip,
+                                                username=username,
+                                                password=password,
+                                                update_logs=update_logs,
+                                                run_log=backup_run_log,
+                                            )
+                                            raw_prompt = net_connect.find_prompt()
+
+                                        hostname = _hostname_from_prompt(raw_prompt)
 
                                         master_folder = OUTPUT_DIR
                                         base_folder = f"{target_ip}_{hostname}"
@@ -912,7 +995,7 @@ else:
                                                     update_logs(
                                                         f"ℹ️ {target_ip} FortiGate config.txt 約 {line_count} 行"
                                                     )
-                                            elif vendor in ('cisco_wlc', 'cisco-wlc'):
+                                            elif vendor == "cisco_wlc":
                                                 output_result = _send_cisco_wlc_command(
                                                     net_connect, cmd_type, cmd_string
                                                 )
