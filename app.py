@@ -97,6 +97,67 @@ _FORTINET_DISABLE_PAGING = [
 _FORTINET_TERM_HEIGHT = 9999
 
 
+def _parse_fortinet_version_info(content: str):
+    """Parse get system status / show version style FortiGate output for inventory."""
+    vendor = "Fortinet"
+    sw_version = "Unknown"
+    models_list: list[str] = []
+    serials_list: list[str] = []
+
+    match_ver_line = re.search(
+        r"^Version:\s*(.+)$",
+        content,
+        re.MULTILINE | re.IGNORECASE,
+    )
+    if match_ver_line:
+        ver_line = match_ver_line.group(1).strip()
+        match_build = re.search(
+            r"\bv(\d+(?:\.\d+)*(?:,build[\d,]+)?(?:\s*\([^)]+\))?)",
+            ver_line,
+            re.IGNORECASE,
+        )
+        if match_build:
+            sw_version = match_build.group(1)
+        else:
+            match_fos = re.search(
+                r"FortiOS\s+v?([^\s,]+)",
+                ver_line,
+                re.IGNORECASE,
+            )
+            if match_fos:
+                sw_version = match_fos.group(1)
+
+        match_model = re.search(
+            r"(Forti(?:Gate|WiFi|Switch|AP|Analyzer|Manager|Web)-[\w.-]+)",
+            ver_line,
+            re.IGNORECASE,
+        )
+        if match_model:
+            models_list = [match_model.group(1)]
+
+    serials_list = re.findall(
+        r"Serial-Number:\s*(\S+)",
+        content,
+        re.IGNORECASE,
+    )
+    if not models_list:
+        models_list = re.findall(
+            r"(Forti(?:Gate|WiFi|Switch|AP)-[\w-]+)",
+            content,
+            re.IGNORECASE,
+        )
+    if not models_list:
+        plat = re.search(
+            r"Platform Type:\s*(\S+)",
+            content,
+            re.IGNORECASE,
+        )
+        if plat:
+            models_list = [plat.group(1)]
+
+    return vendor, sw_version, models_list, serials_list
+
+
 def _fortinet_resize_terminal(net_connect) -> None:
     """Netmiko opens vt100 with height=1000; FortiGate output often stops near ~1001 lines."""
     try:
@@ -257,33 +318,14 @@ def build_inventory():
                                     re.IGNORECASE,
                                 )
 
-                        elif "FortiOS" in content or "FortiGate" in content:
-                            vendor = "Fortinet"
-                            match_ver = re.search(
-                                r"Version:\s*FortiOS\s+v([^,\s]+)",
-                                content,
-                                re.IGNORECASE,
+                        elif re.search(
+                            r"FortiOS|FortiGate|FortiWiFi|FortiSwitch|^Version:\s*Forti",
+                            content,
+                            re.MULTILINE | re.IGNORECASE,
+                        ):
+                            vendor, sw_version, models_list, serials_list = (
+                                _parse_fortinet_version_info(content)
                             )
-                            if match_ver:
-                                sw_version = match_ver.group(1)
-                            serials_list = re.findall(
-                                r"Serial-Number:\s*(\S+)",
-                                content,
-                                re.IGNORECASE,
-                            )
-                            models_list = re.findall(
-                                r"(FortiGate-[\w-]+)",
-                                content,
-                                re.IGNORECASE,
-                            )
-                            if not models_list:
-                                plat = re.search(
-                                    r"Platform Type:\s*(\S+)",
-                                    content,
-                                    re.IGNORECASE,
-                                )
-                                if plat:
-                                    models_list = [plat.group(1)]
 
                         elif (
                             "Cisco Controller" in content
