@@ -88,6 +88,42 @@ if "logged_in" not in st.session_state:
 
 OUTPUT_DIR = "output"
 
+_FORTINET_DISABLE_PAGING = [
+    "config system console",
+    "set output standard",
+    "end",
+]
+
+
+def _send_fortinet_command(net_connect, cmd_string: str, *, long_output: bool = False) -> str:
+    """Run FortiOS CLI; long_output for show full-configuration (avoid ~1000-line paging cut)."""
+    read_timeout = 600 if long_output else 120
+    try:
+        return net_connect.send_command(cmd_string, read_timeout=read_timeout)
+    except TypeError:
+        if long_output:
+            return net_connect.send_command_timing(
+                cmd_string, delay_factor=10, max_loops=8000
+            )
+        return net_connect.send_command(cmd_string, delay_factor=4)
+
+
+def _fortinet_prepare_session(net_connect) -> None:
+    """Best-effort: set console output standard so full-configuration is not paged."""
+    try:
+        net_connect.send_config_set(
+            _FORTINET_DISABLE_PAGING,
+            read_timeout=60,
+            cmd_verify=False,
+        )
+    except TypeError:
+        try:
+            net_connect.send_config_set(_FORTINET_DISABLE_PAGING, cmd_verify=False)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
 NAV_BACKUP = "backup"
 NAV_INVENTORY = "inventory"
 NAV_NEIGHBORS = "neighbors"
@@ -524,16 +560,16 @@ else:
                                     if not os.path.exists(backup_folder):
                                         os.makedirs(backup_folder)
 
+                                    if vendor == 'fortinet':
+                                        _fortinet_prepare_session(net_connect)
+
                                     for cmd_type, cmd_string in commands.items():
                                         if vendor == 'fortinet':
-                                            try:
-                                                output_result = net_connect.send_command(
-                                                    cmd_string, read_timeout=120
-                                                )
-                                            except TypeError:
-                                                output_result = net_connect.send_command(
-                                                    cmd_string, delay_factor=4
-                                                )
+                                            output_result = _send_fortinet_command(
+                                                net_connect,
+                                                cmd_string,
+                                                long_output=(cmd_type == 'config'),
+                                            )
                                         else:
                                             output_result = net_connect.send_command(cmd_string)
                                         file_name = os.path.join(backup_folder, f"{cmd_type}.txt")
