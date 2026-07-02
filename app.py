@@ -4,6 +4,7 @@ import datetime
 import os
 import re
 import secrets
+import time
 from dotenv import load_dotenv
 from netmiko import ConnectHandler
 from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
@@ -93,36 +94,68 @@ _FORTINET_DISABLE_PAGING = [
     "set output standard",
     "end",
 ]
+_FORTINET_TERM_HEIGHT = 9999
 
 
-def _send_fortinet_command(net_connect, cmd_string: str, *, long_output: bool = False) -> str:
-    """Run FortiOS CLI; long_output for show full-configuration (avoid ~1000-line paging cut)."""
-    read_timeout = 600 if long_output else 120
+def _fortinet_resize_terminal(net_connect) -> None:
+    """Netmiko opens vt100 with height=1000; FortiGate output often stops near ~1001 lines."""
     try:
-        return net_connect.send_command(cmd_string, read_timeout=read_timeout)
-    except TypeError:
-        if long_output:
-            return net_connect.send_command_timing(
-                cmd_string, delay_factor=10, max_loops=8000
-            )
-        return net_connect.send_command(cmd_string, delay_factor=4)
+        conn = getattr(net_connect, "remote_conn", None)
+        if conn is not None and hasattr(conn, "resize_pty"):
+            conn.resize_pty(width=511, height=_FORTINET_TERM_HEIGHT)
+    except Exception:
+        pass
 
 
 def _fortinet_prepare_session(net_connect) -> None:
-    """Best-effort: set console output standard so full-configuration is not paged."""
+    _fortinet_resize_terminal(net_connect)
+    try:
+        net_connect.disable_paging(cmd_verify=False)
+    except Exception:
+        pass
     try:
         net_connect.send_config_set(
             _FORTINET_DISABLE_PAGING,
-            read_timeout=60,
+            read_timeout=90,
             cmd_verify=False,
         )
-    except TypeError:
-        try:
-            net_connect.send_config_set(_FORTINET_DISABLE_PAGING, cmd_verify=False)
-        except Exception:
-            pass
     except Exception:
         pass
+
+
+def _fortinet_fetch_full_configuration(net_connect) -> str:
+    """Stream show full-configuration; send space on --More-- until idle."""
+    cmd = "show full-configuration"
+    net_connect.write_channel(net_connect.normalize_cmd(cmd))
+    chunks: list[str] = []
+    deadline = time.time() + 900
+    idle_rounds = 0
+    while time.time() < deadline:
+        data = net_connect.read_channel()
+        if data:
+            idle_rounds = 0
+            chunks.append(data)
+            compact = data.replace(" ", "").lower()
+            if "--more--" in compact or "(more)" in data.lower():
+                net_connect.write_channel(" ")
+        else:
+            idle_rounds += 1
+            time.sleep(0.2)
+            if idle_rounds >= 20 and chunks:
+                break
+    raw = "".join(chunks)
+    return net_connect._sanitize_output(
+        raw,
+        strip_command=True,
+        command_string=cmd,
+        strip_prompt=True,
+    )
+
+
+def _send_fortinet_command(net_connect, cmd_string: str, *, long_output: bool = False) -> str:
+    if long_output and cmd_string.strip() == "show full-configuration":
+        return _fortinet_fetch_full_configuration(net_connect)
+    return net_connect.send_command(cmd_string, read_timeout=120)
 
 NAV_BACKUP = "backup"
 NAV_INVENTORY = "inventory"
@@ -570,6 +603,11 @@ else:
                                                 cmd_string,
                                                 long_output=(cmd_type == 'config'),
                                             )
+                                            if cmd_type == 'config':
+                                                line_count = output_result.count("\n") + (1 if output_result else 0)
+                                                update_logs(
+                                                    f"ℹ️ {target_ip} FortiGate config.txt 約 {line_count} 行"
+                                                )
                                         else:
                                             output_result = net_connect.send_command(cmd_string)
                                         file_name = os.path.join(backup_folder, f"{cmd_type}.txt")

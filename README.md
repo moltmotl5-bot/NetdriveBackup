@@ -9,7 +9,7 @@
 * **批次備份：** Netmiko 連線，支援下列 CSV `Vendor` 值：
   * `cisco` — Cisco IOS / NX-OS
   * `huawei` — Huawei 交換
-  * `fortinet` — FortiGate（`show full-configuration`；備份前會嘗試 `set output standard` 避免分頁截斷）
+  * `fortinet` — FortiGate（`show full-configuration`；放大 SSH 終端高度並處理 `--More--`，避免約 1000 行截斷）
   * `cisco_wlc` / `cisco-wlc` — Cisco 無線控制器
   * `huawei_wlc` / `huawei-wlc` — Huawei AC/WLAN
 * **設備總表與版控：** 解析 `version_info.txt`（含 **Cisco NX-OS**、FortiOS、WLC 等）
