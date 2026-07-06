@@ -78,28 +78,24 @@ def iface_name_keys(name: str) -> set[str]:
     if not n:
         return set()
     keys = {n, n.lower()}
-    repl = [
-        (r"^(?i)GigabitEthernet", "Gi"),
-        (r"^(?i)TenGigabitEthernet", "Te"),
-        (r"^(?i)FastEthernet", "Fa"),
-        (r"^(?i)FortyGigabitEthernet", "Fo"),
-        (r"^(?i)HundredGigE", "Hu"),
-        (r"^(?i)Ethernet", "Eth"),
-        (r"^(?i)Port-channel", "Po"),
+    pairs = [
+        ("GigabitEthernet", "Gi"),
+        ("TenGigabitEthernet", "Te"),
+        ("FastEthernet", "Fa"),
+        ("FortyGigabitEthernet", "Fo"),
+        ("HundredGigE", "Hu"),
+        ("Ethernet", "Eth"),
+        ("Port-channel", "Po"),
     ]
-    short = n
-    for pat, abbr in repl:
-        if re.match(pat, short):
-            short = re.sub(pat, abbr, short, count=1)
-            keys.add(short)
-            keys.add(short.lower())
-            break
-    for pat, abbr in repl:
-        if re.match(rf"^{abbr}", short, re.I):
-            long_form = re.sub(rf"^{abbr}", pat.replace("(?i)", "").replace("^", ""), short, count=1, flags=re.I)
-            if long_form != short:
-                keys.add(long_form)
-                keys.add(long_form.lower())
+    for long_p, short_p in pairs:
+        if re.match(rf"^{re.escape(long_p)}", n, re.I):
+            rest = re.sub(rf"^{re.escape(long_p)}", "", n, count=1, flags=re.I)
+            keys.add(short_p + rest)
+            keys.add((short_p + rest).lower())
+        if re.match(rf"^{re.escape(short_p)}", n, re.I):
+            rest = re.sub(rf"^{re.escape(short_p)}", "", n, count=1, flags=re.I)
+            keys.add(long_p + rest)
+            keys.add((long_p + rest).lower())
     return keys
 
 
