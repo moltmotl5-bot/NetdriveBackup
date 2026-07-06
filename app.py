@@ -428,11 +428,15 @@ def _resolve_vendor_profile(vendor: str) -> tuple[str, dict]:
             "interfaces": "get system interface physical",
         }
     if vendor == "cisco_wlc":
+        wlc_cfg = (
+            os.getenv("NCCM_WLC_CONFIG_CMD", "show run-config no-ap").strip()
+            or "show run-config no-ap"
+        )
         return "cisco_wlc", {
             "version_info": "show inventory",
             "ap_cdp": "show ap cdp neighbors all",
             "cdp": "show cdp neighbors",
-            "config": "show run-config no-ap",
+            "config": wlc_cfg,
         }
     if vendor in ("huawei_wlc",):
         return "huawei", {
@@ -524,49 +528,91 @@ def _netmiko_connect_params(
 
 
 def _fetch_cisco_wlc_run_config(net_connect, cmd: str) -> str:
-    """Stream WLC run-config; handle 'Press Enter' / inventory interstitials."""
+    """Stream WLC run-config via raw channel until idle or AireOS prompt (avoid early truncation)."""
+    try:
+        net_connect.clear_buffer()
+    except Exception:
+        pass
     net_connect.write_channel(net_connect.normalize_cmd(cmd))
     chunks: list[str] = []
-    deadline = time.time() + 2400
+    deadline = time.time() + int(os.getenv("NCCM_WLC_CONFIG_DEADLINE_SEC", "3600"))
     idle_rounds = 0
     last_enter = 0.0
+    press_enter_hits = 0
+
+    def _blob() -> str:
+        return "".join(chunks)
+
     while time.time() < deadline:
         data = net_connect.read_channel()
         if data:
             idle_rounds = 0
             chunks.append(data)
-            blob = "".join(chunks)
+            blob = _blob()
             lower = data.lower()
-            if "press enter" in lower or "press any key" in lower:
-                if time.time() - last_enter > 0.4:
+            if any(
+                x in lower
+                for x in (
+                    "press enter",
+                    "press return",
+                    "press any key",
+                    "to continue",
+                )
+            ):
+                press_enter_hits += 1
+                if time.time() - last_enter > 0.35:
                     net_connect.write_channel(net_connect.RETURN)
                     last_enter = time.time()
-                    time.sleep(0.8)
+                    time.sleep(1.0)
             elif "display the next" in lower:
                 net_connect.write_channel("y")
+                time.sleep(0.5)
             elif "--more--" in lower.replace(" ", ""):
                 net_connect.write_channel(" ")
+                time.sleep(0.3)
             if "802.11b advanced configuration" in lower:
-                time.sleep(25)
-            if re.search(r"\)\s*>\s*$", blob[-400:]):
-                time.sleep(1.5)
+                time.sleep(30)
+            tail = blob[-800:]
+            if re.search(r"\)\s*>\s*$", tail):
+                if len(blob) < 4000 and press_enter_hits < 40:
+                    net_connect.write_channel(net_connect.RETURN)
+                    time.sleep(1.0)
+                    continue
+                time.sleep(2.0)
                 extra = net_connect.read_channel()
                 if extra:
                     chunks.append(extra)
-                elif len(blob) > 500:
+                    continue
+                if len(blob) > 2000:
                     break
         else:
             idle_rounds += 1
             time.sleep(0.25)
-            if idle_rounds >= 24 and chunks:
+            if idle_rounds >= 160 and chunks:
                 break
-    raw = "".join(chunks)
+    raw = _blob()
     return net_connect._sanitize_output(
         raw,
         strip_command=True,
         command_string=cmd,
         strip_prompt=True,
     )
+
+
+def _wlc_config_looks_truncated(text: str) -> bool:
+    raw = text or ""
+    if "# NCCM command:" in raw:
+        body = raw.split("\n\n", 2)[-1].strip()
+    else:
+        body = raw.strip()
+    if len(body) < 1500:
+        return True
+    lines = body.splitlines()
+    if len(lines) < 40:
+        return True
+    if re.search(r"^(wlan|ap group|interface |version )", body, re.MULTILINE | re.I):
+        return False
+    return len(body) < 8000
 
 
 def _wlc_file_with_header(cmd: str, body: str) -> str:
@@ -581,7 +627,7 @@ def _wlc_file_with_header(cmd: str, body: str) -> str:
 
 
 def _trim_wlc_config_output(text: str) -> str:
-    """AireOS often prepends System Inventory / notices before run-config body."""
+    """Strip AireOS inventory / notices before the first real config stanza."""
     if not text:
         return text
     out = text
@@ -598,10 +644,22 @@ def _trim_wlc_config_output(text: str) -> str:
         flags=re.DOTALL | re.IGNORECASE,
     )
     lines = out.splitlines()
+    start_idx = 0
     for i, line in enumerate(lines):
         s = line.strip()
-        if s.startswith("!") or re.match(r"^(version|ap |wlan|interface )", s, re.I):
-            return "\n".join(lines[i:]).strip()
+        if s.startswith("!") and i + 1 < len(lines):
+            nxt = lines[i + 1].strip()
+            if re.match(r"^(version|wlan|ap |interface |mgmtuser )", nxt, re.I):
+                start_idx = i
+                break
+        if re.match(r"^(version \d|wlan \d|ap group )", s, re.I):
+            start_idx = i
+            break
+        if s == "Building Configuration..." or s.startswith("Current configuration"):
+            start_idx = i
+            break
+    if start_idx:
+        return "\n".join(lines[start_idx:]).strip()
     return out.strip()
 
 
@@ -626,19 +684,34 @@ def _send_cisco_wlc_plain(net_connect, cmd_string: str) -> str:
 
 
 def _send_cisco_wlc_command(net_connect, cmd_type: str, cmd_string: str) -> str:
-    """Use Netmiko WLC helpers for paging / 'Press Enter' / 'display next' prompts."""
+    """WLC: config uses channel streaming first; CDP uses send_command_w_enter."""
     if cmd_type == "config":
-        try:
-            net_connect.clear_buffer()
-        except Exception:
-            pass
-        text = ""
-        if hasattr(net_connect, "send_command_w_enter"):
-            text = net_connect.send_command_w_enter(
-                cmd_string, delay_factor=6, max_loops=8000
+        _prepare_cisco_wlc_session(net_connect)
+        text = _fetch_cisco_wlc_run_config(net_connect, cmd_string)
+        if _wlc_config_looks_truncated(text) and hasattr(
+            net_connect, "send_command_w_enter"
+        ):
+            try:
+                net_connect.clear_buffer()
+            except Exception:
+                pass
+            alt = net_connect.send_command_w_enter(
+                cmd_string,
+                delay_factor=8,
+                max_loops=15000,
             )
-        if len((text or "").strip()) < 200:
-            text = _fetch_cisco_wlc_run_config(net_connect, cmd_string)
+            if len((alt or "").strip()) > len((text or "").strip()):
+                text = alt
+        if _wlc_config_looks_truncated(text):
+            fallback_cmd = "show run-config commands"
+            if cmd_string.strip().lower() != fallback_cmd.lower():
+                try:
+                    net_connect.clear_buffer()
+                except Exception:
+                    pass
+                fb = _fetch_cisco_wlc_run_config(net_connect, fallback_cmd)
+                if len((fb or "").strip()) > len((text or "").strip()):
+                    text = fb
         text = _trim_wlc_config_output(text)
         try:
             net_connect.clear_buffer()
@@ -1170,12 +1243,33 @@ else:
                                                         f"ℹ️ {target_ip} FortiGate config.txt 約 {line_count} 行"
                                                     )
                                             elif vendor == "cisco_wlc":
+                                                if cmd_type == "config":
+                                                    _prepare_cisco_wlc_session(net_connect)
                                                 output_result = _send_cisco_wlc_command(
                                                     net_connect, cmd_type, cmd_string
                                                 )
                                                 output_result = _wlc_file_with_header(
                                                     cmd_string, output_result
                                                 )
+                                                if cmd_type == "config":
+                                                    body_lines = output_result.count("\n") + (
+                                                        1 if output_result else 0
+                                                    )
+                                                    update_logs(
+                                                        f"ℹ️ {target_ip} WLC config.txt 約 {body_lines} 行"
+                                                    )
+                                                    if _wlc_config_looks_truncated(
+                                                        output_result
+                                                    ):
+                                                        update_logs(
+                                                            f"⚠️ {target_ip} WLC config 可能不完整"
+                                                            "（可設 NCCM_WLC_CONFIG_CMD=show run-config 或 show run-config commands）"
+                                                        )
+                                                        backup_run_log.error(
+                                                            "WLC config may be truncated %s lines=%s",
+                                                            target_ip,
+                                                            body_lines,
+                                                        )
                                             else:
                                                 output_result = net_connect.send_command(cmd_string)
                                             file_name = os.path.join(backup_folder, f"{cmd_type}.txt")
