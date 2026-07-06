@@ -1644,33 +1644,31 @@ else:
                                 key=f"iface_map_ts_{row['IP']}",
                             )
 
-                        ts, iface_df, source_note, parser_id, raw_iface = load_device_interface_table(
-                            device_path,
-                            vendor,
-                            snapshot=selected_ts,
+                        ts, iface_df, source_note, status_parser, raw_iface, config_snippets = (
+                            load_device_interface_table(
+                                device_path,
+                                vendor,
+                                snapshot=selected_ts,
+                            )
                         )
 
                         if ts:
                             st.caption(
-                                f"資料來源：{source_note} · 解析器：`{parser_id}` · 備份時間 `{ts}`"
+                                f"**{source_note}** · Status 解析：`{status_parser}` · 備份 `{ts}`"
+                            )
+                            st.caption(
+                                "表格欄位：**Description / Vlan / Speed / Type** 來自 **config.txt**；"
+                                "**Status** 僅來自 **interfaces.txt**。"
                             )
                         else:
                             st.warning("此設備尚無備份快照。")
 
-                        if vendor.lower() == "cisco" and "missing" in source_note:
-                            st.info(
-                                "Cisco WLC 備份未含 `interfaces.txt`；若為控制器，介面資訊可能僅見於 `config.txt` 的 interface 區段。"
-                            )
-
                         if iface_df.empty:
                             st.info(
-                                "無法將備份解析成表格。請展開下方「原始 interfaces.txt」對照設備 CLI 格式。"
+                                "尚無可顯示的介面。請確認備份含 `config.txt`（interface 區段）"
+                                "與交換器類設備的 `interfaces.txt`（show interface status 等）。"
                             )
                         else:
-                            if parser_id in ("unparsed", "none") or source_note.startswith("unparsed"):
-                                st.warning(
-                                    "表格可能與設備輸出格式不完全相符；請以原始檔為準或回報此設備型號。"
-                                )
                             st.dataframe(
                                 iface_df,
                                 column_config={
@@ -1687,24 +1685,24 @@ else:
                             )
                             st.caption(f"共 **{len(iface_df)}** 個介面／埠位")
 
+                        if config_snippets:
+                            with st.expander("📄 config.txt 擷取之 interface 設定", expanded=False):
+                                st.code(
+                                    config_snippets[:120_000]
+                                    + (
+                                        "\n…(已截斷)"
+                                        if len(config_snippets) > 120_000
+                                        else ""
+                                    ),
+                                    language="text",
+                                )
                         if raw_iface:
-                            with st.expander("📄 原始 interfaces.txt（與表格對照）", expanded=iface_df.empty):
+                            with st.expander(
+                                "📄 interfaces.txt（僅用於 Status 欄）",
+                                expanded=iface_df.empty,
+                            ):
                                 st.code(
                                     raw_iface[:120_000]
                                     + ("\n…(已截斷)" if len(raw_iface) > 120_000 else ""),
                                     language="text",
                                 )
-                        elif iface_df.empty and selected_ts:
-                            cfg_path = os.path.join(device_path, selected_ts, "config.txt")
-                            if os.path.isfile(cfg_path):
-                                with st.expander("📄 config.txt 中的 interface 區段", expanded=False):
-                                    with open(cfg_path, encoding="utf-8", errors="replace") as f:
-                                        cfg = f.read()
-                                    blocks = re.findall(
-                                        r"(?ms)^interface\s+\S+.*?(?=^\S|\Z)",
-                                        cfg,
-                                    )
-                                    st.code(
-                                        "\n\n".join(blocks[:80])[:80_000] or "(無 interface 區段)",
-                                        language="text",
-                                    )
