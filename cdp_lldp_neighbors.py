@@ -225,6 +225,81 @@ def _latest_backup_dir(device_path: str) -> str | None:
     return os.path.join(device_path, dates[0]) if dates else None
 
 
+def list_device_backup_versions(device_path: str, limit: int = 10) -> list[str]:
+    """Newest-first backup timestamp folder names (max ``limit``)."""
+    if not os.path.isdir(device_path):
+        return []
+    dates = sorted(
+        [d for d in os.listdir(device_path) if os.path.isdir(os.path.join(device_path, d))],
+        reverse=True,
+    )
+    return dates[: max(1, int(limit))]
+
+
+def neighbors_from_backup_snapshot(
+    backup_path: str,
+    hostname: str,
+    vendor: str,
+    hostname_lookup: dict[str, str],
+) -> tuple[list[dict[str, Any]], str, str]:
+    """Parse CDP/LLDP neighbor rows for one backup snapshot directory."""
+    cdp_text = ""
+    lldp_text = ""
+    cdp_status = "missing"
+    lldp_status = "missing"
+
+    if backup_path and os.path.isdir(backup_path):
+        cdp_file = os.path.join(backup_path, "cdp.txt")
+        lldp_file = os.path.join(backup_path, "lldp.txt")
+        if os.path.isfile(cdp_file):
+            with open(cdp_file, "r", encoding="utf-8", errors="replace") as f:
+                cdp_text = f.read()
+            cdp_status = "error" if _is_cdp_error(cdp_text) else "ok"
+        if os.path.isfile(lldp_file):
+            with open(lldp_file, "r", encoding="utf-8", errors="replace") as f:
+                lldp_text = f.read()
+            lldp_status = "error" if "% Invalid" in lldp_text[:300] else "ok"
+
+    skip_lldp = (vendor or "").lower() == "cisco" and cdp_status == "ok"
+    if skip_lldp:
+        lldp_status = "skipped"
+
+    neighbor_rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    protocol_sources: list[tuple[str, Any, str]] = [
+        ("CDP", parse_show_cdp_neighbors, cdp_text),
+    ]
+    if not skip_lldp:
+        protocol_sources.append(("LLDP", parse_show_lldp_neighbors, lldp_text))
+
+    for protocol, parser, text in protocol_sources:
+        if not text.strip():
+            continue
+        for rec in parser(text, local_device=hostname):
+            dedupe_key = (
+                protocol,
+                rec.local_interface,
+                rec.remote_hostname,
+                rec.remote_port,
+            )
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            remote_device_key = _resolve_remote_key(hostname_lookup, rec.remote_hostname)
+            neighbor_rows.append(
+                {
+                    "local_interface": rec.local_interface,
+                    "protocol": protocol,
+                    "remote_hostname": rec.remote_hostname,
+                    "remote_port": rec.remote_port,
+                    "cable_type": rec.cable_type,
+                    "remote_device_key": remote_device_key,
+                }
+            )
+
+    return neighbor_rows, cdp_status, lldp_status
+
+
 def _vendor_from_device_path(device_path: str) -> str:
     """Match build_inventory vendor detection from latest version_info.txt."""
     backup = _latest_backup_dir(device_path)
@@ -314,61 +389,12 @@ def build_neighbor_catalog(
         backup_path = _latest_backup_dir(device_path)
         vendor = _vendor_from_device_path(device_path)
 
-        cdp_text = ""
-        lldp_text = ""
-        cdp_status = "missing"
-        lldp_status = "missing"
-
-        if backup_path:
-            cdp_file = os.path.join(backup_path, "cdp.txt")
-            lldp_file = os.path.join(backup_path, "lldp.txt")
-            if os.path.isfile(cdp_file):
-                with open(cdp_file, "r", encoding="utf-8", errors="replace") as f:
-                    cdp_text = f.read()
-                cdp_status = "error" if _is_cdp_error(cdp_text) else "ok"
-            if os.path.isfile(lldp_file):
-                with open(lldp_file, "r", encoding="utf-8", errors="replace") as f:
-                    lldp_text = f.read()
-                lldp_status = "error" if "% Invalid" in lldp_text[:300] else "ok"
-
-        skip_lldp = vendor.lower() == "cisco" and cdp_status == "ok"
-        if skip_lldp:
-            lldp_status = "skipped"
-
-        neighbor_rows: list[dict[str, Any]] = []
-        seen: set[tuple[str, str, str, str]] = set()
-
-        protocol_sources: list[tuple[str, Any, str]] = [
-            ("CDP", parse_show_cdp_neighbors, cdp_text),
-        ]
-        if not skip_lldp:
-            protocol_sources.append(("LLDP", parse_show_lldp_neighbors, lldp_text))
-
-        for protocol, parser, text in protocol_sources:
-            if not text.strip():
-                continue
-            for rec in parser(text, local_device=hostname):
-                dedupe_key = (
-                    protocol,
-                    rec.local_interface,
-                    rec.remote_hostname,
-                    rec.remote_port,
-                )
-                if dedupe_key in seen:
-                    continue
-                seen.add(dedupe_key)
-
-                remote_device_key = _resolve_remote_key(hostname_lookup, rec.remote_hostname)
-                neighbor_rows.append(
-                    {
-                        "local_interface": rec.local_interface,
-                        "protocol": protocol,
-                        "remote_hostname": rec.remote_hostname,
-                        "remote_port": rec.remote_port,
-                        "cable_type": rec.cable_type,
-                        "remote_device_key": remote_device_key,
-                    }
-                )
+        neighbor_rows, cdp_status, lldp_status = neighbors_from_backup_snapshot(
+            backup_path or "",
+            hostname,
+            vendor,
+            hostname_lookup,
+        )
 
         neighbors_by_key[device_key] = neighbor_rows
         row["cdp_status"] = cdp_status

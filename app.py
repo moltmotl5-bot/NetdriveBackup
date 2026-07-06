@@ -1349,7 +1349,11 @@ else:
     # CDP/LLDP 鄰居表
     # ==========================================
     elif nav_page == NAV_NEIGHBORS:
-        from cdp_lldp_neighbors import make_device_key
+        from cdp_lldp_neighbors import (
+            list_device_backup_versions,
+            make_device_key,
+            neighbors_from_backup_snapshot,
+        )
 
         st.markdown(
             "瀏覽設備 CDP/LLDP 鄰居；操作方式與 **設備總表與版控** 相同："
@@ -1360,7 +1364,7 @@ else:
             st.warning("⚠️ `output` 資料夾不存在。請先執行備份任務產生資料！")
         else:
             df = build_inventory()
-            cat_df, _hostname_lookup, neighbors_by_key = load_neighbor_catalog_cached()
+            cat_df, hostname_lookup, neighbors_by_key = load_neighbor_catalog_cached()
 
             if df.empty:
                 st.info("📭 暫無設備資料。請先執行備份任務。")
@@ -1450,24 +1454,47 @@ else:
                 if selected_device_key and selected_device_key in df["device_key"].values:
                     row = df[df["device_key"] == selected_device_key].iloc[0]
                     device_label = f"{row['Hostname']} ({row['IP']})"
-                    neighbor_rows = neighbors_by_key.get(selected_device_key, [])
+                    device_path = row.get("Path", "")
 
                     st.divider()
                     st.subheader(f"🔗 CDP/LLDP 介面鄰居 — {device_label}")
 
-                    if row.get("cdp_status") == "error":
-                        st.warning(
-                            "此設備最新 `cdp.txt` 為指令錯誤或無效輸出（可能需改用 `show cdp neighbors`）。"
+                    backup_versions = list_device_backup_versions(device_path, limit=10)
+                    selected_ts = None
+                    if not backup_versions:
+                        st.info("此設備尚無備份版本。")
+                        neighbor_rows = []
+                        cdp_status = "missing"
+                        lldp_status = "missing"
+                    else:
+                        selected_ts = st.selectbox(
+                            "選擇備份版本（時間戳記，最多 10 筆）",
+                            backup_versions,
+                            key=f"neighbors_version_{selected_device_key}",
                         )
-                    if row.get("lldp_status") == "error":
-                        st.warning("此設備最新 `lldp.txt` 為指令錯誤或無效輸出。")
+                        snap_path = os.path.join(device_path, selected_ts)
+                        vendor = str(row.get("Vendor", ""))
+                        neighbor_rows, cdp_status, lldp_status = neighbors_from_backup_snapshot(
+                            snap_path,
+                            row["Hostname"],
+                            vendor,
+                            hostname_lookup,
+                        )
 
-                    if str(row.get("Vendor", "")).lower() == "cisco" and row.get("cdp_status") == "ok":
+                    if cdp_status == "error":
+                        st.warning(
+                            "此版本 `cdp.txt` 為指令錯誤或無效輸出（可能需改用 `show cdp neighbors`）。"
+                        )
+                    if lldp_status == "error":
+                        st.warning("此版本 `lldp.txt` 為指令錯誤或無效輸出。")
+
+                    if str(row.get("Vendor", "")).lower() == "cisco" and cdp_status == "ok":
                         st.caption("Cisco 設備且 CDP 解析成功：僅顯示 CDP，不列入 LLDP。")
 
+                    version_label = selected_ts or "—"
                     st.caption(
-                        f"共 **{len(neighbor_rows)}** 筆鄰居（最新備份 · "
-                        f"CDP:{row.get('cdp_status')} · LLDP:{row.get('lldp_status')}）"
+                        f"共 **{len(neighbor_rows)}** 筆鄰居（版本 `{version_label}` · "
+                        f"CDP:{cdp_status} · LLDP:{lldp_status}）"
                     )
 
                     if not neighbor_rows:
