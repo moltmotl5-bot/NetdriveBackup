@@ -2,6 +2,9 @@
 #
 # 啟動：docker compose up -d --build
 # 停止：docker compose down
+#
+# Agent unhealthy 常見原因：舊版 agent-logs volume 權限（uid 1000 無法寫入）。
+# 修復：docker compose down -v && docker compose up -d --build
 
 name: netdriverbackup-nccm
 
@@ -13,19 +16,28 @@ services:
     image: netdriverbackup-netdriver-agent:local
     container_name: nccm-netdriver-agent
     restart: unless-stopped
+    environment:
+      NETDRIVER_AGENT_CONFIG: /app/config/agent/agent.yml
     volumes:
       - ./deploy/config/agent:/app/config/agent:ro
-      - agent-logs:/app/logs
+      # 勿掛載 root-owned named volume 到 /app/logs；Agent 以 uid 1000 執行，寫 log 失敗會起不來。
+      # 日誌請用：docker compose logs -f netdriver-agent
     ports:
       - "${NETDRIVER_AGENT_PORT:-8000}:8000"
     networks:
       - nccm
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 30s
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)",
+        ]
+      interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 45s
+      retries: 5
+      start_period: 90s
 
   portal:
     build:
@@ -43,7 +55,6 @@ services:
       NCCM_APP_ROOT: /app
     volumes:
       - ./store:/data/store
-      - portal-logs:/app/logs
     ports:
       - "${NCCM_PORT:-8501}:8501"
     depends_on:
@@ -61,7 +72,3 @@ services:
 networks:
   nccm:
     driver: bridge
-
-volumes:
-  agent-logs:
-  portal-logs:

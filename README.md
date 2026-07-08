@@ -3,6 +3,7 @@
 企業網路設備組態備份與庫存平台：**FastAPI Web** + **NetDriver Agent（Docker）**。  
 取代舊版 Streamlit / Netmiko 單體；**不支援 WLC**；備份資料寫入 **`store/`**，索引為 **`store/index.db`**。
 
+**GitHub：** https://github.com/moltmotl5-bot/NetdriveBackup  
 **完整圖文手冊：** [docs/Handbook.html](docs/Handbook.html)（瀏覽器開啟；含安裝、設定、各頁操作與維運）
 
 ---
@@ -47,7 +48,7 @@
 在專案根目錄：
 
 ```bash
-git clone <your-repo-url> NetdriveBackup
+git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
 
 cp .env.example .env
@@ -55,6 +56,13 @@ cp .env.example .env
 chmod 600 .env
 
 mkdir -p store
+docker compose up -d --build
+```
+
+若曾用舊版 Compose 且 Agent 顯示 **unhealthy**，請先清掉舊 volume 再啟動：
+
+```bash
+docker compose down -v
 docker compose up -d --build
 ```
 
@@ -91,6 +99,7 @@ docker compose down
 | `NCCM_SESSION_SECRET` | Cookie 簽章（多副本請固定） | 未設則每次重啟隨機 |
 | `NCCM_PORT` | 對外 Web 埠 | `8501` |
 | `NETDRIVER_AGENT_PORT` | 對外 Agent API 埠 | `8000` |
+| `NETDRIVER_AGENT_CONFIG` | Agent 設定檔路徑（僅 Agent 容器） | `/app/config/agent/agent.yml` |
 
 **設備 SSH 帳密**：僅在 Web「批次備份」表單輸入，**不寫入** `.env` 或映像。
 
@@ -141,7 +150,7 @@ store/
                 └── interfaces.txt
 ```
 
-設備在索引中的主鍵為 **`site::ip::port`**（同 IP 不同埠為不同設備）。
+設備在索引中的主鍵為 **`site::ip::port::hostname`**（hostname 經正規化；同 IP 不同 hostname 為不同設備）。虛擬 IP／Stack 仍只備份**一份** running-config（掛在 Active/Master 邏輯設備上）。
 
 備份完成後會自動寫入索引；亦可於「設備總表」按 **重建索引** 掃描整個 `store/`。
 
@@ -150,7 +159,7 @@ store/
 ## Web 功能（四頁）
 
 1. **批次備份** — CSV、SSH 帳密、即時 job log  
-2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽  
+2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽；**Cisco Stack** 自 `show version` 解析時會**每台 member 一行**（組態仍共用虛擬 IP 那份 config）  
 3. **CDP/LLDP 鄰居** — 由快照解析鄰居表  
 4. **Device Interface Map** — `config` + `interfaces` 合併埠位表  
 
@@ -182,10 +191,10 @@ docker compose up -d portal
 ### Agent 日誌
 
 ```bash
-docker compose exec netdriver-agent tail -f /app/logs/agent.log
+docker compose logs -f netdriver-agent
 ```
 
-或查看 named volume `agent-logs`（依部署主機設定）。
+（已移除 `agent-logs` volume：Agent 以 uid 1000 執行，掛載 root-owned volume 會導致 **unhealthy**。）
 
 ---
 
@@ -210,7 +219,7 @@ pip install -r requirements-v3.txt
 cp .env.example .env
 export PYTHONPATH=.
 # 另終端啟動 Agent（見 netdrive-agent 文件）後：
-uvicorn web.main:app --reload --port 8501
+python -m uvicorn web.main:app --reload --port 8501
 ```
 
 模組說明：`nccm/`（備份、索引、解析）、`web/`（UI）。
@@ -229,7 +238,7 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 
 - 勿將 `.env` 提交 Git；建議 `chmod 600 .env`  
 - Web 帳密僅來自環境變數；無程式內建預設密碼  
-- 登入稽核寫入 `nccm_auth.log`（路徑可經 `NCCM_AUDIT_LOG` 調整，容器可掛載 `portal-logs`）  
+- 登入稽核寫入 `nccm_auth.log`（路徑可經 `NCCM_AUDIT_LOG` 調整）  
 - Docker 請用 `env_file: .env`，避免在命令列暴露密碼  
 - **不支援** WLC；CSV 含 WLC vendor 會被拒絕  
 
@@ -257,7 +266,8 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 |------|------|
 | 側欄 Agent 紅燈 | `docker compose ps`、Agent log、`curl http://localhost:8000/health` |
 | 備份全失敗 | 確認容器到設備 **SSH 22**（或 CSV Port）可連、帳密正確 |
-| 庫存只有一台 | 同 Site+IP 多設備需不同 **Port**；按「重建索引」 |
+| 庫存只有一台 | 同 Site+IP 多設備需不同 **Port** 或 **hostname**；按「重建索引」 |
+| Agent **unhealthy** | 多為舊 `agent-logs` volume 權限問題：`docker compose down -v && docker compose up -d --build`；查 `docker compose logs netdriver-agent` |
 | Forti 設定過短 | 調高 `deploy/config/agent/agent.yml` 內 `fortinet.fortigate` `read_timeout` |
 
 ---

@@ -166,7 +166,8 @@
 
 <main>
   <h1>NetdriverBackup NCCM v3 使用手冊</h1>
-  <p class="lead">企業網路設備組態備份、庫存與埠位檢視 — 安裝、設定與日常操作完整說明。</p>
+  <p class="lead">企業網路設備組態備份、庫存與埠位檢視 — 安裝、設定與日常操作完整說明。<br/>
+  原始碼：<a href="https://github.com/moltmotl5-bot/NetdriveBackup" style="color:var(--accent)">github.com/moltmotl5-bot/NetdriveBackup</a></p>
 
   <h2 id="intro">產品簡介</h2>
   <section class="block">
@@ -214,7 +215,7 @@
   <h2 id="install-docker">安裝 — Docker Compose（建議）</h2>
   <ol>
     <li>取得專案原始碼並進入目錄：
-      <pre><code>git clone &lt;your-repo-url&gt; NetdriveBackup
+      <pre><code>git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup</code></pre>
     </li>
     <li>建立 Portal 登入設定：
@@ -227,6 +228,7 @@ chmod 600 .env</code></pre>
 docker compose up -d --build</code></pre>
       首次建置會編譯 <code>netdrive-agent/</code> 與 Portal 映像，需能存取基礎映像 registry（含 <code>ghcr.io</code>）。
     </li>
+    <li>若 Agent 狀態為 <strong>unhealthy</strong>（常見於舊版 <code>agent-logs</code> volume）：<code>docker compose down -v</code> 後再 <code>docker compose up -d --build</code>。</li>
     <li>開啟 Web：<a href="http://localhost:8501/login">http://localhost:8501/login</a>（埠可經 <code>NCCM_PORT</code> 調整）。</li>
   </ol>
   <table>
@@ -251,7 +253,7 @@ export PYTHONPATH=.
 
 # 終端 A：啟動 Agent（見 netdrive-agent 文件或 docker compose up netdriver-agent）
 # 終端 B：
-uvicorn web.main:app --reload --host 0.0.0.0 --port 8501</code></pre>
+python -m uvicorn web.main:app --reload --host 0.0.0.0 --port 8501</code></pre>
     <p>自檢腳本（ad-hoc，非正式測試套件）：</p>
     <pre><code>python3 scripts/hermes-verify-nccm-v3.py
 python3 scripts/smoke-web-nccm-v3.py   # 需 Portal 已啟動</code></pre>
@@ -291,7 +293,7 @@ curl -s http://localhost:8000/health</code></pre>
     <tbody>
       <tr><td><code>api.request_log_level</code></td><td><code>INFO</code> 或 <code>DEBUG</code>（HTTP 請求記錄詳細度）</td></tr>
       <tr><td><code>logging.level</code></td><td>Agent log 層級：<code>INFO</code> / <code>DEBUG</code> / <code>TRACE</code></td></tr>
-      <tr><td><code>logging.log_file</code></td><td>容器內路徑，預設 <code>logs/agent.log</code>（volume <code>agent-logs</code>）</td></tr>
+      <tr><td><code>logging.log_file</code></td><td>容器內路徑，預設 <code>logs/agent.log</code>；日誌請以 <code>docker compose logs netdriver-agent</code> 為主（勿掛載 root-owned volume 至 <code>/app/logs</code>）</td></tr>
       <tr><td><code>session.ssh</code></td><td>登入／連線逾時、keepalive、終端機寬高（大設定檔建議寬 1000、高 100）</td></tr>
       <tr><td><code>session.profiles</code></td><td>依 global → vendor/model → IP 覆寫 <code>read_timeout</code>、session 過期時間</td></tr>
     </tbody>
@@ -307,7 +309,7 @@ curl -s http://localhost:8000/health</code></pre>
     </tbody>
   </table>
   <p>修改 YAML 後：<code>docker compose restart netdriver-agent</code>。</p>
-  <p>環境變數 <code>NETDRIVER_CONFIG_PATH</code> 在官方映像中指向 <code>/app/config/agent/agent.yml</code>（本專案建置的 Agent 同樣）。</p>
+  <p>環境變數 <code>NETDRIVER_AGENT_CONFIG</code>（Compose 已設）指向 <code>/app/config/agent/agent.yml</code>。</p>
 
   <h2 id="config-compose">設定 — Compose 與網路</h2>
   <h3>自訂對外埠</h3>
@@ -339,7 +341,7 @@ NETDRIVER_AGENT_PORT=18000</code></pre>
 hq,10.1.1.10,cisco,22
 hq,10.1.1.20,fortinet,22
 dc,10.2.1.5,huawei,22</code></pre>
-  <p>範例檔：<code>DEMO-v3.csv</code>。索引主鍵為 <code>site::ip::port</code>。</p>
+  <p>範例檔：<code>DEMO-v3.csv</code>。索引主鍵為 <code>site::ip::port::hostname</code>（hostname 自備份正規化）。</p>
 
   <h2 id="use-login">使用 — 登入與側欄</h2>
   <ol>
@@ -371,6 +373,7 @@ dc,10.2.1.5,huawei,22</code></pre>
     <li>列表來自 <code>index.db</code>，可依 Site、IP、Hostname、Vendor 篩選。</li>
     <li>設備表約顯示 10 列高度，其餘於表內捲動；點列或「檢視」開啟下方詳情。</li>
     <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config）。</li>
+    <li><strong>Cisco Stack</strong>：若 <code>version_info.txt</code> 含 Stack 成員資訊，總表會<strong>每台 member 一行</strong>（Stack#、Role）；虛擬 IP 仍只備份一份組態，Active/Master 列標示「· 組態」。</li>
     <li><strong>重建索引</strong>：掃描整個 <code>store/</code> 重建 <code>index.db</code>（手動還原資料或修復索引時使用）。</li>
   </ul>
 
@@ -419,7 +422,7 @@ python -m nccm backup \
 
   <h2 id="data-index">資料 — 索引與重建</h2>
   <ul>
-    <li>設備主鍵：<code>site::ip::port</code>。</li>
+    <li>設備主鍵：<code>site::ip::port::hostname</code>。</li>
     <li>每次成功備份會 upsert 設備與快照記錄。</li>
     <li>若曾手動刪除 <code>index.db</code> 或從他處還原 <code>store/</code>，請在 Web 按「重建索引」或執行 <code>python -m nccm index rebuild</code>。</li>
   </ul>
@@ -444,8 +447,8 @@ docker load -i nccm-v3-images.tar</code></pre>
     <thead><tr><th>來源</th><th>查看方式</th></tr></thead>
     <tbody>
       <tr><td>Portal 容器 stdout</td><td><code>docker compose logs -f portal</code></td></tr>
-      <tr><td>Agent 容器 stdout</td><td><code>docker compose logs -f netdriver-agent</code></td></tr>
-      <tr><td>Agent 檔案 log</td><td><code>docker compose exec netdriver-agent tail -f /app/logs/agent.log</code></td></tr>
+      <tr><td>Agent 容器 stdout</td><td><code>docker compose logs -f netdriver-agent</code>（建議）</td></tr>
+      <tr><td>Agent 容器內檔案 log</td><td>可選 <code>docker compose exec netdriver-agent tail -f /app/logs/agent.log</code>（未掛載 logs volume 時）</td></tr>
       <tr><td>Web 登入稽核</td><td><code>NCCM_AUDIT_LOG</code>（預設 <code>nccm_auth.log</code>）</td></tr>
     </tbody>
   </table>
@@ -466,9 +469,10 @@ docker load -i nccm-v3-images.tar</code></pre>
     <tbody>
       <tr><td>Portal 無法啟動</td><td>檢查 <code>.env</code> 帳密是否符合政策；<code>docker compose logs portal</code></td></tr>
       <tr><td>側欄 Agent 紅燈</td><td>Agent 未啟動、URL 錯誤、防火牆；<code>curl http://localhost:8000/health</code></td></tr>
+      <tr><td>Agent <code>unhealthy</code></td><td>多為舊 <code>agent-logs</code> volume 導致無法寫 log：<code>docker compose down -v</code> 後重建；查 <code>docker compose logs netdriver-agent</code></td></tr>
       <tr><td>備份全部失敗</td><td>Agent 容器無法 SSH 至設備；檢查路由／Port／帳密；必要時 host 網路</td></tr>
       <tr><td>Forti 設定不完整</td><td>提高 <code>deploy/config/agent/agent.yml</code> 中 Fortinet <code>read_timeout</code></td></tr>
-      <tr><td>庫存只有一台設備</td><td>多設備同 Site+IP 須不同 <code>Port</code>；執行重建索引</td></tr>
+      <tr><td>庫存只有一台設備</td><td>多設備同 Site+IP 須不同 <code>Port</code> 或 hostname；執行重建索引</td></tr>
       <tr><td>鄰居／埠位空白</td><td>該次備份未擷取到 CDP/LLDP 或 interfaces；重新備份並確認權限</td></tr>
       <tr><td>建置 Agent 失敗</td><td>確認可拉取 <code>ghcr.io</code> 基礎映像；代理或鏡像設定</td></tr>
     </tbody>
