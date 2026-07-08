@@ -89,6 +89,7 @@ def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
     if v == "fortinet":
         return [
             CommandSpec("version_info", "get system status"),
+            CommandSpec("ha_status", "get system ha status"),
             CommandSpec("config", "show full-configuration", timeout=600),
             CommandSpec("interfaces", "get system interface physical"),
         ]

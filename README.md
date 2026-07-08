@@ -159,7 +159,7 @@ store/
 ## Web 功能（四頁）
 
 1. **批次備份** — CSV、SSH 帳密、即時 job log  
-2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽；Hostname 優先從 running-config 解析（舊資料可「重建索引」回填）；**Cisco Stack** 自 `show version` 解析時會**每台 member 一行**（組態仍共用虛擬 IP 那份 config）  
+2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽；Hostname 優先從 running-config 解析；**Cisco Stack / FortiGate HA** 每台實體機一行（Primary/Secondary + 各自 hostname），組態仍掛在 Anchor（Active/Primary）上。
 3. **CDP/LLDP 鄰居** — 由快照解析鄰居表  
 4. **Device Interface Map** — `config` + `interfaces` 合併埠位表  
 
@@ -169,24 +169,56 @@ store/
 
 ## 維運
 
-### 升級映像
+### Docker 更新方式
 
+#### 推薦標準更新（日常改動後）
 ```bash
 git pull
 docker compose build --no-cache
 docker compose up -d
 ```
 
-### 備份資料
+#### 安全完整更新（升級版本或行為異常時建議）
+```bash
+docker compose down
+git pull
+docker compose build --no-cache
+docker compose up -d --build
+```
 
-請定期備份 host 目錄 **`./store`**（含 `index.db` 與所有快照）。
+#### 強制清除舊 Volume（Agent unhealthy、權限問題等）
+```bash
+docker compose down -v
+git pull
+docker compose build --no-cache
+docker compose up -d --build
+```
 
-### 僅重建 Portal（不動 Agent）
+#### 僅更新 Agent
+```bash
+docker compose build --no-cache netdriver-agent
+docker compose up -d netdriver-agent
+```
 
+#### 僅更新 Portal
 ```bash
 docker compose build portal
 docker compose up -d portal
 ```
+
+#### 更新後建議檢查
+```bash
+docker compose ps
+docker compose logs -f netdriver-agent     # 查看 Agent 是否正常啟動
+```
+
+> **重要提醒**：
+> - 重大更新前建議先備份 `./store` 目錄。
+> - 若本次更新涉及索引結構或 hostname 解析，更新後請在 Web 按「**重建索引**」。
+> - `--no-cache` 可避免快取導致舊程式碼持續使用。
+### 備份資料
+
+請定期備份 host 目錄 **`./store`**（含 `index.db` 與所有快照）。
 
 ### Agent 日誌
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from nccm.config import store_dir
+from nccm.profiles import normalize_vendor
 from nccm.parsers.stack import config_anchor_unit, parse_cisco_stack_units
 from nccm.parsers.version import parse_version_info
 from nccm.storage.writer import safe_hostname
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS stack_units (
     model TEXT,
     serial TEXT,
     sw_version TEXT,
+    hostname TEXT,
     FOREIGN KEY (device_id) REFERENCES devices(device_id)
 );
 CREATE INDEX IF NOT EXISTS idx_stack_units_device ON stack_units(device_id, switch_num);
@@ -175,16 +177,27 @@ def _read_version_text(snap_dir: Path) -> str:
     return vf.read_text(encoding="utf-8", errors="replace")
 
 
+def _read_ha_status(snap_dir: Path) -> str:
+    f = snap_dir / "ha_status.txt"
+    if f.is_file():
+        return f.read_text(encoding="utf-8", errors="replace")
+    return ""
+
 def _sync_stack_units(
     conn: sqlite3.Connection,
     did: str,
     vendor: str,
     version_text: str,
+    ha_text: str = "",
 ) -> None:
     conn.execute("DELETE FROM stack_units WHERE device_id = ?", (did,))
-    if (vendor or "").lower() != "cisco" and "cisco" not in (version_text or "").lower():
+    v = normalize_vendor(vendor)
+    if v == "cisco":
+        units = parse_cisco_stack_units(version_text)
+    elif v == "fortinet":
+        units = parse_fortigate_ha_units(ha_text or version_text)
+    else:
         return
-    units = parse_cisco_stack_units(version_text)
     if len(units) < 2:
         return
     for u in units:
@@ -192,8 +205,8 @@ def _sync_stack_units(
         conn.execute(
             """
             INSERT INTO stack_units (
-                unit_id, device_id, switch_num, role, model, serial, sw_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                unit_id, device_id, switch_num, role, model, serial, sw_version, hostname
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 uid,
@@ -203,6 +216,7 @@ def _sync_stack_units(
                 u.model,
                 u.serial,
                 u.sw_version,
+                u.hostname or "",
             ),
         )
 
@@ -336,7 +350,8 @@ def index_manifest(manifest: dict[str, Any], snapshot_path: Path) -> int:
                     created_at,
                 ),
             )
-        _sync_stack_units(conn, did, vendor, version_text)
+        ha_text = _read_ha_status(snapshot_path) if normalize_vendor(vendor) == "fortinet" else ""
+        _sync_stack_units(conn, did, vendor, version_text, ha_text)
         return int(snap_id)
 
 
@@ -430,8 +445,9 @@ def list_inventory_display(
     vendor: str = "",
     limit: int = 500,
 ) -> list[InventoryDisplayRow]:
-    """Expand Cisco stacks into one row per member; config stays on anchor (Active/Master)."""
-    from nccm.parsers.stack import StackUnit
+    """Expand stacks / HA clusters into one row per member; config stays on anchor."""
+    from nccm.parsers.stack import StackUnit, config_anchor_unit
+    from nccm.profiles import normalize_vendor
 
     logical = list_inventory(query=query, site=site, vendor=vendor, limit=limit)
     out: list[InventoryDisplayRow] = []
@@ -439,7 +455,7 @@ def list_inventory_display(
         for r in logical:
             su_rows = conn.execute(
                 """
-                SELECT switch_num, role, model, serial, sw_version
+                SELECT switch_num, role, model, serial, sw_version, hostname
                 FROM stack_units WHERE device_id = ?
                 ORDER BY switch_num
                 """,
@@ -453,6 +469,7 @@ def list_inventory_display(
                         x["model"] or "",
                         x["serial"] or "",
                         x["sw_version"] or "",
+                        x.get("hostname") or "",
                     )
                     for x in su_rows
                 ]
@@ -461,13 +478,12 @@ def list_inventory_display(
                 display_units = sorted(
                     su_rows,
                     key=lambda x: (
-                        0
-                        if int(x["switch_num"]) == anchor_num
-                        else 1,
+                        0 if int(x["switch_num"]) == anchor_num else 1,
                         int(x["switch_num"]),
                     ),
                 )
                 for x in display_units:
+                    member_hostname = (x.get("hostname") or "").strip() or r.hostname
                     sn = int(x["switch_num"])
                     is_anchor = sn == anchor_num
                     out.append(
@@ -476,7 +492,7 @@ def list_inventory_display(
                             site=r.site,
                             ip=r.ip,
                             port=r.port,
-                            hostname=r.hostname,
+                            hostname=member_hostname,
                             vendor=r.vendor,
                             sw_version=(x["sw_version"] or r.sw_version),
                             model_summary=x["model"] or r.model_summary,
@@ -506,7 +522,6 @@ def list_inventory_display(
                     )
                 )
     return out
-
 
 def list_sites() -> list[str]:
     with connect() as conn:

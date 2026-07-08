@@ -374,7 +374,7 @@ dc,10.2.1.5,huawei,22</code></pre>
     <li>設備表約顯示 10 列高度，其餘於表內捲動；點列或「檢視」開啟下方詳情。</li>
     <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config）。</li>
     <li>Hostname 優先從 running-config 擷取；若舊快照顯示 unknown，可按「重建索引」從 config.txt 回填。</li>
-    <li><strong>Cisco Stack</strong>：若 <code>version_info.txt</code> 含 Stack 成員資訊，總表會<strong>每台 member 一行</strong>（Stack#、Role）；虛擬 IP 仍只備份一份組態，Active/Master 列標示「· 組態」。</li>
+    <li><strong>Cisco Stack / FortiGate HA</strong>：總表會<strong>每台實體機一行</strong>（Stack#/Member + Role: Primary/Secondary）；各自 hostname 會顯示（來自 HA status / running-config）。組態仍掛在 Anchor（Active/Primary）那一列，虛擬 IP / Cluster 只備一份 config。</li>
     <li><strong>重建索引</strong>：掃描整個 <code>store/</code> 重建 <code>index.db</code>（手動還原資料或修復索引時使用）。</li>
   </ul>
 
@@ -428,20 +428,43 @@ python -m nccm backup \
     <li>若曾手動刪除 <code>index.db</code> 或從他處還原 <code>store/</code>，請在 Web 按「重建索引」或執行 <code>python -m nccm index rebuild</code>。</li>
   </ul>
 
-  <h2 id="ops-upgrade">維運 — 升級與資料備份</h2>
-  <h3>升級應用版本</h3>
+  <h2 id="ops-upgrade">維運 — Docker 更新方式</h2>
+
+  <h3>推薦標準更新（日常改動後）</h3>
   <pre><code>git pull
 docker compose build --no-cache
 docker compose up -d</code></pre>
-  <h3>僅重建 Portal</h3>
+
+  <h3>安全完整更新（升級版本或行為異常時建議）</h3>
+  <pre><code>docker compose down
+git pull
+docker compose build --no-cache
+docker compose up -d --build</code></pre>
+
+  <h3>強制清除舊 Volume（Agent unhealthy、權限問題等）</h3>
+  <pre><code>docker compose down -v
+git pull
+docker compose build --no-cache
+docker compose up -d --build</code></pre>
+
+  <h3>僅更新 Agent</h3>
+  <pre><code>docker compose build --no-cache netdriver-agent
+docker compose up -d netdriver-agent</code></pre>
+
+  <h3>僅更新 Portal</h3>
   <pre><code>docker compose build portal
 docker compose up -d portal</code></pre>
-  <h3>備份業務資料</h3>
-  <p>定期備份 host 目錄 <code>./store</code>（含 <code>index.db</code> 與所有快照）。建議納入既有的檔案備份或快照排程。</p>
-  <h3>映像離線搬移</h3>
-  <pre><code>docker save netdriverbackup-portal:local netdriverbackup-netdriver-agent:local -o nccm-v3-images.tar
-# 目標主機：
-docker load -i nccm-v3-images.tar</code></pre>
+
+  <h3>更新後建議檢查</h3>
+  <pre><code>docker compose ps
+docker compose logs -f netdriver-agent</code></pre>
+
+  <p><strong>重要提醒</strong>：</p>
+  <ul>
+    <li>重大更新前建議先備份 <code>./store</code> 目錄。</li>
+    <li>若本次更新涉及索引結構或 hostname 解析，更新後請在 Web 按「<strong>重建索引</strong>」。</li>
+    <li><code>--no-cache</code> 可避免快取導致舊程式碼持續使用。</li>
+  </ul>
 
   <h2 id="ops-logs">維運 — 日誌</h2>
   <table>

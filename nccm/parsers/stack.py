@@ -12,6 +12,7 @@ class StackUnit:
     model: str
     serial: str
     sw_version: str = ""
+    hostname: str = ""
 
 
 _ROLE_ORDER = {"active": 0, "master": 0, "standby": 1, "member": 2, "unknown": 3}
@@ -68,6 +69,7 @@ def parse_cisco_stack_units(text: str) -> list[StackUnit]:
             model=model or "Unknown",
             serial=serial or "Unknown",
             sw_version=sw,
+            hostname="",
         )
 
     if len(units) < 2 and roles:
@@ -78,6 +80,7 @@ def parse_cisco_stack_units(text: str) -> list[StackUnit]:
                     role=role,
                     model="Unknown",
                     serial="Unknown",
+                    hostname="",
                 )
 
     if len(units) < 2:
@@ -95,3 +98,51 @@ def config_anchor_unit(units: list[StackUnit]) -> StackUnit | None:
         if u.role.lower() in ("active", "master"):
             return u
     return units[0]
+
+def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
+    """Parse FortiGate HA cluster members from get system ha status or version.
+    Returns empty list if not a cluster (<2 members) or standalone.
+    """
+    if not text:
+        return []
+    t = text or ""
+    if re.search(r"Current HA mode:\s*standalone|HA mode:\s*standalone", t, re.I):
+        return []
+
+    units: list[StackUnit] = []
+    patterns = [
+        r"(?im)(Primary|Secondary|Master|Slave|Active|Standby)[\s:,-]+([A-Z0-9]{6,})\s*,?\s*([A-Za-z0-9_.-]+)",
+    ]
+    seen = set()
+    for pat in patterns:
+        for m in re.finditer(pat, t):
+            role_raw = m.group(1).lower()
+            serial = m.group(2)
+            hname = m.group(3)
+            if serial in seen:
+                continue
+            seen.add(serial)
+            role = "Primary" if role_raw in ("primary", "master", "active") else "Secondary"
+            units.append(StackUnit(
+                switch_num=0,  # will renumber
+                role=role,
+                model="",
+                serial=serial,
+                sw_version="",
+                hostname=hname,
+            ))
+    if len(units) < 2:
+        return []
+    # Primary first
+    ordered = sorted(units, key=lambda u: (0 if u.role == "Primary" else 1, u.hostname or u.serial))
+    result = []
+    for i, u in enumerate(ordered, 1):
+        result.append(StackUnit(
+            switch_num=i,
+            role=u.role,
+            model=u.model,
+            serial=u.serial,
+            sw_version=u.sw_version,
+            hostname=u.hostname,
+        ))
+    return result
