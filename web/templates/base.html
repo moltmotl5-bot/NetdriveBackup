@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}NetdriverBackup{% endblock %}</title>
+  <link rel="stylesheet" href="/static/nccm.css" />
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">🛡️ NCCM v3</div>
+      <p class="meta">Agent: <span class="{% if agent_ok %}ok{% else %}bad{% endif %}">{{ agent_url }}</span></p>
+      <nav>
+        {% for key, label, href in nav %}
+        <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
+        {% endfor %}
+      </nav>
+      <p class="meta store">store: {{ store }}</p>
+      <a class="logout" href="/logout">登出</a>
+    </aside>
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% block scripts %}{% endblock %}
+  </body>
+</html>

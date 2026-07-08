@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}CDP/LLDP 鄰居 — NCCM v3{% endblock %}
+{% block content %}
+<h1>CDP/LLDP 鄰居</h1>
+<p class="lead">從備份快照的 <code>cdp_neighbors.txt</code> / <code>lldp_neighbors.txt</code> 解析；點選設備列查看介面鄰居。</p>
+<div class="inv-page-stack">
+  <section class="inv-main">
+    <form id="nb-filters" class="filters"
+          hx-get="/neighbors/partial/table"
+          hx-target="#nb-table"
+          hx-trigger="keyup changed delay:300ms from:#q, change from:select"
+          hx-include="#nb-filters">
+      <input type="search" id="q" name="q" value="{{ q }}" placeholder="搜尋 IP / Hostname / Model" />
+      <select name="site">
+        <option value="">全部 Site</option>
+        {% for s in sites %}
+        <option value="{{ s }}" {% if site_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <input name="vendor" value="{{ vendor_filter }}" placeholder="Vendor" />
+      <input type="hidden" name="device_key" id="device_key_field" value="{{ device_key }}" />
+    </form>
+    <p class="muted table-hint">設備列表顯示約 10 筆高度，其餘請在表內向下捲動。</p>
+    <div id="nb-table" class="inv-device-table-scroll">
+      {% include "partials/neighbors_table.html" %}
+    </div>
+  </section>
+  <section class="inv-result-below" id="nb-detail">
+    {% if device_key %}
+      {% include "partials/neighbors_detail.html" %}
+    {% else %}
+    <p class="muted">點選上方設備列以顯示 CDP/LLDP 鄰居表。</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

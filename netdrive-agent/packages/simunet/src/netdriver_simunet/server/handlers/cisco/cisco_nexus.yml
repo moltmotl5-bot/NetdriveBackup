@@ -1,0 +1,167 @@
+# Cisco Nexus
+start_mode: enable
+hostname: nxos
+line_feed: "\r\n"
+enable_password: ""
+modes:
+  enable:
+    prompt: "# "
+    switch_mode_cmds:
+      - "configure terminal"
+      - "exit"
+    cmds: []
+  config:
+    prompt: "(config)# "
+    switch_mode_cmds:
+      - "exit"
+      - "end"
+    cmds:
+    - cmd: "hostname nxos"
+      output: ""
+    - cmd: "copy running-config startup-config"
+      output: |
+        [########################################] 100%
+        Copy complete, now saving to disk (please wait)...
+        Copy complete.
+common:
+  - cmd: "show version"
+    output: |
+      Cisco Nexus Operating System (NX-OS) Software
+      TAC support: http://www.cisco.com/tac
+      Documents: http://www.cisco.com/en/US/products/ps9372/tsd_products_support_series_home.html
+      Copyright (c) 2002-2018, Cisco Systems, Inc. All rights reserved.
+      The copyrights to certain works contained herein are owned by
+      other third parties and are used and distributed under license.
+      Some parts of this software are covered under the GNU Public
+      License. A copy of the license is available at
+      http://www.gnu.org/licenses/gpl.html.
+
+      Nexus 9000v is a demo version of the Nexus Operating System
+
+      Software
+        BIOS: version
+        NXOS: version 7.0(3)I7(4)
+        BIOS compile time:
+        NXOS image file is: bootflash:///nxos.7.0.3.I7.4.bin
+        NXOS compile time:  6/14/2018 2:00:00 [06/14/2018 09:49:04]
+
+
+      Hardware
+        cisco Nexus9000 9000v Chassis
+         with 8129576 kB of memory.
+        Processor Board ID 9RFOYRP1UDR
+
+        Device name: nxos-60-100
+        bootflash:    3509454 kB
+      Kernel uptime is 0 day(s), 0 hour(s), 7 minute(s), 57 second(s)
+
+      Last reset
+        Reason: Unknown
+        System version:
+        Service:
+
+      plugin
+        Core Plugin, Ethernet Plugin
+
+  - cmd: "terminal length 0"
+    output: ""
+  - cmd: "show running-config"
+    output: |
+      !Command: show running-config
+      !Time: Wed Jan  1 00:00:00 2020
+
+      version 7.0(3)I7(4) Bios:version
+      hostname nxos-60-100
+      feature bash-shell
+      feature scp-server
+      cfs eth distribute
+      nv overlay evpn
+      feature ospf
+      feature bgp
+      feature interface-vlan
+      feature vn-segment-vlan-based
+      feature lacp
+      feature vpc
+      feature lldp
+      username admin password 5 $1$xyz role network-admin
+      ip domain-lookup
+      copp profile strict
+      snmp-server location lab
+      vlan 1
+      vrf context management
+        ip route 0.0.0.0/0 192.168.1.1
+      interface Ethernet1/1
+        description uplink
+        no shutdown
+      interface Ethernet1/2
+        description server
+        switchport
+        switchport mode access
+        switchport access vlan 10
+  - cmd: "show run"
+    output: |
+      !Command: show running-config
+      hostname nxos-60-100
+      version 7.0(3)I7(4)
+  - cmd: "show interface status"
+    output: |
+      --------------------------------------------------------------------------------
+      Port          Name               Status    Vlan      Duplex  Speed   Type
+      --------------------------------------------------------------------------------
+      Eth1/1        uplink             connected trunk     full    10G     10Gbase-SR
+      Eth1/2        server             connected 10        full    10G     10Gbase-SR
+  - cmd: "show cdp neighbors"
+    output: |
+      Capability Codes: R - Router, T - Trans-Bridge, B - Source-Route-Bridge
+                        S - Switch, H - Host, I - IGMP, r - Repeater,
+                        V - VoIP-Phone, D - Remotely-Managed-Device,
+                        s - Supports-SNMP, C - CAST Port/Channel
+                        W - Two-Port MAC Relay
+
+      Device-ID          Local Intrfce  Hldtme Capability  Platform  Port ID
+      nexus-peer         Eth1/1         168    R S I s     N9K-9000v Eth1/1
+  - cmd: "show lldp neighbors"
+    output: |
+      Capability codes:
+        (R) Router, (B) Bridge, (T) Telephone, (C) DOCSIS Cable Device
+        (W) WLAN Access Point, (P) Repeater, (S) Station, (O) Other
+
+      Device ID            Local Intf     Hold-time  Capability  Port ID
+      nexus-peer           Eth1/1         120        B,R         Eth1/1
+welcome: |
+  Warning: Permanently added '192.168.60.100' (RSA) to the list of known hosts.
+  User Access Verification
+  (admin@192.168.60.100) Password:
+
+  Bad terminal type: "xterm-256color". Will assume vt100.
+  Cisco NX-OS Software
+  Copyright (c) 2002-2018, Cisco Systems, Inc. All rights reserved.
+  Nexus 9000v software ("Nexus 9000v Software") and related documentation,
+  files or other reference materials ("Documentation") are
+  the proprietary property and confidential information of Cisco
+  Systems, Inc. ("Cisco") and are protected, without limitation,
+  pursuant to United States and International copyright and trademark
+  laws in the applicable jurisdiction which provide civil and criminal
+  penalties for copying or distribution without Cisco's authorization.
+
+  Any use or disclosure, in whole or in part, of the Nexus 9000v Software
+  or Documentation to any third party for any purposes is expressly
+  prohibited except as otherwise authorized by Cisco in writing.
+  The copyrights to certain works contained herein are owned by other
+  third parties and are used and distributed under license. Some parts
+  of this software may be covered under the GNU Public License or the
+  GNU Lesser General Public License. A copy of each such license is
+  available at
+  http://www.gnu.org/licenses/gpl.html and
+  http://www.gnu.org/licenses/lgpl.html
+  ***************************************************************************
+  *  Nexus 9000v is strictly limited to use for evaluation, demonstration   *
+  *  and NX-OS education. Any use or disclosure, in whole or in part of     *
+  *  the Nexus 9000v Software or Documentation to any third party for any   *
+  *  purposes is expressly prohibited except as otherwise authorized by     *
+  *  Cisco in writing.                                                      *
+  ***************************************************************************
+
+invalid_cmd_error: |
+  ^
+  % Invalid command at '^' marker.

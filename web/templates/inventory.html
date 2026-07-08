@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}設備總表與版控 — NCCM v3{% endblock %}
+{% block content %}
+<h1>設備總表與版控</h1>
+<p class="lead">資料來源：<code>store/index.db</code>（備份成功後自動索引；亦可手動重建）。</p>
+{% if request.query_params.get('rebuild_ok') %}
+<p class="ok-banner">索引已重建：{{ request.query_params.get('rebuild_ok') }}</p>
+{% endif %}
+<form method="post" action="/inventory/rebuild" class="inline-form">
+  <button type="submit" class="btn-secondary">重建索引（掃描 store）</button>
+</form>
+<div class="inv-page-stack">
+  <section class="inv-main">
+    <form id="inv-filters" class="filters"
+          hx-get="/inventory/partial/table"
+          hx-target="#inv-table"
+          hx-trigger="keyup changed delay:300ms from:#q, change from:select"
+          hx-include="#inv-filters">
+      <input type="search" id="q" name="q" value="{{ q }}" placeholder="搜尋 IP / Hostname / Model / SN" />
+      <select name="site">
+        <option value="">全部 Site</option>
+        {% for s in sites %}
+        <option value="{{ s }}" {% if site_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <input name="vendor" value="{{ vendor_filter }}" placeholder="Vendor" />
+      <input type="hidden" name="device_id" id="device_id_field" value="{{ device_id }}" />
+    </form>
+    <p class="muted table-hint">設備列表顯示約 10 筆高度，其餘請在表內向下捲動。</p>
+    <div id="inv-table" class="inv-device-table-scroll">
+      {% include "partials/inventory_table.html" %}
+    </div>
+  </section>
+  <section class="inv-result-below" id="inv-detail">
+    {% if device_id %}
+      {% include "partials/inventory_detail.html" %}
+    {% else %}
+    <p class="muted">點選上方設備列以檢視版本與 Running-Configuration。</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

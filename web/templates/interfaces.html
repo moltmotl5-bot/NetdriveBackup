@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Interface Map — NCCM v3{% endblock %}
+{% block content %}
+<h1>Device Interface Map</h1>
+<p class="lead">合併 <code>config.txt</code> 介面區段與 <code>interfaces.txt</code> 狀態（與舊版邏輯相同）。</p>
+<div class="inv-page-stack">
+  <section class="inv-main">
+    <form class="filters" method="get" action="/interfaces">
+      <input type="search" name="q" value="{{ q }}" placeholder="搜尋" />
+      <select name="site">
+        <option value="">全部 Site</option>
+        {% for s in sites %}
+        <option value="{{ s }}" {% if site_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <input name="vendor" value="{{ vendor_filter }}" placeholder="Vendor" />
+      <button type="submit" class="btn-secondary">篩選</button>
+    </form>
+    <p class="muted table-hint">設備列表顯示約 10 筆高度，其餘請在表內向下捲動。</p>
+    <div class="inv-device-table-scroll">
+      <table class="inv-table">
+        <thead>
+          <tr><th>Site</th><th>IP</th><th>Port</th><th>Hostname</th><th>Vendor</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr class="{% if device_id == r.device_id %}selected{% endif %}">
+            <td>{{ r.site }}</td>
+            <td>{{ r.ip }}</td>
+            <td>{{ r.port }}</td>
+            <td>{{ r.hostname }}</td>
+            <td>{{ r.vendor }}</td>
+            <td>
+              <a href="/interfaces?device_id={{ r.device_id | urlencode }}&q={{ q | urlencode }}&site={{ site_filter | urlencode }}&vendor={{ vendor_filter | urlencode }}"
+                 hx-get="/interfaces/partial/detail?device_id={{ r.device_id | urlencode }}"
+                 hx-target="#if-detail"
+                 hx-swap="innerHTML"
+                 hx-push-url="true">檢視</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted">尚無設備</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section class="inv-result-below" id="if-detail">
+    {% if device_id and iface %}
+      {% include "partials/interfaces_detail.html" %}
+    {% else %}
+    <p class="muted">選擇上方設備「檢視」以顯示埠位表。</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+# Dockerfile for CI/CD with uv and Python pre-installed
+FROM ghcr.io/astral-sh/uv:python3.12-trixie
+
+LABEL org.opencontainers.image.source="https://github.com/OpenSecFlow/netdriver"
+LABEL org.opencontainers.image.description="CI/CD image with Python 3.12 and uv"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set uv environment variables
+ENV UV_PYTHON=python3.12
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]

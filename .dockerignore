@@ -1,8 +1,22 @@
+# Docker build (NCCM v3 portal) — context: repo root, -f docker/Dockerfile.portal
+.git
+.github
 venv/
+.venv/
 __pycache__/
 *.pyc
 .env
+.env.*
+store/
 output/
-.git/
-.DS_Store
 docs/
+netdrive-agent/
+scripts/
+app.py
+cdp_lldp_neighbors.py
+requirements.txt
+Dockerfile
+DEMO.csv
+nccm_auth.log
+*.log
+.DS_Store

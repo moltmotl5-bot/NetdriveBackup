@@ -1,0 +1,138 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'bases/**'
+      - 'components/**'
+      - 'packages/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'tests/**'
+  push:
+    branches: [master, main]
+    paths:
+      - 'bases/**'
+      - 'components/**'
+      - 'packages/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'tests/**'
+
+jobs:
+  test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Run pylint
+        run: |
+          echo "Running pylint checks..."
+          uv run pylint bases/ components/ --exit-zero --output-format=colorized || true
+        continue-on-error: true
+
+      - name: Run unit test
+        run: |
+          echo "Running unit pytest..."
+          uv run pytest -v --tb=short -m unit
+
+
+      - name: Run integration test
+        run: |
+          echo "Running integration pytest..."
+          uv run pytest -v --tb=short --mock-dev -m integration
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some tests failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  build:
+    name: Build packages
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      matrix:
+        project: ['agent', 'simunet']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --all-packages
+
+      - name: Build ${{ matrix.project }}
+        run: |
+          echo "Building netdriver-${{ matrix.project }}..."
+          uv build --directory packages/${{ matrix.project }} --out-dir dist/
+
+      - name: Check package metadata
+        run: |
+          uv run twine check packages/${{ matrix.project }}/dist/*.whl
+
+      - name: Verify package contents
+        run: |
+          python -m zipfile -l packages/${{ matrix.project }}/dist/*.whl
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: netdriver-${{ matrix.project }}
+          path: packages/${{ matrix.project }}/dist/*.whl
+          retention-days: 7
+
+  verify:
+    name: Verify builds
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: List artifacts
+        run: |
+          echo "Built packages:"
+          find . -name "*.whl" -type f -exec ls -lh {} \;
+
+      - name: Build summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Size | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|------|--------|" >> $GITHUB_STEP_SUMMARY
+          for whl in $(find . -name "*.whl" -type f); do
+            name=$(basename "$whl")
+            size=$(du -h "$whl" | cut -f1)
+            echo "| $name | $size | ✓ |" >> $GITHUB_STEP_SUMMARY
+          done

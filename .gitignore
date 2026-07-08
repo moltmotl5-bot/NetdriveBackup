@@ -1,6 +1,18 @@
 .env
+.venv/
 venv/
 output/
+store/*
+!store/.gitkeep
 __pycache__/
+*.py[cod]
+.pytest_cache/
 .DS_Store
 nccm_auth.log
+*.log
+
+# NetDriver Agent workspace (local dev)
+netdrive-agent/.git/
+netdrive-agent/.venv/
+netdrive-agent/logs/
+netdrive-agent/.pytest_cache/

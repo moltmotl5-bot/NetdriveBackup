@@ -1,0 +1,36 @@
+<h2>{{ iface.hostname }} ({{ iface.ip }})</h2>
+<p class="meta">{{ iface.source_note }} · parser: {{ iface.status_parser }}</p>
+{% if iface.versions %}
+<form hx-get="/interfaces/partial/detail" hx-target="#if-detail" hx-trigger="change" hx-include="this">
+  <input type="hidden" name="device_id" value="{{ device_id }}" />
+  <label>備份版本</label>
+  <select name="snapshot_ts">
+    {% for v in iface.versions %}
+    <option value="{{ v }}" {% if iface.snapshot_ts == v %}selected{% endif %}>{{ v }}</option>
+    {% endfor %}
+  </select>
+</form>
+{% endif %}
+<table class="inv-table">
+  <thead>
+    <tr><th>Port</th><th>Description</th><th>Status</th><th>Vlan</th><th>Speed</th><th>Type</th></tr>
+  </thead>
+  <tbody>
+    {% for p in iface.ports %}
+    <tr>
+      <td>{{ p.Port }}</td>
+      <td>{{ p.Description }}</td>
+      <td>{{ p.Status }}</td>
+      <td>{{ p.Vlan }}</td>
+      <td>{{ p.Speed }}</td>
+      <td>{{ p.Type }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">無介面資料</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if iface.config_snippets %}
+<h3>Config 介面摘要</h3>
+<pre class="config-preview">{{ iface.config_snippets }}</pre>
+{% endif %}

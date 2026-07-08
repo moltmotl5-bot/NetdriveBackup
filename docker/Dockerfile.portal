@@ -1,0 +1,27 @@
+# NCCM v3 portal image (FastAPI + HTMX)
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-v3.txt .
+RUN pip install --no-cache-dir -r requirements-v3.txt
+
+COPY nccm/ ./nccm/
+COPY web/ ./web/
+
+ENV PYTHONPATH=/app
+ENV NCCM_APP_ROOT=/app
+ENV NCCM_STORE_DIR=/data/store
+
+RUN mkdir -p /data/store /app/logs
+
+EXPOSE 8501
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8501/health || exit 1
+
+CMD ["uvicorn", "web.main:app", "--host", "0.0.0.0", "--port", "8501"]

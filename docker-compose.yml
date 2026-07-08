@@ -1,0 +1,67 @@
+# NetdriverBackup NCCM v3 — Docker Compose (Portal + NetDriver Agent)
+#
+# 啟動：docker compose up -d --build
+# 停止：docker compose down
+
+name: netdriverbackup-nccm
+
+services:
+  netdriver-agent:
+    build:
+      context: ./netdrive-agent
+      dockerfile: packages/agent/Dockerfile
+    image: netdriverbackup-netdriver-agent:local
+    container_name: nccm-netdriver-agent
+    restart: unless-stopped
+    volumes:
+      - ./deploy/config/agent:/app/config/agent:ro
+      - agent-logs:/app/logs
+    ports:
+      - "${NETDRIVER_AGENT_PORT:-8000}:8000"
+    networks:
+      - nccm
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  portal:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.portal
+    image: netdriverbackup-portal:local
+    container_name: nccm-portal
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      NCCM_NETDRIVER_URL: http://netdriver-agent:8000
+      NCCM_STORE_DIR: /data/store
+      NCCM_APP_ROOT: /app
+    volumes:
+      - ./store:/data/store
+      - portal-logs:/app/logs
+    ports:
+      - "${NCCM_PORT:-8501}:8501"
+    depends_on:
+      netdriver-agent:
+        condition: service_healthy
+    networks:
+      - nccm
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8501/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 25s
+
+networks:
+  nccm:
+    driver: bridge
+
+volumes:
+  agent-logs:
+  portal-logs:

@@ -1,0 +1,29 @@
+<table class="inv-table">
+  <thead>
+    <tr>
+      <th>Site</th><th>IP</th><th>Port</th><th>Hostname</th><th>Vendor</th>
+      <th>Version</th><th>鄰居數</th><th>CDP</th><th>LLDP</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr class="{% if device_key == r.device_key %}selected{% endif %}"
+        hx-get="/neighbors/partial/detail?device_key={{ r.device_key | urlencode }}"
+        hx-target="#nb-detail"
+        hx-swap="innerHTML"
+        onclick="document.getElementById('device_key_field').value='{{ r.device_key }}'">
+      <td>{{ r.site }}</td>
+      <td>{{ r.ip }}</td>
+      <td>{{ r.port }}</td>
+      <td>{{ r.hostname }}</td>
+      <td>{{ r.vendor }}</td>
+      <td>{{ r.sw_version }}</td>
+      <td>{{ r.neighbor_count }}</td>
+      <td>{{ r.cdp_status }}</td>
+      <td>{{ r.lldp_status }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted">尚無資料。請先備份並確認 index.db 有設備。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

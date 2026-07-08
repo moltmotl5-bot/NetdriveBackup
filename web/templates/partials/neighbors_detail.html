@@ -1,0 +1,37 @@
+<h2>介面鄰居</h2>
+<p class="meta"><code>{{ device_key }}</code></p>
+{% if versions %}
+<form hx-get="/neighbors/partial/detail" hx-target="#nb-detail" hx-trigger="change" hx-include="this">
+  <input type="hidden" name="device_key" value="{{ device_key }}" />
+  <label>備份版本</label>
+  <select name="snapshot_ts">
+    {% for v in versions %}
+    <option value="{{ v }}" {% if snapshot_ts == v %}selected{% endif %}>{{ v }}</option>
+    {% endfor %}
+  </select>
+</form>
+<p class="meta">CDP: {{ cdp_status }} · LLDP: {{ lldp_status }}</p>
+{% if cdp_status == 'error' %}
+<p class="error">cdp_neighbors.txt 可能為無效指令輸出。</p>
+{% endif %}
+<table class="inv-table">
+  <thead>
+    <tr><th>本端介面</th><th>協定</th><th>鄰居設備</th><th>鄰居介面</th><th>連線類型</th></tr>
+  </thead>
+  <tbody>
+    {% for n in neighbor_rows %}
+    <tr>
+      <td>{{ n.local_interface }}</td>
+      <td>{{ n.protocol }}</td>
+      <td>{{ n.remote_device }}</td>
+      <td>{{ n.remote_port }}</td>
+      <td>{{ n.cable_type }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">無鄰居紀錄</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">此設備尚無備份版本。</p>
+{% endif %}

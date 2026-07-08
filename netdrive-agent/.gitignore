@@ -1,0 +1,15 @@
+# Python
+.venv/
+.pytest_cache/
+__pycache__/
+dist/
+logs/
+data/
+
+*.pyc
+
+# Mac Os
+.DS_store
+
+# Claude Code
+.claude/

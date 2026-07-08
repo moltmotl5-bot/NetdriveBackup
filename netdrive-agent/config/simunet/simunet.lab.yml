@@ -1,0 +1,31 @@
+# NetDriver SimuNet — lab profile (NetdriverBackup)
+# Trimmed set for faster startup and fewer port conflicts on macOS dev.
+# Full fleet: config/simunet/simunet.yml
+
+logging:
+  level: INFO
+  log_file: logs/simunet.log
+  intercept_loggers:
+    - uvicorn.access
+    - uvicorn.error
+
+devices:
+  - vendor: cisco
+    model: nexus
+    version: 9.6.0
+    port: 18020
+
+  - vendor: cisco
+    model: asa
+    version: 9.6.0
+    port: 18024
+
+  - vendor: fortinet
+    model: fortigate
+    version: 7.2
+    port: 18037
+
+  - vendor: huawei
+    model: ce
+    version: 8.18
+    port: 18038

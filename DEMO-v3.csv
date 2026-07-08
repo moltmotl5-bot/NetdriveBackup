@@ -1,0 +1,4 @@
+Site,IP,Vendor,Port
+lab,127.0.0.1,cisco,18020
+lab,127.0.0.1,fortinet,18037
+lab,127.0.0.1,huawei,18038

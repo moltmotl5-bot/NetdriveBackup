@@ -1,0 +1,101 @@
+[project]
+name = "netdriver"
+version = "0.3.0"
+description = "The driver for network devices, which interact with network device using CLI."
+authors = [
+    { name = "Vincent", email = "vincent@byntra.se" },
+    { name = "Bobby", email = "bobby@byntra.se" },
+    { name = "Sam", email = "sam@byntra.se" },
+    { name = "Mark", email = "mark@byntra.se" },
+]
+requires-python = ">=3.12,<4"
+readme = {file = "README.md", content-type = "text/markdown"}
+license = "Apache-2.0"
+keywords = [
+    "network",
+    "automation",
+    "cli",
+    "ssh",
+    "device",
+    "driver",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Telecommunications Industry",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  "netdriver-core",
+  "netdriver-agent",
+  "netdriver-simunet",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.3,<9",
+    "pytest-asyncio>=0.24.0,<0.25",
+    "pylint>=3.3.0,<4",
+    "twine>=6.2.0",
+    "httpx>=0.27.2,<0.28",
+]
+[project.urls]
+Homepage = "https://github.com/OpenSecFlow/netdriver"
+Repository = "https://github.com/OpenSecFlow/netdriver"
+Documentation = "https://github.com/OpenSecFlow/netdriver#readme"
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+netdriver-agent = { workspace = true }
+netdriver-core = { workspace = true }
+netdriver-simunet = { workspace = true }
+netdriver-textfsm = { workspace = true }
+
+[tool.uv.workspace]
+members = [ "packages/*" ]
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.basedpyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+pythonPlatform = "Linux"
+extraPaths = [
+  "packages/agent/src",
+  "packages/core/src",
+  "packages/simunet/src",
+  "packages/textfsm/src",
+]
+reportImplicitRelativeImport = false
+reportMissingTypeArgument = false
+
+[tool.pyright]
+venvPath = "."
+penv = ".venv"
+pythonVersion = "3.12"
+pythonPlatform = "Linux"
+extraPaths = [
+  "packages/agent/src",
+  "packages/core/src",
+  "packages/simunet/src",
+  "packages/textfsm/src",
+]
+
+[tool.pytest.ini_options]
+markers = ['unit', 'integration']
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "package"
+addopts = "-v --tb=short --disable-warnings --strict-markers"

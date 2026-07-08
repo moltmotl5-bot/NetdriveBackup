@@ -1,0 +1,93 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - testpypi
+          - pypi
+      projects:
+        description: 'Projects to publish (comma-separated: agent,simunet or "all")'
+        required: true
+        default: 'all'
+
+jobs:
+  publish:
+    name: Publish Python packages
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'pypi' }}
+    permissions:
+      contents: read
+      packages: read
+      id-token: write  # Required for trusted publishing
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Determine projects to publish
+        id: projects
+        run: |
+          if [ "${{ github.event.inputs.projects }}" = "all" ] || [ -z "${{ github.event.inputs.projects }}" ]; then
+            echo "projects=agent,simunet" >> $GITHUB_OUTPUT
+          else
+            echo "projects=${{ github.event.inputs.projects }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine target repository
+        id: repository
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "target=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            echo "target=pypi" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and publish packages
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          TESTPYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: |
+          TARGET="${{ steps.repository.outputs.target }}"
+          IFS=',' read -ra PROJECTS <<< "${{ steps.projects.outputs.projects }}"
+
+          for project in "${PROJECTS[@]}"; do
+            project=$(echo "$project" | xargs)  # Trim whitespace
+            echo "Building $project..."
+
+            # Clean and build
+            uv build --directory "packages/$project"
+
+            # Publish
+            if [ "$TARGET" = "testpypi" ]; then
+              echo "Publishing $project to TestPyPI..."
+              uv publish --directory "packages/$project" --token "$TESTPYPI_TOKEN" --publish-url https://test.pypi.org/legacy/
+            else
+              echo "Publishing $project to PyPI..."
+              uv publish --directory "packages/$project" --token "$PYPI_TOKEN"
+            fi
+
+            echo "✓ Successfully published $project to $TARGET"
+          done
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: packages/*/dist/*.whl
+          retention-days: 30

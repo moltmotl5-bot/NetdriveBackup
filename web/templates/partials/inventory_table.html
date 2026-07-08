@@ -1,0 +1,35 @@
+<table class="inv-table">
+  <thead>
+    <tr>
+      <th>Site</th><th>IP</th><th>Port</th><th>Hostname</th>
+      <th>Stack#</th><th>Role</th><th>Vendor</th>
+      <th>Version</th><th>Model</th><th>Serial</th><th>快照</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr class="{% if device_id == r.device_id %}selected{% endif %}{% if r.stack_switch %} stack-member-row{% endif %}"
+        hx-get="/inventory/partial/detail?device_id={{ r.device_id | urlencode }}"
+        hx-target="#inv-detail"
+        hx-swap="innerHTML"
+        onclick="document.getElementById('device_id_field').value='{{ r.device_id }}'">
+      <td>{{ r.site }}</td>
+      <td>{{ r.ip }}</td>
+      <td>{{ r.port }}</td>
+      <td>{{ r.hostname }}</td>
+      <td>{% if r.stack_switch %}{{ r.stack_switch }}{% else %}—{% endif %}</td>
+      <td>
+        {% if r.stack_role != "—" %}{{ r.stack_role }}{% else %}—{% endif %}
+        {% if r.is_config_anchor and r.stack_switch %}<span class="muted" title="虛擬 IP 組態錨點"> · 組態</span>{% endif %}
+      </td>
+      <td>{{ r.vendor }}</td>
+      <td>{{ r.sw_version }}</td>
+      <td>{{ r.model_summary }}</td>
+      <td>{{ r.serial_summary }}</td>
+      <td>{% if r.snapshot_count is not none %}{{ r.snapshot_count }}{% else %}—{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="11" class="muted">尚無設備資料。請先執行批次備份，或按「重建索引」。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

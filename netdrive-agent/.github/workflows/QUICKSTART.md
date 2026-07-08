@@ -1,0 +1,227 @@
+# Quick Start Guide: Publishing to PyPI
+
+This guide will help you quickly set up and publish your packages to PyPI.
+
+## Prerequisites
+
+- GitHub repository with the workflows
+- PyPI account (<https://pypi.org/account/register/>)
+- TestPyPI account (<https://test.pypi.org/account/register/>) - optional but recommended
+
+## Step 1: Get PyPI Tokens
+
+### For PyPI
+
+1. Visit <https://pypi.org/manage/account/token/>
+2. Click "Add API token"
+3. Fill in:
+   - Token name: `GitHub Actions - NetDriver`
+   - Scope: `Entire account` (or select specific project after first upload)
+4. Click "Add token"
+5. **Copy the token** (starts with `pypi-...`) - you won't see it again!
+
+### For TestPyPI (Recommended for testing)
+
+1. Visit <https://test.pypi.org/manage/account/token/>
+2. Follow same steps as above
+3. Copy the token
+
+## Step 2: Add Secrets to GitHub
+
+1. Go to your GitHub repository
+2. Navigate to: **Settings** → **Secrets and variables** → **Actions**
+3. Click "New repository secret"
+4. Add two secrets:
+
+   **Secret 1:**
+   - Name: `PYPI_API_TOKEN`
+   - Secret: Paste your PyPI token
+
+   **Secret 2:**
+   - Name: `TEST_PYPI_API_TOKEN`
+   - Secret: Paste your TestPyPI token
+
+## Step 3: Build CI Docker Image
+
+The `publish-pypi.yml` workflow uses a pre-built Docker image for faster execution.
+
+**Build the image:**
+
+1. Go to **Actions** → **"Build CI Image"**
+2. Click **"Run workflow"**
+3. Select branch: `master`
+4. Click **"Run workflow"**
+
+**Or build locally:**
+
+```bash
+docker build -t ghcr.io/opensecflow/netdriver/python-uv:3.12 -f .github/Dockerfile.ci .
+docker push ghcr.io/opensecflow/netdriver/python-uv:3.12
+```
+
+**Note**: This only needs to be done once. The image will be cached and reused.
+
+## Step 4: Test Publishing (Recommended)
+
+Before publishing to production PyPI, test with TestPyPI:
+
+### Manual Test
+
+1. Go to **Actions** → **"Publish to PyPI"**
+2. Click **"Run workflow"**
+3. Select:
+   - Branch: `master`
+   - Environment: **`testpypi`**
+   - Projects: **`all`**
+4. Click **"Run workflow"**
+
+### Verify on TestPyPI
+
+1. Check your packages:
+   - <https://test.pypi.org/project/netdriver-agent/>
+   - <https://test.pypi.org/project/netdriver-simunet/>
+
+2. Test installation:
+
+   ```bash
+   pip install --index-url https://test.pypi.org/simple/ netdriver-agent
+   ```
+
+## Step 5: Publish to Production
+
+### Option 1: Manual Publishing
+
+1. Go to **Actions** → **"Publish to PyPI"**
+2. Click **"Run workflow"**
+3. Select:
+   - Branch: `master`
+   - Environment: **`pypi`** (NOT testpypi!)
+   - Projects: **`all`**
+4. Click **"Run workflow"**
+
+### Option 2: Automatic Publishing (via Git Tags)
+
+```bash
+# 1. Update version numbers
+sed -i 's/^version = ".*"/version = "0.3.1"/' packages/agent/pyproject.toml
+sed -i 's/^version = ".*"/version = "0.3.1"/' packages/simunet/pyproject.toml
+
+# 2. Commit changes
+git add packages/*/pyproject.toml
+git commit -m "chore: bump version to 0.3.1"
+git push
+
+# 3. Create and push tag (without 'v' prefix)
+git tag 0.3.1
+git push origin 0.3.1
+```
+
+**Note**: Both `0.3.1` and `v0.3.1` tag formats are supported.
+
+The `release.yml` workflow will automatically:
+
+- ✅ Create a GitHub Release
+- ✅ Build both packages
+- ✅ Publish to PyPI
+- ✅ Attach wheel files to the release
+
+## Step 6: Verify Publication
+
+1. Check on PyPI:
+   - <https://pypi.org/project/netdriver-agent/>
+   - <https://pypi.org/project/netdriver-simunet/>
+
+2. Test installation:
+
+   ```bash
+   pip install netdriver-agent
+   pip install netdriver-simunet
+   ```
+
+## Common Issues
+
+### "HTTP Error 403: Authentication failed"
+
+**Solution:** Check that GitHub secrets are correctly configured
+
+```bash
+# Verify secrets exist in: Settings → Secrets and variables → Actions
+# Should see:
+# - PYPI_API_TOKEN
+# - TEST_PYPI_API_TOKEN
+```
+
+### "HTTP Error 400: Bad Request - duplicate keys"
+
+**Solution:** Version already exists on PyPI. Bump the version:
+
+```bash
+# Manually update version in pyproject.toml files
+sed -i 's/^version = ".*"/version = "0.3.2"/' packages/agent/pyproject.toml
+sed -i 's/^version = ".*"/version = "0.3.2"/' packages/simunet/pyproject.toml
+# Then rebuild and publish
+```
+
+### Workflow fails with "uv not found" or image pull error
+
+**Solution:** Build the CI Docker image first
+
+```bash
+# Go to Actions → "Build CI Image" → Run workflow
+```
+
+Or check the image name matches: `ghcr.io/opensecflow/netdriver/python-uv:3.12`
+
+### Package shows as "0 B" or malformed
+
+**Solution:** Check build output - Polylith path warnings are normal, verify wheel contents:
+
+```bash
+unzip -l packages/agent/dist/netdriver_agent-*.whl
+```
+
+## Best Practices
+
+### Version Management
+
+✅ **DO:**
+
+- Keep version numbers in sync across `packages/agent/pyproject.toml` and `packages/simunet/pyproject.toml`
+- Use semantic versioning: `MAJOR.MINOR.PATCH`
+- Test on TestPyPI before production
+
+❌ **DON'T:**
+
+- Publish the same version twice
+- Skip testing on TestPyPI
+- Use local version identifiers for production (e.g., `0.3.0+local`)
+
+### Release Process
+
+1. Develop features on branches
+2. Test locally: `uv build --directory packages/agent`
+3. Create PR and verify build test passes
+4. Merge to master
+5. Test on TestPyPI
+6. Tag and release to production PyPI
+
+### Security
+
+- 🔒 Never commit tokens to repository
+- 🔒 Use scoped tokens when possible
+- 🔒 Rotate tokens regularly
+- 🔒 Use GitHub environments for additional approval gates
+
+## Next Steps
+
+- Set up automated testing before publishing
+- Configure GitHub environments for approval workflows
+- Set up branch protection rules
+- Consider using PyPI Trusted Publishers (no tokens needed!)
+
+## Need Help?
+
+- 📖 Full documentation: `.github/workflows/README.md`
+- 🐛 Report issues: <https://github.com/OpenSecFlow/netdriver/issues>
+- 📝 PyPI Help: <https://pypi.org/help/>
+- 🎯 GitHub Actions: <https://docs.github.com/en/actions>
