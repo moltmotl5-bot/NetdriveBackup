@@ -39,8 +39,10 @@ RUN useradd -m -u 1000 netdriver
 WORKDIR /app
 
 # Copy built wheel and install it using uv
+# Explicitly install pyyaml because dependency-injector.from_yaml() requires it
+# (it is not declared in the agent/core wheels)
 COPY --from=builder /build/dist/*.whl /tmp/
-RUN uv pip install --system --no-cache /tmp/*.whl \
+RUN uv pip install --system --no-cache /tmp/*.whl pyyaml \
     && rm -rf /tmp/*.whl
 
 # Copy configuration files
@@ -56,12 +58,12 @@ EXPOSE 8000
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV FATSTAPI_ENV=production
-ENV NETDRIVER_CONFIG_PATH=/app/config/agent/agent.yml
+ENV FASTAPI_ENV=production
+ENV NETDRIVER_AGENT_CONFIG=/app/config/agent/agent.yml
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)" || exit 1
 
 # Run agent
 CMD ["uvicorn", "netdriver_agent.main:app", "--host", "0.0.0.0", "--port", "8000"]

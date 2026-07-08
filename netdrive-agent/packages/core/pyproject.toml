@@ -7,7 +7,6 @@ authors = [
     { name = "Vincent", email = "vincent@byntra.se" },
     { name = "Bobby", email = "bobby@byntra.se" },
     { name = "Sam", email = "sam@byntra.se" },
-    { name = "Mark", email = "mark@byntra.se" },
 ]
 requires-python = ">=3.12,<4"
 license = "Apache-2.0"
@@ -37,6 +36,7 @@ classifiers = [
 dependencies = [
     "dependency-injector>=4.42.0,<5",
     "loguru>=0.7.2,<0.8",
+    "pyyaml>=6.0.2,<7",
 ]
 
 [project.urls]
