@@ -159,7 +159,7 @@ store/
 ## Web 功能（四頁）
 
 1. **批次備份** — CSV、SSH 帳密、即時 job log  
-2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽；**Cisco Stack** 自 `show version` 解析時會**每台 member 一行**（組態仍共用虛擬 IP 那份 config）  
+2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽；Hostname 優先從 running-config 解析（舊資料可「重建索引」回填）；**Cisco Stack** 自 `show version` 解析時會**每台 member 一行**（組態仍共用虛擬 IP 那份 config）  
 3. **CDP/LLDP 鄰居** — 由快照解析鄰居表  
 4. **Device Interface Map** — `config` + `interfaces` 合併埠位表  
 
@@ -267,6 +267,7 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 | 側欄 Agent 紅燈 | `docker compose ps`、Agent log、`curl http://localhost:8000/health` |
 | 備份全失敗 | 確認容器到設備 **SSH 22**（或 CSV Port）可連、帳密正確 |
 | 庫存只有一台 | 同 Site+IP 多設備需不同 **Port** 或 **hostname**；按「重建索引」 |
+| 設備列表 Hostname 為空白／unknown | 舊快照的 hostname 可能只從 show version 抓到；新備份已優先從 running-config 解析。請按「重建索引」從現有 `config.txt` 回填。 |
 | Agent **unhealthy** | 多為舊 `agent-logs` volume 權限問題：`docker compose down -v && docker compose up -d --build`；查 `docker compose logs netdriver-agent` |
 | Forti 設定過短 | 調高 `deploy/config/agent/agent.yml` 內 `fortinet.fortigate` `read_timeout` |
 

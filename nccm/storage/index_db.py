@@ -220,6 +220,20 @@ def index_manifest(manifest: dict[str, Any], snapshot_path: Path) -> int:
     ip = manifest["ip"]
     hostname = manifest.get("hostname") or "unknown"
     vendor = manifest.get("vendor") or "unknown"
+
+    # Backfill hostname from saved running-config (config.txt) if it was "unknown" at backup time
+    if not hostname or str(hostname).lower() == "unknown":
+        cfg_file = snapshot_path / "config.txt"
+        if cfg_file.is_file():
+            try:
+                cfg_text = cfg_file.read_text(encoding="utf-8", errors="replace")
+                from nccm.profiles import hostname_from_output
+                better = hostname_from_output(vendor, cfg_text)
+                if better and better != "unknown":
+                    hostname = better
+            except Exception:
+                pass
+
     created_at = manifest.get("created_at") or ""
     status = manifest.get("status") or "ok"
     run_id = manifest.get("run_id") or ""

@@ -179,6 +179,15 @@ def backup_device(
                 raise
             artifacts[spec.artifact] = out
 
+        # Prefer hostname from running-config (authoritative; "hostname XXX" is usually not in "show version")
+        config_text = artifacts.get("config", "")
+        if config_text:
+            cfg_host = hostname_from_output(row.vendor, config_text)
+            if cfg_host and cfg_host != "unknown":
+                hostname = cfg_host
+        if row.hostname_hint and hostname == "unknown":
+            hostname = row.hostname_hint
+
         snap = write_snapshot(
             run_id=run_id,
             site=row.site,

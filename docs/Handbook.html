@@ -373,6 +373,7 @@ dc,10.2.1.5,huawei,22</code></pre>
     <li>列表來自 <code>index.db</code>，可依 Site、IP、Hostname、Vendor 篩選。</li>
     <li>設備表約顯示 10 列高度，其餘於表內捲動；點列或「檢視」開啟下方詳情。</li>
     <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config）。</li>
+    <li>Hostname 優先從 running-config 擷取；若舊快照顯示 unknown，可按「重建索引」從 config.txt 回填。</li>
     <li><strong>Cisco Stack</strong>：若 <code>version_info.txt</code> 含 Stack 成員資訊，總表會<strong>每台 member 一行</strong>（Stack#、Role）；虛擬 IP 仍只備份一份組態，Active/Master 列標示「· 組態」。</li>
     <li><strong>重建索引</strong>：掃描整個 <code>store/</code> 重建 <code>index.db</code>（手動還原資料或修復索引時使用）。</li>
   </ul>
@@ -473,6 +474,7 @@ docker load -i nccm-v3-images.tar</code></pre>
       <tr><td>備份全部失敗</td><td>Agent 容器無法 SSH 至設備；檢查路由／Port／帳密；必要時 host 網路</td></tr>
       <tr><td>Forti 設定不完整</td><td>提高 <code>deploy/config/agent/agent.yml</code> 中 Fortinet <code>read_timeout</code></td></tr>
       <tr><td>庫存只有一台設備</td><td>多設備同 Site+IP 須不同 <code>Port</code> 或 hostname；執行重建索引</td></tr>
+      <tr><td>設備列表 Hostname 為空白／unknown</td><td>舊快照可能只從 version 抓到；新備份已優先從 running-config 解析。按「重建索引」可從現有 config.txt 回填。</td></tr>
       <tr><td>鄰居／埠位空白</td><td>該次備份未擷取到 CDP/LLDP 或 interfaces；重新備份並確認權限</td></tr>
       <tr><td>建置 Agent 失敗</td><td>確認可拉取 <code>ghcr.io</code> 基礎映像；代理或鏡像設定</td></tr>
     </tbody>
