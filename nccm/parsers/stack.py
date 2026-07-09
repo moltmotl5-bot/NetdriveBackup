@@ -100,49 +100,71 @@ def config_anchor_unit(units: list[StackUnit]) -> StackUnit | None:
     return units[0]
 
 def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
-    """Parse FortiGate HA cluster members from get system ha status or version.
-    Returns empty list if not a cluster (<2 members) or standalone.
+    """Robust parser for FortiGate HA "get system ha status".
+    Focus on finding distinct serial + real hostname pairs.
     """
     if not text:
         return []
     t = text or ""
-    if re.search(r"Current HA mode:\s*standalone|HA mode:\s*standalone", t, re.I):
+    if re.search(r"standalone", t, re.I):
         return []
 
-    units: list[StackUnit] = []
-    patterns = [
-        r"(?im)(Primary|Secondary|Master|Slave|Active|Standby)[\s:,-]+([A-Z0-9]{6,})\s*,?\s*([A-Za-z0-9_.-]+)",
-    ]
+    units = []
     seen = set()
-    for pat in patterns:
-        for m in re.finditer(pat, t):
-            role_raw = m.group(1).lower()
-            serial = m.group(2)
-            hname = m.group(3)
-            if serial in seen:
+
+    # Process line by line for reliability
+    for line in t.splitlines():
+        line = line.strip()
+        if not line: continue
+
+        # Find a role on this line
+        role_m = re.search(r"(?i)\b(Primary|Secondary|Master|Slave|Active|Standby)\b", line)
+        if not role_m:
+            continue
+        role_raw = role_m.group(1).lower()
+        role = "Primary" if role_raw in ("primary", "master", "active") else "Secondary"
+
+        # Find a serial (long alphanum, prefer ones starting with FGT)
+        serials = re.findall(r"\b([A-Za-z0-9]{6,})\b", line)
+        serial = None
+        for s in serials:
+            if s.startswith("FGT") or len(s) > 10:
+                serial = s
+                break
+        if not serial and serials:
+            serial = serials[0]
+        if not serial or serial in seen:
+            continue
+
+        # Find hostname: look for token with - or that is not purely the serial/role
+        hname = ""
+        # Search for good hostname candidates in the line
+        candidates = re.findall(r"\b([A-Za-z][A-Za-z0-9_.-]{2,})\b", line)
+        for c in candidates:
+            if c.lower() in ("primary", "secondary", "master", "slave", "unit", "group"):
                 continue
-            seen.add(serial)
-            role = "Primary" if role_raw in ("primary", "master", "active") else "Secondary"
-            units.append(StackUnit(
-                switch_num=0,  # will renumber
-                role=role,
-                model="",
-                serial=serial,
-                sw_version="",
-                hostname=hname,
-            ))
+            if c == serial:
+                continue
+            if "-" in c or (not c.upper().startswith("FGT") and not re.match(r"^[A-Za-z0-9]{6,}$", c)):
+                hname = c
+                break
+        if not hname:
+            # last resort: first non-serial alphanum
+            for c in candidates:
+                if c != serial and c.lower() not in ("primary", "secondary", "master", "slave"):
+                    hname = c
+                    break
+        if not hname:
+            hname = serial
+
+        seen.add(serial)
+        units.append(StackUnit(0, role, "", serial, "", hname))
+
     if len(units) < 2:
         return []
-    # Primary first
+
     ordered = sorted(units, key=lambda u: (0 if u.role == "Primary" else 1, u.hostname or u.serial))
-    result = []
-    for i, u in enumerate(ordered, 1):
-        result.append(StackUnit(
-            switch_num=i,
-            role=u.role,
-            model=u.model,
-            serial=u.serial,
-            sw_version=u.sw_version,
-            hostname=u.hostname,
-        ))
+    result = [StackUnit(i+1, u.role, u.model, u.serial, u.sw_version, u.hostname) for i, u in enumerate(ordered)]
     return result
+
+

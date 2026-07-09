@@ -106,12 +106,22 @@ def hostname_from_output(vendor: str, text: str) -> str:
         if m:
             return m.group(1)
     if v == "fortinet":
-        m = re.search(r"Hostname:\s*(\S+)", text, re.I)
-        if m:
-            return m.group(1)
+        # Prefer explicit hostname
+        for pat in [
+            r"set hostname\s+"?([A-Za-z0-9_.-]+)"?",
+            r"Hostname:\s*([A-Za-z0-9_.-]+)",
+        ]:
+            m = re.search(pat, text, re.I)
+            if m:
+                val = m.group(1)
+                # Avoid picking serial numbers as hostname
+                if not (val.upper().startswith("FGT") and len(val) > 8):
+                    return val
         m = re.search(r'set alias "([^"]+)"', text, re.I)
         if m:
-            return m.group(1)
+            val = m.group(1)
+            if not (val.upper().startswith("FGT") and len(val) > 8):
+                return val
     if v == "huawei":
         m = re.search(r"sysname\s+(\S+)", text, re.I)
         if m:
