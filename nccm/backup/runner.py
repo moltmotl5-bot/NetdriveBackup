@@ -239,6 +239,7 @@ def backup_device(
             except Exception:
                 pass
         failed_host = hostname
+        _log(f"{row.ip}: FAILED — {exc}")
         return BackupResult(
             site=row.site,
             ip=row.ip,

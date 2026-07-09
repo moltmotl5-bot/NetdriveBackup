@@ -65,11 +65,12 @@ def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
     m = (model or "").strip().lower()
     if v == "cisco":
         if m == "nexus":
-            # Use | no-more for long outputs on NX-OS to avoid paging/more prompt issues
+            # Prefer plain show running-config; agent disables paging + handles --More--
+            # (some NX-OS builds reject or mishandle "| no-more" on this command)
             return [
                 CommandSpec("version_info", "show version"),
-                CommandSpec("config", "show running-config | no-more", timeout=300),
-                CommandSpec("interfaces", "show interface status | no-more"),
+                CommandSpec("config", "show running-config", timeout=300),
+                CommandSpec("interfaces", "show interface status"),
                 CommandSpec("cdp", "show cdp neighbors"),
                 CommandSpec("lldp", "show lldp neighbors"),
             ]

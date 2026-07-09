@@ -96,6 +96,9 @@ def start_backup_job_async(
             job.status = "done"
             ok = sum(1 for r in results if r.status == "ok")
             job.append_log(f"Job finished: {ok}/{len(results)} ok (run_id={run_id})")
+            for r in results:
+                if r.status != "ok" and r.error:
+                    job.append_log(f"{r.ip}: error detail — {r.error}")
         except Exception as exc:
             job.status = "failed"
             job.error = str(exc)
