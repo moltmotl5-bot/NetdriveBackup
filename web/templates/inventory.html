@@ -23,7 +23,7 @@
         <option value="{{ s }}" {% if site_filter == s %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>
-      <input name="vendor" value="{{ vendor_filter }}" placeholder="Vendor" />
+      {% include "partials/vendor_select.html" %}
       <input type="hidden" name="device_id" id="device_id_field" value="{{ device_id }}" />
     </form>
     <p class="muted table-hint">設備列表顯示約 10 筆高度，其餘請在表內向下捲動。</p>

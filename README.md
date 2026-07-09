@@ -159,7 +159,7 @@ store/
 ## Web 功能（四頁）
 
 1. **批次備份** — CSV、SSH 帳密、即時 job log  
-2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽；Hostname 優先從 running-config 解析；**Cisco Stack / FortiGate HA** 每台實體機一行（Primary/Secondary + 各自 hostname）
+2. **設備總表與版控** — Site／**Vendor（下拉，來自已備份設備）**／關鍵字篩選；型號／版本／序號、歷史快照、Running-Config 預覽；Hostname 優先從 running-config 解析；**Cisco Stack / FortiGate HA** 每台實體機一行（Primary/Secondary + 各自 hostname）
 FortiGate HA Cluster：使用 `ha_status.txt` 解析。
 預期格式（每行）：
 ```

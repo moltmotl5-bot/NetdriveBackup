@@ -281,11 +281,13 @@ async def inventory_page(
         list_inventory_display,
         list_sites,
         list_snapshots_for_device,
+        list_vendors,
         read_config_text,
     )
 
     rows = list_inventory_display(query=q, site=site, vendor=vendor)
     sites = list_sites()
+    vendors = list_vendors()
     snapshots = []
     config_preview = ""
     selected_snap = None
@@ -305,6 +307,7 @@ async def inventory_page(
             "inventory",
             rows=rows,
             sites=sites,
+            vendors=vendors,
             q=q,
             site_filter=site,
             vendor_filter=vendor,
@@ -398,10 +401,11 @@ async def neighbors_page(
         neighbor_display_rows,
         neighbors_for_device,
     )
-    from nccm.storage.index_db import list_sites
+    from nccm.storage.index_db import list_sites, list_vendors
 
     rows, lookup = neighbor_device_rows(query=q, site=site, vendor=vendor)
     sites = list_sites()
+    vendors = list_vendors()
     neighbor_rows: list = []
     display_neighbors: list = []
     cdp_status = lldp_status = ""
@@ -420,6 +424,7 @@ async def neighbors_page(
             "neighbors",
             rows=rows,
             sites=sites,
+            vendors=vendors,
             q=q,
             site_filter=site,
             vendor_filter=vendor,
@@ -506,10 +511,11 @@ async def interfaces_page(
 ):
     from nccm.inventory.interface_map import interface_map_for_device
     from nccm.inventory.neighbors import neighbor_device_rows
-    from nccm.storage.index_db import list_sites
+    from nccm.storage.index_db import list_sites, list_vendors
 
     rows, _ = neighbor_device_rows(query=q, site=site, vendor=vendor)
     sites = list_sites()
+    vendors = list_vendors()
     iface_data: dict = {}
     if device_id:
         iface_data = interface_map_for_device(device_id, snapshot_ts=snapshot_ts)
@@ -522,6 +528,7 @@ async def interfaces_page(
             "interfaces",
             rows=rows,
             sites=sites,
+            vendors=vendors,
             q=q,
             site_filter=site,
             vendor_filter=vendor,

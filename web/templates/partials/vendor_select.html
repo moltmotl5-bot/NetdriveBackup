@@ -1,0 +1,6 @@
+<select name="vendor">
+  <option value="">全部 Vendor</option>
+  {% for v in vendors %}
+  <option value="{{ v }}" {% if vendor_filter == v %}selected{% endif %}>{{ v }}</option>
+  {% endfor %}
+</select>

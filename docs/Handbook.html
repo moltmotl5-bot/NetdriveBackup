@@ -370,7 +370,7 @@ dc,10.2.1.5,huawei,22</code></pre>
 
   <h2 id="use-inventory">使用 — 設備總表與版控</h2>
   <ul>
-    <li>列表來自 <code>index.db</code>，可依 Site、IP、Hostname、Vendor 篩選。</li>
+    <li>列表來自 <code>index.db</code>，可依 Site、<strong>Vendor（下拉，選項為已備份設備之廠牌）</strong>、關鍵字（IP / Hostname / Model / SN）篩選；鄰居與 Interface Map 頁同樣使用 Vendor 下拉。</li>
     <li>設備表約顯示 10 列高度，其餘於表內捲動；點列或「檢視」開啟下方詳情。</li>
     <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config）。</li>
     <li>Hostname 優先從 running-config 擷取；若舊快照顯示 unknown，可按「重建索引」從 config.txt 回填。</li>

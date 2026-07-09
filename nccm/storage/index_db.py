@@ -416,8 +416,8 @@ def list_inventory(
         clauses.append("site = ?")
         params.append(site.strip())
     if vendor.strip():
-        clauses.append("LOWER(vendor) LIKE ?")
-        params.append(f"%{vendor.strip().lower()}%")
+        clauses.append("LOWER(TRIM(vendor)) = LOWER(TRIM(?))")
+        params.append(vendor.strip())
 
     sql = f"""
         SELECT device_id, site, ip, hostname, vendor, sw_version, model_summary,
@@ -540,6 +540,22 @@ def list_sites() -> list[str]:
             "SELECT DISTINCT site FROM devices ORDER BY site"
         ).fetchall()
     return [r["site"] for r in rows]
+
+
+def list_vendors(*, backed_up_only: bool = True) -> list[str]:
+    """Distinct vendors from indexed backup devices (store/index.db)."""
+    clause = ""
+    if backed_up_only:
+        clause = " AND snapshot_count > 0"
+    with connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT vendor FROM devices
+            WHERE vendor IS NOT NULL AND TRIM(vendor) != ''{clause}
+            ORDER BY LOWER(vendor)
+            """
+        ).fetchall()
+    return [str(r["vendor"]).strip() for r in rows]
 
 
 def list_snapshots_for_device(device_id_value: str) -> list[SnapshotRow]:
