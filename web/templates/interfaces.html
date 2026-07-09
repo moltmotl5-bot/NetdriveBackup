@@ -20,15 +20,17 @@
     <div class="inv-device-table-scroll">
       <table class="inv-table">
         <thead>
-          <tr><th>Site</th><th>IP</th><th>Port</th><th>Hostname</th><th>Vendor</th><th>操作</th></tr>
+          <tr><th>Site</th><th>IP</th><th>Port</th><th>Hostname</th><th>Stack#</th><th>Role</th><th>Vendor</th><th>操作</th></tr>
         </thead>
         <tbody>
           {% for r in rows %}
-          <tr class="{% if device_id == r.device_id %}selected{% endif %}">
+          <tr class="{% if device_id == r.device_id %}selected{% endif %}{% if r.cluster_type %} stack-member-row{% endif %}">
             <td>{{ r.site }}</td>
             <td>{{ r.ip }}</td>
             <td>{{ r.port }}</td>
             <td>{{ r.hostname }}</td>
+            <td>{% if r.stack_switch is not none %}{{ r.stack_switch }}{% else %}—{% endif %}</td>
+            <td>{% if r.stack_role and r.stack_role != '—' %}{{ r.stack_role }}{% else %}—{% endif %}</td>
             <td>{{ r.vendor }}</td>
             <td>
               <a href="/interfaces?device_id={{ r.device_id | urlencode }}&q={{ q | urlencode }}&site={{ site_filter | urlencode }}&vendor={{ vendor_filter | urlencode }}"
@@ -39,7 +41,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="muted">尚無設備</td></tr>
+          <tr><td colspan="8" class="muted">尚無設備</td></tr>
           {% endfor %}
         </tbody>
       </table>

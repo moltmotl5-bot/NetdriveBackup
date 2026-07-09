@@ -11,7 +11,7 @@ from nccm.parsers.cdp_lldp import (
     make_device_key,
     neighbors_from_backup_snapshot,
 )
-from nccm.storage.index_db import InventoryRow, list_inventory, list_snapshots_for_device
+from nccm.storage.index_db import InventoryDisplayRow, list_inventory_display, list_snapshots_for_device
 
 
 def device_store_path(site: str, ip: str, hostname: str) -> Path:
@@ -19,7 +19,7 @@ def device_store_path(site: str, ip: str, hostname: str) -> Path:
     return store_dir() / site / f"{ip}__{safe_host}"
 
 
-def build_hostname_lookup(rows: list[InventoryRow]) -> dict[str, str]:
+def build_hostname_lookup(rows: list[InventoryDisplayRow]) -> dict[str, str]:
     lookup: dict[str, str] = {}
     for r in rows:
         key = make_device_key(r.site, r.ip, r.hostname, r.port)
@@ -35,8 +35,8 @@ def neighbor_device_rows(
     site: str = "",
     vendor: str = "",
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
-    """Inventory rows enriched with neighbor_count / cdp / lldp from latest snapshot."""
-    inv = list_inventory(query=query, site=site, vendor=vendor)
+    """Expanded inventory (stack / HA per member) with neighbor stats from latest snapshot."""
+    inv = list_inventory_display(query=query, site=site, vendor=vendor)
     lookup = build_hostname_lookup(inv)
     out: list[dict[str, Any]] = []
 
@@ -62,6 +62,10 @@ def neighbor_device_rows(
                 "sw_version": r.sw_version,
                 "model_summary": r.model_summary,
                 "serial_summary": r.serial_summary,
+                "stack_switch": r.stack_switch,
+                "stack_role": r.stack_role,
+                "cluster_type": r.cluster_type,
+                "is_config_anchor": r.is_config_anchor,
                 "neighbor_count": len(neighbor_rows),
                 "cdp_status": cdp_status,
                 "lldp_status": lldp_status,

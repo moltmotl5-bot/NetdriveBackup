@@ -152,6 +152,7 @@ class InventoryDisplayRow:
     stack_switch: int | None
     stack_role: str
     is_config_anchor: bool
+    cluster_type: str = ""
 
 
 @dataclass(frozen=True)
@@ -194,17 +195,25 @@ def _read_ha_status(snap_dir: Path) -> str:
         return f.read_text(encoding="utf-8", errors="replace")
     return ""
 
+def _read_stack_info(snap_dir: Path) -> str:
+    f = snap_dir / "stack_info.txt"
+    if f.is_file():
+        return f.read_text(encoding="utf-8", errors="replace")
+    return ""
+
+
 def _sync_stack_units(
     conn: sqlite3.Connection,
     did: str,
     vendor: str,
     version_text: str,
     ha_text: str = "",
+    stack_extra: str = "",
 ) -> None:
     conn.execute("DELETE FROM stack_units WHERE device_id = ?", (did,))
     v = normalize_vendor(vendor)
     if v == "cisco":
-        units = parse_cisco_stack_units(version_text)
+        units = parse_cisco_stack_units(version_text, stack_extra)
     elif v == "fortinet":
         units = parse_fortigate_ha_units(ha_text or version_text)
     else:
@@ -362,7 +371,8 @@ def index_manifest(manifest: dict[str, Any], snapshot_path: Path) -> int:
                 ),
             )
         ha_text = _read_ha_status(snapshot_path) if normalize_vendor(vendor) == "fortinet" else ""
-        _sync_stack_units(conn, did, vendor, version_text, ha_text)
+        stack_extra = _read_stack_info(snapshot_path) if normalize_vendor(vendor) == "cisco" else ""
+        _sync_stack_units(conn, did, vendor, version_text, ha_text, stack_extra)
         return int(snap_id)
 
 
@@ -457,13 +467,19 @@ def list_inventory_display(
     limit: int = 500,
 ) -> list[InventoryDisplayRow]:
     """Expand stacks / HA clusters into one row per member; config stays on anchor."""
-    from nccm.parsers.stack import StackUnit, config_anchor_unit
+    from nccm.parsers.stack import (
+        StackUnit,
+        config_anchor_unit,
+        member_display_hostname,
+        normalize_stack_display_role,
+    )
     from nccm.profiles import normalize_vendor
 
     logical = list_inventory(query=query, site=site, vendor=vendor, limit=limit)
     out: list[InventoryDisplayRow] = []
     with connect() as conn:
         for r in logical:
+            vnorm = normalize_vendor(r.vendor)
             su_rows = conn.execute(
                 """
                 SELECT switch_num, role, model, serial, sw_version, hostname
@@ -473,6 +489,7 @@ def list_inventory_display(
                 (r.device_id,),
             ).fetchall()
             if len(su_rows) >= 2:
+                cluster_type = "ha" if vnorm == "fortinet" else "stack"
                 units = [
                     StackUnit(
                         int(x["switch_num"]),
@@ -494,9 +511,22 @@ def list_inventory_display(
                     ),
                 )
                 for x in display_units:
-                    member_hostname = (x["hostname"] or "").strip() or r.hostname
+                    su = StackUnit(
+                        int(x["switch_num"]),
+                        x["role"] or "Member",
+                        x["model"] or "",
+                        x["serial"] or "",
+                        x["sw_version"] or "",
+                        x["hostname"] or "",
+                    )
+                    member_hostname = member_display_hostname(
+                        r.hostname, su, vendor=r.vendor
+                    )
                     sn = int(x["switch_num"])
                     is_anchor = sn == anchor_num
+                    disp_role = normalize_stack_display_role(
+                        x["role"] or "Member", vendor=r.vendor
+                    )
                     out.append(
                         InventoryDisplayRow(
                             device_id=r.device_id,
@@ -510,8 +540,9 @@ def list_inventory_display(
                             serial_summary=x["serial"] or "",
                             snapshot_count=r.snapshot_count if is_anchor else None,
                             stack_switch=sn,
-                            stack_role=x["role"] or "Member",
+                            stack_role=disp_role,
                             is_config_anchor=is_anchor,
+                            cluster_type=cluster_type,
                         )
                     )
             else:
@@ -530,6 +561,7 @@ def list_inventory_display(
                         stack_switch=None,
                         stack_role="—",
                         is_config_anchor=True,
+                        cluster_type="",
                     )
                 )
     return out

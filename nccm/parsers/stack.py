@@ -1,4 +1,4 @@
-"""Parse Cisco IOS / IOS-XE stack members from show version output."""
+"""Parse Cisco IOS / IOS-XE stack members from show version / show switch output."""
 from __future__ import annotations
 
 import re
@@ -15,11 +15,49 @@ class StackUnit:
     hostname: str = ""
 
 
-_ROLE_ORDER = {"active": 0, "master": 0, "standby": 1, "member": 2, "unknown": 3}
+_ROLE_ORDER = {
+    "active": 0,
+    "master": 0,
+    "primary": 0,
+    "standby": 1,
+    "secondary": 1,
+    "slave": 1,
+    "member": 2,
+    "unknown": 3,
+}
 
 
 def _role_rank(role: str) -> int:
     return _ROLE_ORDER.get((role or "").strip().lower(), 3)
+
+
+def normalize_stack_display_role(role: str, *, vendor: str = "") -> str:
+    """Align Cisco stack roles with FortiGate HA labels (Primary / Secondary / Member)."""
+    r = (role or "").strip().lower()
+    if r in ("active", "master", "primary"):
+        return "Primary"
+    if r in ("standby", "secondary", "slave"):
+        return "Secondary"
+    if r in ("member",):
+        return "Member"
+    return (role or "Member").strip() or "Member"
+
+
+def member_display_hostname(
+    cluster_hostname: str,
+    unit: StackUnit,
+    *,
+    vendor: str,
+) -> str:
+    """Per-member hostname for inventory (Forti HA uses parsed hostname; Cisco stack uses SW# suffix)."""
+    h = (unit.hostname or "").strip()
+    if h:
+        return h
+    base = (cluster_hostname or "").strip() or "unknown"
+    v = (vendor or "").strip().lower()
+    if v == "fortinet":
+        return base
+    return f"{base} · SW{unit.switch_num}"
 
 
 def is_cisco_stack_version(text: str) -> bool:
@@ -29,14 +67,14 @@ def is_cisco_stack_version(text: str) -> bool:
     if re.search(r"^\s*\*?\d+\s+(Active|Standby|Member|Master)\s", t, re.M | re.I):
         return True
     blocks = re.findall(r"^Switch\s+(\d+)\s*$", t, re.M | re.I)
-    return len(blocks) >= 2
+    if len(blocks) >= 2:
+        return True
+    if len(re.findall(r"^\s*\*?\s*\d+\s+\d+\s+\S+\s+\S+", t, re.M)) >= 2:
+        return True
+    return False
 
 
-def parse_cisco_stack_units(text: str) -> list[StackUnit]:
-    """Return stack members; empty if not a stack or unparseable."""
-    if not is_cisco_stack_version(text):
-        return []
-
+def _parse_role_table(text: str) -> dict[int, str]:
     roles: dict[int, str] = {}
     for m in re.finditer(
         r"^\s*\*?(\d+)\s+(Active|Standby|Member|Master)\b",
@@ -44,7 +82,10 @@ def parse_cisco_stack_units(text: str) -> list[StackUnit]:
         re.MULTILINE | re.IGNORECASE,
     ):
         roles[int(m.group(1))] = m.group(2).capitalize()
+    return roles
 
+
+def _parse_switch_blocks(text: str, roles: dict[int, str]) -> dict[int, StackUnit]:
     units: dict[int, StackUnit] = {}
     block_pat = re.compile(
         r"Switch\s+(\d+)\s*\n[-\s]*\n(.*?)(?=^Switch\s+\d+\s*$|\Z)",
@@ -71,6 +112,76 @@ def parse_cisco_stack_units(text: str) -> list[StackUnit]:
             sw_version=sw,
             hostname="",
         )
+    return units
+
+
+def _parse_iosxe_port_table(text: str) -> dict[int, StackUnit]:
+    """IOS-XE stack summary table inside show version (Switch# Ports Model Serial ...)."""
+    units: dict[int, StackUnit] = {}
+    active_nums: set[int] = set()
+    for m in re.finditer(
+        r"^\s*(\*?)\s*(\d+)\s+\d+\s+(\S+)\s+(\S+)\s+",
+        text,
+        re.MULTILINE,
+    ):
+        starred = bool(m.group(1))
+        num = int(m.group(2))
+        model = m.group(3)
+        serial = m.group(4)
+        if starred:
+            active_nums.add(num)
+        role = "Active" if starred else "Member"
+        units[num] = StackUnit(
+            switch_num=num,
+            role=role,
+            model=model,
+            serial=serial,
+            hostname="",
+        )
+    if len(units) >= 2 and len(active_nums) == 1:
+        for num, u in list(units.items()):
+            if num not in active_nums:
+                units[num] = StackUnit(
+                    u.switch_num,
+                    "Standby",
+                    u.model,
+                    u.serial,
+                    u.sw_version,
+                    u.hostname,
+                )
+    return units
+
+
+def _merge_units(*maps: dict[int, StackUnit]) -> dict[int, StackUnit]:
+    merged: dict[int, StackUnit] = {}
+    for m in maps:
+        for num, u in m.items():
+            if num not in merged:
+                merged[num] = u
+                continue
+            prev = merged[num]
+            merged[num] = StackUnit(
+                num,
+                u.role if u.role != "Member" else prev.role,
+                u.model if u.model not in ("", "Unknown") else prev.model,
+                u.serial if u.serial not in ("", "Unknown") else prev.serial,
+                u.sw_version or prev.sw_version,
+                u.hostname or prev.hostname,
+            )
+    return merged
+
+
+def parse_cisco_stack_units(text: str, extra: str = "") -> list[StackUnit]:
+    """Return stack members; empty if not a stack or unparseable."""
+    combined = f"{text or ''}\n{extra or ''}".strip()
+    if not is_cisco_stack_version(combined):
+        return []
+
+    roles = _parse_role_table(combined)
+    units = _merge_units(
+        _parse_switch_blocks(combined, roles),
+        _parse_iosxe_port_table(combined),
+    )
 
     if len(units) < 2 and roles:
         for num, role in roles.items():
@@ -95,9 +206,10 @@ def config_anchor_unit(units: list[StackUnit]) -> StackUnit | None:
     if not units:
         return None
     for u in units:
-        if u.role.lower() in ("active", "master"):
+        if u.role.lower() in ("active", "master", "primary"):
             return u
     return units[0]
+
 
 def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
     """Parse FortiGate HA from ha_status.txt.
@@ -120,17 +232,14 @@ def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
         if not line:
             continue
 
-        # Find role
         role_m = re.search(r"(?i)\b(Primary|Secondary|Master|Slave)\b", line)
         if not role_m:
             continue
         role_raw = role_m.group(1).lower()
         role = "Primary" if role_raw in ("primary", "master") else "Secondary"
 
-        # Remove the role part and common noise
         rest = re.sub(r"(?i)^.*?(Primary|Secondary|Master|Slave)\s*:?\s*", "", line)
 
-        # Split by comma or whitespace
         raw_tokens = re.split(r"[,\s]+", rest)
         tokens = [t.strip() for t in raw_tokens if t.strip()]
 
@@ -143,26 +252,34 @@ def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
                 continue
             if "=" in tok or "HA operating" in tok or "index" in tok.lower():
                 continue
-            # Serial: starts with FGT or long pure alphanum without _ -
-            if (tok.upper().startswith("FGT") or (len(tok) >= 10 and tok.replace("-", "").replace("_", "").isalnum() and not any(c in tok for c in "_-"))):
+            if (
+                tok.upper().startswith("FGT")
+                or (
+                    len(tok) >= 10
+                    and tok.replace("-", "").replace("_", "").isalnum()
+                    and not any(c in tok for c in "_-")
+                )
+            ):
                 if serial is None:
                     serial = tok
-            # Hostname: has _ or - , or looks like a named device, not serial
             elif ("_" in tok or "-" in tok) and not tok.upper().startswith("FGT"):
                 if hname is None:
                     hname = tok
 
-        # Fallback if still missing
         if hname is None or serial is None:
-            # Try to pick the non-serial looking token as hostname
             for tok in tokens:
                 if "=" in tok or "HA operating" in tok or "index" in tok.lower():
                     continue
-                if not (tok.upper().startswith("FGT") or (len(tok) >= 10 and not any(c in tok for c in "_-"))):
+                if not (
+                    tok.upper().startswith("FGT")
+                    or (len(tok) >= 10 and not any(c in tok for c in "_-"))
+                ):
                     if hname is None and len(tok) > 3:
                         hname = tok
             for tok in tokens:
-                if tok.upper().startswith("FGT") or (len(tok) >= 10 and tok.replace("-", "").isalnum()):
+                if tok.upper().startswith("FGT") or (
+                    len(tok) >= 10 and tok.replace("-", "").isalnum()
+                ):
                     if serial is None:
                         serial = tok
 
@@ -171,9 +288,7 @@ def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
         if serial in seen:
             continue
 
-        # Extra safety: hostname should not look like serial
         if hname.upper().startswith("FGT") and len(hname) > 10:
-            # swap if we have another candidate
             for tok in tokens:
                 if "_" in tok or ("-" in tok and not tok.upper().startswith("FGT")):
                     hname = tok
@@ -183,7 +298,6 @@ def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
             continue
 
         seen.add(serial)
-        # Only accept if hostname looks like a real named device (has _ or - )
         if "_" in hname or "-" in hname:
             units.append(StackUnit(0, role, "", serial, "", hname))
 
@@ -195,5 +309,3 @@ def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
     for i, u in enumerate(ordered, 1):
         result.append(StackUnit(i, u.role, u.model, u.serial, u.sw_version, u.hostname))
     return result
-
-

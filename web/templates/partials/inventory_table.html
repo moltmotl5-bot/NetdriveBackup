@@ -8,7 +8,7 @@
   </thead>
   <tbody>
     {% for r in rows %}
-    <tr class="{% if device_id == r.device_id %}selected{% endif %}{% if r.stack_switch %} stack-member-row{% endif %}"
+    <tr class="{% if device_id == r.device_id %}selected{% endif %}{% if r.cluster_type %} stack-member-row{% endif %}"
         hx-get="/inventory/partial/detail?device_id={{ r.device_id | urlencode }}"
         hx-target="#inv-detail"
         hx-swap="innerHTML"
@@ -16,11 +16,15 @@
       <td>{{ r.site }}</td>
       <td>{{ r.ip }}</td>
       <td>{{ r.port }}</td>
-      <td>{{ r.hostname }}</td>
-      <td>{% if r.stack_switch %}{{ r.stack_switch }}{% else %}—{% endif %}</td>
+      <td>
+        {{ r.hostname }}
+        {% if r.is_config_anchor and r.cluster_type == 'stack' %}<span class="muted" title="Cisco Stack 虛擬 IP"> · Stack</span>{% endif %}
+        {% if r.is_config_anchor and r.cluster_type == 'ha' %}<span class="muted" title="FortiGate HA 虛擬 IP"> · HA</span>{% endif %}
+      </td>
+      <td>{% if r.stack_switch is not none %}{{ r.stack_switch }}{% else %}—{% endif %}</td>
       <td>
         {% if r.stack_role != "—" %}{{ r.stack_role }}{% else %}—{% endif %}
-        {% if r.is_config_anchor and r.stack_switch %}<span class="muted" title="虛擬 IP 組態錨點"> · 組態</span>{% endif %}
+        {% if r.is_config_anchor and r.cluster_type %}<span class="muted" title="虛擬 IP 組態錨點"> · 組態</span>{% endif %}
       </td>
       <td>{{ r.vendor }}</td>
       <td>{{ r.sw_version }}</td>

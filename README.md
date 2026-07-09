@@ -159,16 +159,12 @@ store/
 ## Web 功能（四頁）
 
 1. **批次備份** — CSV、SSH 帳密、即時 job log  
-2. **設備總表與版控** — Site／**Vendor（下拉，來自已備份設備）**／關鍵字篩選；型號／版本／序號、歷史快照、Running-Config 預覽；Hostname 優先從 running-config 解析；**Cisco Stack / FortiGate HA** 每台實體機一行（Primary/Secondary + 各自 hostname）
-FortiGate HA Cluster：使用 `ha_status.txt` 解析。
-預期格式（每行）：
-```
-Primary: hostname, serial, HAindex
-Secondary: hostname, serial, HAindex
-```
-每台實體機會展開成獨立一行，顯示正確的 hostname、Stack#（HAindex）、Role。。FortiGate HA 成員若未正確展開，請重新備份該設備（確保產生 ha_status），再按「重建索引」。，組態仍掛在 Anchor（Active/Primary）上。更新後若出現 Internal Server Error，請重啟服務或按「重建索引」（stack_units 新增 hostname 欄位）。
-3. **CDP/LLDP 鄰居** — 由快照解析鄰居表  
-4. **Device Interface Map** — `config` + `interfaces` 合併埠位表  
+2. **設備總表與版控** — Site／**Vendor（下拉，來自已備份設備）**／關鍵字篩選；型號／版本／序號、歷史快照、Running-Config 預覽；**Cisco Stack / FortiGate HA** 每台實體機一行（Stack#、Role **Primary/Secondary**、各自序號；Cisco 成員 hostname 為 `管理名 · SW#`）。組態錨點列標 **· 組態**；虛擬 IP 只備一份 running-config。  
+   - **Cisco Stack**：`version_info.txt` + 備份時 **`show switch` → `stack_info.txt`**（非 Nexus）  
+   - **FortiGate HA**：`ha_status.txt`（Primary/Secondary 行含 hostname、serial）  
+   展開異常時請重新備份後按 **重建索引**。  
+3. **CDP/LLDP 鄰居** — 設備列表同總表展開 Stack/HA；由快照解析鄰居表  
+4. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
 
 側欄顯示 Agent 連線狀態（綠／紅）。
 

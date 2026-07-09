@@ -76,6 +76,7 @@ def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
             ]
         return [
             CommandSpec("version_info", "show version"),
+            CommandSpec("stack_info", "show switch"),
             CommandSpec("config", "show running-config", timeout=300),
             CommandSpec("interfaces", "show interface status"),
             CommandSpec("cdp", "show cdp neighbors"),
