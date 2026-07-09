@@ -87,7 +87,7 @@ class CiscoBase(Base):
         _PATTERN_CONFIG = r"^\r{0,1}\S+\(\S+\)#\s*$"
         _PATTERN_ENABLE_PASSWORD = r"(Enable )?Password:"
         # <--- More --->
-        _PATTERN_MORE = r"<--- More --->"
+        _PATTERN_MORE = r"--More--|<--- More --->"  # Nexus "--More--" + classic
 
         @staticmethod
         def get_login_prompt_pattern() -> re.Pattern:

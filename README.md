@@ -308,7 +308,9 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 | 庫存只有一台 | 同 Site+IP 多設備需不同 **Port** 或 **hostname**；按「重建索引」 |
 | 設備列表 Hostname 為空白／unknown | 舊快照的 hostname 可能只從 show version 抓到；新備份已優先從 running-config 解析。請按「重建索引」從現有 `config.txt` 回填。 |
 | Agent **unhealthy** | 多為舊 `agent-logs` volume 權限問題：`docker compose down -v && docker compose up -d --build`；查 `docker compose logs netdriver-agent` |
-| Forti 設定過短 | 調高 `deploy/config/agent/agent.yml` 內 `fortinet.fortigate` `read_timeout` |
+|| Forti 設定過短 | 調高 `deploy/config/agent/agent.yml` 內 `fortinet.fortigate` `read_timeout` |
+|| Cisco Nexus 備份失敗（auto classify 後） | NX-OS 9.x 常見 paging/more prompt 問題。已改用 `show running-config | no-more` 與強化 more 處理。請**重新對該設備備份**一次；確認 Agent 設定中 `vendor.cisco.nexus.base` read_timeout ≥ 120s |
+|| Cisco Nexus 備份失敗（auto classify 後） | NX-OS 9.x 常見 paging/more prompt 問題。已改用 `show running-config | no-more` 與強化 more 處理。請**重新對該設備備份**一次；確認 Agent 設定中 `vendor.cisco.nexus.base` read_timeout ≥ 120s |
 
 ---
 
