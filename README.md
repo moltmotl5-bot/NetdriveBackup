@@ -309,7 +309,7 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 | 設備列表 Hostname 為空白／unknown | 舊快照的 hostname 可能只從 show version 抓到；新備份已優先從 running-config 解析。請按「重建索引」從現有 `config.txt` 回填。 |
 | Agent **unhealthy** | 多為舊 `agent-logs` volume 權限問題：`docker compose down -v && docker compose up -d --build`；查 `docker compose logs netdriver-agent` |
 | Forti 設定過短 | 調高 `deploy/config/agent/agent.yml` 內 `fortinet.fortigate` `read_timeout` |
-| Cisco Nexus 備份失敗（auto classify 後） | Agent 強化 `--More--`；Nexus 使用 `show running-config`（部分 NX-OS 不支援 `\| no-more`）。失敗時看批次備份 **即時日誌** `FAILED —` / `error detail` 或結果 **Detail**；`docker compose logs portal` 通常不含每台錯誤。`vendor.cisco.nexus.base` read_timeout ≥ 120s |
+| Cisco Nexus 備份失敗（auto classify 後） | 若 Detail 為 `[config] …: ^` 但 **CLI tail** 已有 config 與 `hostname#`，為 Agent 誤判 lone `^`（需 **rebuild netdriver-agent**）。否則查權限／`read_timeout`；Nexus 用 `show running-config`（勿強制 `\| no-more`）。 |
 | 備份失敗但 docker log 無錯誤 | 單台錯誤在 Portal **SSE 即時日誌**（含 `[config]` 與 `CLI tail`）與結果表 **Detail**；若 `FAILED —` 後為空請 rebuild portal。Agent 可設 `api.request_log_level: DEBUG` 後 `docker compose logs netdriver-agent` |
 
 ---

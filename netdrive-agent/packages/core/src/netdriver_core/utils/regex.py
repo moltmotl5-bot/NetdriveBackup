@@ -32,7 +32,23 @@ def catch_error_of_output(output: str,
                     log.debug(f"Ignoring error: {ematch.group()}, By pattern: {ignore_pattern}")
                     break
             if not imatch:
-                log.debug(f"Catched an error: {ematch.group()}, By pattern: {error_pattern}")
+                caught = ematch.group().strip()
+                log.debug(f"Catched an error: {caught}, By pattern: {error_pattern}")
+                if caught == "^":
+                    fuller = re.search(r"^% .+", output, re.MULTILINE)
+                    if fuller:
+                        return fuller.group().strip()
+                    has_cli_error = re.search(
+                        r"% Invalid|Command authorization failed|Command rejected|ERROR:",
+                        output,
+                        re.MULTILINE | re.IGNORECASE,
+                    )
+                    has_enable_prompt = re.search(r"^[^\s#]+#\s*$", output, re.MULTILINE)
+                    if not has_cli_error and has_enable_prompt and len(output) > 200:
+                        log.debug(
+                            "Ignoring lone ^ in long output with enable prompt (false positive)"
+                        )
+                        continue
                 return ematch.group()
     log.debug("No errors found in output")
     return None

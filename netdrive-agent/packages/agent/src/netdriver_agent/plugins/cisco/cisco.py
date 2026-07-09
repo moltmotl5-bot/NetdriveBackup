@@ -120,17 +120,19 @@ class CiscoBase(Base):
         def get_error_patterns() -> list[re.Pattern]:
             regex_strs = [
                 r"% Invalid command at '\^' marker\.",
+                r"% Invalid input command at '\^' marker\.",
                 r"% Invalid parameter detected at '\^' marker\.",
+                r"% Incomplete command at '\^' marker\.",
                 r"invalid vlan \(reserved value\) at '\^' marker\.",
                 r"ERROR: VLAN \d+ is not a primary vlan",
-                r"\^$",
                 r"^%.+",
                 r"^Command authorization failed.*",
                 r"^Command rejected:.*",
                 r"ERROR:.+",
                 r"Invalid password",
                 r"Access denied.",
-                r"End address less than start address"
+                r"End address less than start address",
+                r"\^$",
             ]
             return [re.compile(regex_str, re.MULTILINE) for regex_str in regex_strs]
 
