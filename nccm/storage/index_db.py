@@ -9,7 +9,7 @@ from typing import Any, Iterator
 
 from nccm.config import store_dir
 from nccm.profiles import normalize_vendor
-from nccm.parsers.stack import config_anchor_unit, parse_cisco_stack_units
+from nccm.parsers.stack import config_anchor_unit, parse_cisco_stack_units, parse_fortigate_ha_units
 from nccm.parsers.version import parse_version_info
 from nccm.storage.writer import safe_hostname
 
@@ -118,10 +118,21 @@ def connect() -> Iterator[sqlite3.Connection]:
     conn.row_factory = sqlite3.Row
     try:
         conn.executescript(_SCHEMA)
+
+        # Migrate stack_units to add hostname column if missing (for existing DBs after the HA feature)
+        try:
+            conn.execute("SELECT hostname FROM stack_units LIMIT 1")
+        except sqlite3.OperationalError:
+            try:
+                conn.execute("ALTER TABLE stack_units ADD COLUMN hostname TEXT")
+            except Exception:
+                pass
+
         yield conn
         conn.commit()
     finally:
         conn.close()
+
 
 
 @dataclass(frozen=True)
@@ -469,7 +480,7 @@ def list_inventory_display(
                         x["model"] or "",
                         x["serial"] or "",
                         x["sw_version"] or "",
-                        x.get("hostname") or "",
+                        x["hostname"] or "",
                     )
                     for x in su_rows
                 ]
@@ -483,7 +494,7 @@ def list_inventory_display(
                     ),
                 )
                 for x in display_units:
-                    member_hostname = (x.get("hostname") or "").strip() or r.hostname
+                    member_hostname = (x["hostname"] or "").strip() or r.hostname
                     sn = int(x["switch_num"])
                     is_anchor = sn == anchor_num
                     out.append(

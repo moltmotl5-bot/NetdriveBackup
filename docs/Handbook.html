@@ -374,7 +374,7 @@ dc,10.2.1.5,huawei,22</code></pre>
     <li>設備表約顯示 10 列高度，其餘於表內捲動；點列或「檢視」開啟下方詳情。</li>
     <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config）。</li>
     <li>Hostname 優先從 running-config 擷取；若舊快照顯示 unknown，可按「重建索引」從 config.txt 回填。</li>
-    <li><strong>Cisco Stack / FortiGate HA</strong>：總表會<strong>每台實體機一行</strong>（Stack#/Member + Role: Primary/Secondary）；各自 hostname 會顯示（來自 HA status / running-config）。組態仍掛在 Anchor（Active/Primary）那一列，虛擬 IP / Cluster 只備一份 config。</li>
+    <li><strong>Cisco Stack / FortiGate HA</strong>：總表會<strong>每台實體機一行</strong>（Stack#/Member + Role: Primary/Secondary）；各自 hostname 會顯示（來自 HA status / running-config）。組態仍掛在 Anchor（Active/Primary）那一列。更新後若出現 Internal Server Error，請重啟服務或按「重建索引」（stack_units 新增 hostname 欄位）。，虛擬 IP / Cluster 只備一份 config。</li>
     <li><strong>重建索引</strong>：掃描整個 <code>store/</code> 重建 <code>index.db</code>（手動還原資料或修復索引時使用）。</li>
   </ul>
 

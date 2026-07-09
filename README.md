@@ -159,7 +159,7 @@ store/
 ## Web 功能（四頁）
 
 1. **批次備份** — CSV、SSH 帳密、即時 job log  
-2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽；Hostname 優先從 running-config 解析；**Cisco Stack / FortiGate HA** 每台實體機一行（Primary/Secondary + 各自 hostname），組態仍掛在 Anchor（Active/Primary）上。
+2. **設備總表與版控** — 型號／版本／序號、歷史快照、Running-Config 預覽；Hostname 優先從 running-config 解析；**Cisco Stack / FortiGate HA** 每台實體機一行（Primary/Secondary + 各自 hostname），組態仍掛在 Anchor（Active/Primary）上。更新後若出現 Internal Server Error，請重啟服務或按「重建索引」（stack_units 新增 hostname 欄位）。
 3. **CDP/LLDP 鄰居** — 由快照解析鄰居表  
 4. **Device Interface Map** — `config` + `interfaces` 合併埠位表  
 
