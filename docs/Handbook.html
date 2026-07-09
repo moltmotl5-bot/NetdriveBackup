@@ -497,7 +497,7 @@ docker compose logs -f netdriver-agent</code></pre>
       <tr><td>備份全部失敗</td><td>Agent 容器無法 SSH 至設備；檢查路由／Port／帳密；必要時 host 網路</td></tr>
       <tr><td>Forti 設定不完整</td><td>提高 <code>deploy/config/agent/agent.yml</code> 中 Fortinet <code>read_timeout</code></td></tr>
       <tr><td>Cisco Nexus 備份失敗（auto classify 後）</td><td>Agent 強化 <code>--More--</code>；Nexus 使用 <code>show running-config</code>（部分版本 <code>| no-more</code> 會失敗）。錯誤見批次備份 <strong>即時日誌</strong> <code>FAILED —</code> / <code>error detail</code> 或結果 <strong>Detail</strong>；<code>vendor.cisco.nexus.base</code> read_timeout ≥ 120s</td></tr>
-      <tr><td>備份失敗但 docker log 無錯誤</td><td>單台錯誤在 Portal SSE 與結果 Detail；Agent 可設 <code>api.request_log_level: DEBUG</code> 後查 <code>docker compose logs netdriver-agent</code></td></tr>
+      <tr><td>備份失敗但 docker log 無錯誤</td><td>單台錯誤在 Portal SSE（含 <code>[config]</code> 與 <code>CLI tail</code>）與結果 Detail；若 <code>FAILED —</code> 後為空請 rebuild portal。Agent 可設 <code>api.request_log_level: DEBUG</code> 後查 <code>docker compose logs netdriver-agent</code></td></tr>
       <tr><td>庫存只有一台設備</td><td>多設備同 Site+IP 須不同 <code>Port</code> 或 hostname；執行重建索引</td></tr>
       <tr><td>設備列表 Hostname 為空白／unknown</td><td>舊快照可能只從 version 抓到；新備份已優先從 running-config 解析。按「重建索引」可從現有 config.txt 回填。</td></tr>
       <tr><td>鄰居／埠位空白</td><td>該次備份未擷取到 CDP/LLDP 或 interfaces；重新備份並確認權限</td></tr>

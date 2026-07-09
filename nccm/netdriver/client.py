@@ -107,7 +107,12 @@ class NetDriverClient:
             raise NetDriverError(f"cmd HTTP {r.status_code}: {r.text[:500]}")
         data = r.json()
         if data.get("code") != "OK":
-            raise NetDriverError(data.get("msg") or data.get("code") or "cmd failed")
+            msg = (data.get("msg") or "").strip() or str(data.get("code") or "cmd failed")
+            out = data.get("output")
+            if isinstance(out, str) and out.strip():
+                tail = "\n".join(out.strip().splitlines()[-8:])
+                msg = f"{msg} | CLI tail: {tail[:800]}"
+            raise NetDriverError(msg)
         output = data.get("output")
         if output is not None:
             return str(output)

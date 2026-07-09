@@ -310,7 +310,7 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 | Agent **unhealthy** | 多為舊 `agent-logs` volume 權限問題：`docker compose down -v && docker compose up -d --build`；查 `docker compose logs netdriver-agent` |
 | Forti 設定過短 | 調高 `deploy/config/agent/agent.yml` 內 `fortinet.fortigate` `read_timeout` |
 | Cisco Nexus 備份失敗（auto classify 後） | Agent 強化 `--More--`；Nexus 使用 `show running-config`（部分 NX-OS 不支援 `\| no-more`）。失敗時看批次備份 **即時日誌** `FAILED —` / `error detail` 或結果 **Detail**；`docker compose logs portal` 通常不含每台錯誤。`vendor.cisco.nexus.base` read_timeout ≥ 120s |
-| 備份失敗但 docker log 無錯誤 | 單台錯誤在 Portal **SSE 即時日誌** 與結果表 **Detail**；Agent 可設 `api.request_log_level: DEBUG` 後 `docker compose logs netdriver-agent` |
+| 備份失敗但 docker log 無錯誤 | 單台錯誤在 Portal **SSE 即時日誌**（含 `[config]` 與 `CLI tail`）與結果表 **Detail**；若 `FAILED —` 後為空請 rebuild portal。Agent 可設 `api.request_log_level: DEBUG` 後 `docker compose logs netdriver-agent` |
 
 ---
 

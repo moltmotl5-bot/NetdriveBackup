@@ -19,6 +19,13 @@ from nccm.storage.writer import write_snapshot
 
 LogFn = Callable[[str], None]
 
+
+def _format_exc(exc: BaseException) -> str:
+    text = str(exc).strip()
+    if text:
+        return text
+    return f"{type(exc).__name__} (no message from agent)"
+
 _VERSION_FALLBACK: dict[str, str] = {
     "fortinet": "show full-configuration",
     "huawei": "display current-configuration",
@@ -140,6 +147,7 @@ def backup_device(
     hostname = row.hostname_hint or "unknown"
     discovery = ""
     version_text = ""
+    last_spec = None
     try:
         profile, discovery, version_text = _resolve_profile(
             client, row, username, password, enable_password, _log
@@ -150,6 +158,7 @@ def backup_device(
 
         artifacts: dict[str, str] = {}
         for spec in backup_commands(row.vendor, profile.model):
+            last_spec = spec
             if (
                 spec.artifact == "version_info"
                 and version_text
@@ -239,13 +248,17 @@ def backup_device(
             except Exception:
                 pass
         failed_host = hostname
-        _log(f"{row.ip}: FAILED — {exc}")
+        err_text = _format_exc(exc)
+        if last_spec is not None:
+            err_text = f"[{last_spec.artifact}] {last_spec.command}: {err_text}"
+        _log(f"{row.ip}: FAILED — {err_text}")
+        _log(f"{row.ip}: error detail — {err_text}")
         return BackupResult(
             site=row.site,
             ip=row.ip,
             hostname=failed_host,
             status="failed",
-            error=str(exc),
+            error=err_text,
         )
 
 
