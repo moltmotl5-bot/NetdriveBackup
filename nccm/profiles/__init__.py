@@ -106,9 +106,9 @@ def hostname_from_output(vendor: str, text: str) -> str:
         if m:
             return m.group(1)
     if v == "fortinet":
-        # Prefer explicit hostname
+        # Prefer explicit hostname (handle optional quotes)
         for pat in [
-            r"set hostname\s+"?([A-Za-z0-9_.-]+)"?",
+            r'set hostname\s+"?([A-Za-z0-9_.-]+)"?',
             r"Hostname:\s*([A-Za-z0-9_.-]+)",
         ]:
             m = re.search(pat, text, re.I)
