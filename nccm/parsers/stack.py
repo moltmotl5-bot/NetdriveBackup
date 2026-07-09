@@ -100,8 +100,11 @@ def config_anchor_unit(units: list[StackUnit]) -> StackUnit | None:
     return units[0]
 
 def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
-    """Robust parser for FortiGate HA "get system ha status".
-    Focus on finding distinct serial + real hostname pairs.
+    """Parse FortiGate HA members from ha_status.txt.
+    Supports the recommended format:
+      Primary: hostname, serial, HAindex
+      Secondary: hostname, serial, HAindex
+    Falls back to more general parsing if needed.
     """
     if not text:
         return []
@@ -112,19 +115,62 @@ def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
     units = []
     seen = set()
 
-    # Process line by line for reliability
+    # Priority: specific "Primary:/Secondary:" comma format as recommended
     for line in t.splitlines():
         line = line.strip()
-        if not line: continue
+        if not line:
+            continue
 
-        # Find a role on this line
+        m = re.match(r"(?i)^(Primary|Secondary|Master|Slave)\s*:\s*(.+)", line)
+        if m:
+            role_raw = m.group(1)
+            rest = m.group(2).strip()
+            parts = [p.strip() for p in rest.split(",") if p.strip()]
+
+            # User recommended: hostname, serial, HAindex
+            if len(parts) >= 2:
+                hname = parts[0]
+                serial = parts[1]
+                ha_index_str = parts[2] if len(parts) > 2 else ""
+
+                # Skip if this looks like the old serial-first format or garbage
+                if not hname or not serial:
+                    continue
+
+                role = "Primary" if role_raw.lower() in ("primary", "master") else "Secondary"
+
+                if serial in seen:
+                    continue
+                seen.add(serial)
+
+                # Use HAindex for switch_num if valid, else sequential
+                try:
+                    switch_num = int(ha_index_str) + 1 if ha_index_str.isdigit() else len(units) + 1
+                except:
+                    switch_num = len(units) + 1
+
+                units.append(StackUnit(switch_num, role, "", serial, "", hname))
+
+    if len(units) >= 2:
+        ordered = sorted(units, key=lambda u: (0 if u.role == "Primary" else 1, u.hostname or u.serial))
+        result = []
+        for i, u in enumerate(ordered, 1):
+            result.append(StackUnit(i, u.role, u.model, u.serial, u.sw_version, u.hostname))
+        return result
+
+    # Fallback to previous robust heuristic parser (for other formats)
+    units = []
+    seen = set()
+    for line in t.splitlines():
+        line = line.strip()
+        if not line:
+            continue
         role_m = re.search(r"(?i)\b(Primary|Secondary|Master|Slave|Active|Standby)\b", line)
         if not role_m:
             continue
         role_raw = role_m.group(1).lower()
         role = "Primary" if role_raw in ("primary", "master", "active") else "Secondary"
 
-        # Find a serial (long alphanum, prefer ones starting with FGT)
         serials = re.findall(r"\b([A-Za-z0-9]{6,})\b", line)
         serial = None
         for s in serials:
@@ -136,9 +182,7 @@ def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
         if not serial or serial in seen:
             continue
 
-        # Find hostname: look for token with - or that is not purely the serial/role
         hname = ""
-        # Search for good hostname candidates in the line
         candidates = re.findall(r"\b([A-Za-z][A-Za-z0-9_.-]{2,})\b", line)
         for c in candidates:
             if c.lower() in ("primary", "secondary", "master", "slave", "unit", "group"):
@@ -149,7 +193,6 @@ def parse_fortigate_ha_units(text: str) -> list[StackUnit]:
                 hname = c
                 break
         if not hname:
-            # last resort: first non-serial alphanum
             for c in candidates:
                 if c != serial and c.lower() not in ("primary", "secondary", "master", "slave"):
                     hname = c
