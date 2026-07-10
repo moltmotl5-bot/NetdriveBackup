@@ -19,6 +19,7 @@ from nccm.config import netdriver_url, store_dir
 from nccm.netdriver.client import NetDriverClient
 from nccm.registry.csv import load_devices_csv
 from web.auth import load_portal_credentials, verify_login
+from web.api import router as api_router
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ _WEB_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="NetdriverBackup NCCM v3")
 _secret = os.environ.get("NCCM_SESSION_SECRET") or secrets.token_hex(32)
+app.include_router(api_router, prefix="/api/v1")
 
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 static_path = _WEB_DIR / "static"

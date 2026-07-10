@@ -315,3 +315,87 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 MIT（與主專案相同）
 
 *文件版本：NCCM v3 產品化 — Docker Compose + NetDriver Agent*
+## API 介面
+
+為了讓外部應用程式可以程式化地取得庫存資料，我們提供了一個 RESTful API。
+
+### 基本資訊
+- **基礎路徑**：`/api/v1`
+- **驗證**：所有端點皆需要在 HTTP 標頭中提供 `X-API-Key`，其值必須與伺服器環境變數 `API_KEY` 一致。
+- **回應格式**：JSON
+- **狀態碼**：
+  - 200：成功
+  - 401：未提供或無效的 API Key
+  - 404：資源不存在
+  - 500：伺服器內部錯誤
+
+### 端點
+
+#### 取得庫存列表
+- **URL**：`GET /api/v1/inventory`
+- **查詢參數**：
+  - `site`（可選）：依站點過濾
+  - `vendor`（可選）：依廠商過濾
+  - `q`（可選）：自由文字搜尋（IP、hostname、型號、序號）
+  - `limit`（可選，預設 100，最大 500）：返回的最大筆數上限筆數
+  - `offset`（可選，預設 0）：跳過的筆數，用於分頁
+- **回應**：陣列，每個元素為一台設備（已展開 Stack/HA 成員）：
+  ```json
+  {
+    "device_id": "string",
+    "site": "string",
+    "ip": "string",
+    "port": 22,
+    "hostname": "string",
+    "vendor": "string",
+    "sw_version": "string",
+    "model_summary": "string",
+    "serial_summary": "string",
+    "snapshot_count": 0,
+    "stack_switch": 1,
+    "role": "Primary",
+    "is_config_anchor": true,
+    "cluster_type": "stack"
+  }
+  ```
+
+#### 取得單台設備詳細資訊
+- **URL**：`GET /api/v1/inventory/{device_id}`
+- **說明**：`device_id` 是由 `site::ip::port::hostname` 組成的字串，必須進行 URL 編碼。
+- **回應**：單一設備物件（格式同上），若不存在則回傳 404。
+
+#### 取得設備的最新運行配置
+- **URL**：`GET /api/v1/inventory/{device_id}/config`
+- **說明**：返回最新一次備份的 `config.txt` 內容（純文字）。
+- **回應**：純文字，Content-Type: `text/plain`
+
+#### 取得設備的備份歷史
+- **URL**：`GET /api/v1/inventory/{device_id}/history`
+- **說明**：返回該設備的所有備份快照列表，每個快照包含時間戳和狀態。
+- **回應**：陣列，每個元素：
+  ```json
+  {
+    "id": 123,
+    "created_at": "2025-01-01T12:00:00Z",
+    "status": "ok",
+    "snapshot_path": "relative/path/to/snapshot"
+  }
+  ```
+
+### 安全注意事項
+- 請務必將 `API_KEY` 設為一個強隨機字串，並僅透過安全管道分享給受信任的應用程式。
+- 建議在生產環境中使用 HTTPS（反向代理）以防止 API Key 在網路上被竊聽。
+- API Key 目前僅支援單一金鑰；如需多金鑰支援，請在未來版本中擴充。
+
+### 使用範例（curl）
+```bash
+# 設定 API Key（請替換為您實際的金鑰）
+API_KEY="your-api-key-here"
+
+# 取得庫存列表
+curl -H "X-API-Key: $API_KEY" http://localhost:8501/api/v1/inventory
+
+# 取得特定設備的配置（請先替換 device_id）
+DEVICE_ID="hq::10.1.1.10::22::unknown"
+curl -H "X-API-Key: $API_KEY" http://localhost:8501/api/v1/inventory/$DEVICE_ID/config
+```
