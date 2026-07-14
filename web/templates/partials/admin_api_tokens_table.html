@@ -1,10 +1,9 @@
 <table class="inv-table">
   <thead>
     <tr>
-      <th>ID</th>
       <th>名稱</th>
-      <th>Prefix</th>
-      <th>Scopes</th>
+      <th>前綴碼</th>
+      <th>權限</th>
       <th>啟用</th>
       <th>建立者</th>
       <th>最後使用</th>
@@ -14,7 +13,6 @@
   <tbody>
     {% for t in tokens %}
     <tr>
-      <td>{{ t.id }}</td>
       <td>{{ t.name }}</td>
       <td><code>{{ t.token_prefix }}…</code></td>
       <td>{{ t.scopes }}</td>
@@ -30,7 +28,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="8">尚無 token — 請於上方建立，並參閱下方 REST API 使用手冊</td></tr>
+    <tr><td colspan="7">尚無 token — 請於上方建立，並參閱下方 REST API 使用手冊</td></tr>
     {% endfor %}
   </tbody>
 </table>

@@ -1,5 +1,4 @@
 <h2>介面鄰居</h2>
-<p class="meta"><code>{{ device_key }}</code></p>
 {% if versions %}
 <form hx-get="/neighbors/partial/detail" hx-target="#nb-detail" hx-trigger="change" hx-include="this">
   <input type="hidden" name="device_key" value="{{ device_key }}" />

@@ -20,5 +20,8 @@ assert "REST API（API Token）" in handbook
 assert "不在" in handbook and ".env" in handbook
 assert "api_token_manual.html" in admin
 assert "REST API 使用手冊" in manual and "/api/v1/inventory" in manual
+assert "portal_auth" not in manual.lower()
+assert "portal_auth" not in admin.lower()
+assert ".env.example" not in manual
 print("doc consistency: OK")
 print("=== ad-hoc doc-api-token verify PASSED ===")

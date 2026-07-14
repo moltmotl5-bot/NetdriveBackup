@@ -1,5 +1,4 @@
 <h2>{{ iface.hostname }} ({{ iface.ip }})</h2>
-<p class="meta">{{ iface.source_note }} · parser: {{ iface.status_parser }}</p>
 {% if iface.versions %}
 <form hx-get="/interfaces/partial/detail" hx-target="#if-detail" hx-trigger="change" hx-include="this">
   <input type="hidden" name="device_id" value="{{ device_id }}" />

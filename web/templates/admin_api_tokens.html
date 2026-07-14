@@ -2,7 +2,7 @@
 {% block title %}API Token — NCCM{% endblock %}
 {% block content %}
 <h1>API Token 管理</h1>
-<p class="lead">供 <code>/api/v1</code> 整合使用。完整 secret 僅在建立當下顯示一次；之後僅能看 prefix。詳見下方<strong> REST API 使用手冊</strong>。</p>
+<p class="lead">供外部系統讀取庫存 API。完整 token 僅在建立當下顯示一次；之後僅顯示前綴碼。詳見下方<strong> REST API 使用手冊</strong>。</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if message %}<p class="ok">{{ message }}</p>{% endif %}
 
@@ -20,7 +20,7 @@
   <form method="post" action="/admin/api-tokens" class="inv-filter-form">
     <label>名稱</label>
     <input name="name" required maxlength="128" placeholder="postman-uat" />
-    <label>Scopes</label>
+    <label>權限範圍</label>
     <input name="scopes" value="inventory:read" readonly />
     <button type="submit">建立</button>
   </form>
