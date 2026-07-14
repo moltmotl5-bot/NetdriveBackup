@@ -52,7 +52,7 @@ git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
 
 cp .env.example .env
-# 編輯 .env：NCCM_ADMIN_PASS 至少 12 字元
+# 編輯 .env：NCCM_ADMIN_PASS 至少 12 字元；並設定 API_KEY（REST /api/v1）
 chmod 600 .env
 
 mkdir -p store
@@ -97,6 +97,7 @@ docker compose down
 | `NCCM_NETDRIVER_URL` | Portal 連 Agent 的 URL | `http://netdriver-agent:8000` |
 | `NCCM_STORE_DIR` | 備份根目錄（容器內） | `/data/store` → 掛載 `./store` |
 | `NCCM_SESSION_SECRET` | Cookie 簽章（多副本請固定） | 未設則每次重啟隨機 |
+| `API_KEY` | REST API `/api/v1` 金鑰（請求標頭 `X-API-Key`） | 來自 `.env`；**未設則 API 拒絕** |
 | `NCCM_PORT` | 對外 Web 埠 | `8501` |
 | `NETDRIVER_AGENT_PORT` | 對外 Agent API 埠 | `8000` |
 | `NETDRIVER_AGENT_CONFIG` | Agent 設定檔路徑（僅 Agent 容器） | `/app/config/agent/agent.yml` |
@@ -223,6 +224,7 @@ python3 scripts/hermes-verify-neighbors-detail.py      # CDP/LLDP 點設備 → 
 python3 scripts/run-hermes-verify-temp-neighbors.py    # 同上，使用系統 temp 的 hermes-verify-*.py
 python3 scripts/run-hermes-verify-inventory-config-download.py  # 設備詳情 Running-Config 下載
 python3 scripts/run-hermes-verify-stack-neighbors-all.py        # Stack 鄰居路徑解析 + 鄰居 partial
+python3 scripts/run-hermes-verify-api-key.py                    # REST API_KEY / X-API-Key
 ```
 
 > **重要提醒**：
@@ -327,85 +329,48 @@ MIT（與主專案相同）
 *文件版本：NCCM v3 產品化 — Docker Compose + NetDriver Agent*
 ## API 介面
 
-為了讓外部應用程式可以程式化地取得庫存資料，我們提供了一個 RESTful API。
+外部程式可透過 REST API 讀取庫存（與 Web 登入分離：`/api/v1` 不經 Session 閘道，以 `X-API-Key` 驗證）。
+
+### 設定
+
+1. 在 `.env` 設定 `API_KEY`（見 `.env.example`）；`docker compose` 的 `portal` 服務會經 `env_file` 載入。
+2. 客戶端每次請求帶標頭：`X-API-Key: <與 API_KEY 相同>`。
 
 ### 基本資訊
-- **基礎路徑**：`/api/v1`
-- **驗證**：所有端點皆需要在 HTTP 標頭中提供 `X-API-Key`，其值必須與伺服器環境變數 `API_KEY` 一致。
-- **回應格式**：JSON
-- **狀態碼**：
-  - 200：成功
-  - 401：未提供或無效的 API Key
-  - 404：資源不存在
-  - 500：伺服器內部錯誤
 
-### 端點
+- **基礎路徑**：`/api/v1`
+- **驗證**：`GET /api/v1/inventory` 需要有效 `X-API-Key`；未設定伺服器 `API_KEY` 時回 **500**（fail-closed）。
+- **回應格式**：JSON（庫存列表）
+- **狀態碼**：200 成功；401 金鑰錯誤或缺失；500 伺服器未設定 `API_KEY`
+
+### 已實作端點
+
+#### 健康檢查（無需 API Key）
+
+- **URL**：`GET /api/v1/health`
+- **回應**：`{"status":"ok"}`
 
 #### 取得庫存列表
+
 - **URL**：`GET /api/v1/inventory`
-- **查詢參數**：
-  - `site`（可選）：依站點過濾
-  - `vendor`（可選）：依廠商過濾
-  - `q`（可選）：自由文字搜尋（IP、hostname、型號、序號）
-  - `limit`（可選，預設 100，最大 500）：返回的最大筆數上限筆數
-  - `offset`（可選，預設 0）：跳過的筆數，用於分頁
-- **回應**：陣列，每個元素為一台設備（已展開 Stack/HA 成員）：
-  ```json
-  {
-    "device_id": "string",
-    "site": "string",
-    "ip": "string",
-    "port": 22,
-    "hostname": "string",
-    "vendor": "string",
-    "sw_version": "string",
-    "model_summary": "string",
-    "serial_summary": "string",
-    "snapshot_count": 0,
-    "stack_switch": 1,
-    "role": "Primary",
-    "is_config_anchor": true,
-    "cluster_type": "stack"
-  }
-  ```
+- **查詢參數**：`site`、`vendor`、`q`、`limit`（預設 100，最大 500）、`offset`（預設 0）
+- **回應**：陣列，每筆為已展開 Stack/HA 的設備列（`device_id`、`site`、`ip`、`hostname`、`vendor`、`stack_switch`、`is_config_anchor` 等）。
 
-#### 取得單台設備詳細資訊
-- **URL**：`GET /api/v1/inventory/{device_id}`
-- **說明**：`device_id` 是由 `site::ip::port::hostname` 組成的字串，必須進行 URL 編碼。
-- **回應**：單一設備物件（格式同上），若不存在則回傳 404。
-
-#### 取得設備的最新運行配置
-- **URL**：`GET /api/v1/inventory/{device_id}/config`
-- **說明**：返回最新一次備份的 `config.txt` 內容（純文字）。
-- **回應**：純文字，Content-Type: `text/plain`
-
-#### 取得設備的備份歷史
-- **URL**：`GET /api/v1/inventory/{device_id}/history`
-- **說明**：返回該設備的所有備份快照列表，每個快照包含時間戳和狀態。
-- **回應**：陣列，每個元素：
-  ```json
-  {
-    "id": 123,
-    "created_at": "2025-01-01T12:00:00Z",
-    "status": "ok",
-    "snapshot_path": "relative/path/to/snapshot"
-  }
-  ```
+> **規劃中**（尚未實作）：單設備詳情、`config.txt`、備份歷史等路徑；請以 Web「設備總表」或 `GET /inventory/download/config`（需 Web 登入）取得設定檔。
 
 ### 安全注意事項
-- 請務必將 `API_KEY` 設為一個強隨機字串，並僅透過安全管道分享給受信任的應用程式。
-- 建議在生產環境中使用 HTTPS（反向代理）以防止 API Key 在網路上被竊聽。
-- API Key 目前僅支援單一金鑰；如需多金鑰支援，請在未來版本中擴充。
+
+- `API_KEY` 請使用長隨機字串，勿提交 Git；與 `NCCM_ADMIN_PASS` 分開管理。
+- 生產環境建議 HTTPS 反向代理，避免金鑰在網路上明文傳輸。
+- 目前僅支援單一 `API_KEY`。
 
 ### 使用範例（curl）
+
 ```bash
-# 設定 API Key（請替換為您實際的金鑰）
-API_KEY="your-api-key-here"
+# 與 .env 中 API_KEY 相同
+export API_KEY="your-long-random-secret"
 
-# 取得庫存列表
-curl -H "X-API-Key: $API_KEY" http://localhost:8501/api/v1/inventory
+curl -sS -H "X-API-Key: $API_KEY" "http://localhost:8501/api/v1/inventory?limit=20"
 
-# 取得特定設備的配置（請先替換 device_id）
-DEVICE_ID="hq::10.1.1.10::22::unknown"
-curl -H "X-API-Key: $API_KEY" http://localhost:8501/api/v1/inventory/$DEVICE_ID/config
+curl -sS "http://localhost:8501/api/v1/health"
 ```

@@ -57,7 +57,11 @@ class SessionGateMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if path.startswith("/static") or path in _PUBLIC_PATHS:
+        if (
+            path.startswith("/static")
+            or path in _PUBLIC_PATHS
+            or path.startswith("/api/v1")
+        ):
             await self.app(scope, receive, send)
             return
         session = scope.get("session") or {}
