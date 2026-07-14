@@ -159,15 +159,15 @@ store/
 
 ## Web 功能（四頁）
 
-1. **批次備份** — CSV、SSH 帳密、即時 job log  
-2. **設備總表與版控** — Site／**Vendor（下拉，來自已備份設備）**／關鍵字篩選；型號／版本／序號、歷史快照、Running-Config 預覽與**下載**（完整 `config.txt`）；**Cisco Stack / FortiGate HA** 每台實體機一行（Stack#、Role **Primary/Secondary**、各自序號；Cisco 成員 hostname 為 `管理名 · SW#`）。組態錨點列標 **· 組態**；虛擬 IP 只備一份 running-config。  
+1. **批次備份** — CSV、SSH 帳密、即時 job log；支援廠牌 **Cisco**（IOS/IOS-XE Catalyst、Stack；Nexus）、**Fortinet**、**Huawei**（不支援 WLC）  
+2. **設備總表與版控** — Site／**Vendor（下拉，來自已備份設備）**／關鍵字篩選；型號／版本／序號、歷史快照、Running-Config 預覽與**下載**（完整 `config.txt`，下載旁提示可能無法直接用於還原）；**Cisco Stack / FortiGate HA** 每台實體機一行（Stack#、Role **Primary/Secondary**、各自序號；Cisco 成員 hostname 為 `管理名 · SW#`）。組態錨點列標 **· 組態**；虛擬 IP 只備一份 running-config。  
    - **Cisco Stack**：`version_info.txt` + 備份時 **`show switch` → `stack_info.txt`**（非 Nexus）  
    - **FortiGate HA**：`ha_status.txt`（Primary/Secondary 行含 hostname、serial）  
    展開異常時請重新備份後按 **重建索引**。  
 3. **CDP/LLDP 鄰居** — 設備列表同總表展開 Stack/HA；由快照解析鄰居表  
 4. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
 
-側欄顯示 Agent 連線狀態（綠／紅）。
+側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。
 
 ---
 
@@ -214,18 +214,6 @@ docker compose up -d portal
 ```bash
 docker compose ps
 docker compose logs -f netdriver-agent     # 查看 Agent 是否正常啟動
-```
-
-#### 開發自檢（ad-hoc，非正式測試套件）
-需已安裝 `requirements-v3.txt`（或 Hermes venv 含 FastAPI）並設定 `NCCM_ADMIN_PASS`（≥12 字元）：
-```bash
-python3 scripts/hermes-verify-nccm-v3.py
-python3 scripts/hermes-verify-neighbors-detail.py      # CDP/LLDP 點設備 → partial/detail
-python3 scripts/run-hermes-verify-temp-neighbors.py    # 同上，使用系統 temp 的 hermes-verify-*.py
-python3 scripts/run-hermes-verify-inventory-config-download.py  # 設備詳情 Running-Config 下載
-python3 scripts/run-hermes-verify-stack-neighbors-all.py        # Stack 鄰居路徑解析 + 鄰居 partial
-python3 scripts/run-hermes-verify-api-key.py                    # REST API_KEY / X-API-Key
-python3 scripts/run-hermes-verify-stack-serial.py               # Stack 序號 vs IOS-XE SW Version 欄
 ```
 
 > **重要提醒**：

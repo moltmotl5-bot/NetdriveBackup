@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Ad-hoc: README + Handbook mention inventory config download and verify scripts."""
+"""Ad-hoc: UI copy + README/Handbook alignment (sidebar, backup vendors, config warn)."""
+from __future__ import annotations
+
 import os
-import pathlib
+import subprocess
 import sys
 import tempfile
 
@@ -13,16 +15,25 @@ import pathlib
 import sys
 
 ROOT = %r
+base = (pathlib.Path(ROOT) / "web/templates/base.html").read_text(encoding="utf-8")
+backup = (pathlib.Path(ROOT) / "web/templates/backup.html").read_text(encoding="utf-8")
+detail = (pathlib.Path(ROOT) / "web/templates/partials/inventory_detail.html").read_text(encoding="utf-8")
 readme = (pathlib.Path(ROOT) / "README.md").read_text(encoding="utf-8")
 handbook = (pathlib.Path(ROOT) / "docs/Handbook.html").read_text(encoding="utf-8")
-assert "API_KEY" in (pathlib.Path(ROOT) / ".env.example").read_text(encoding="utf-8")
-assert "下載" in readme and "config.txt" in readme
-assert "還原" in readme
-assert "/inventory/download/config" in handbook
-assert "還原" in handbook
+
+assert "{{ agent_status }}" in base
+assert "{{ agent_url }}" not in base
+assert "store: {{ store }}" not in base
+assert "Online" in (pathlib.Path(ROOT) / "web/main.py").read_text(encoding="utf-8")
+assert "Cisco@123" not in backup
+assert "支援廠牌" in backup
+assert "還原" in detail
 assert "開發自檢" not in readme
-print("docs readme/handbook: OK")
-print("=== ad-hoc doc verify PASSED ===")
+assert "Online" in readme and "Offline" in readme
+assert "支援廠牌" in handbook
+assert "hermes-verify-nccm-v3" not in handbook
+print("ui copy + docs: OK")
+print("=== ad-hoc ui-doc verify PASSED ===")
 """ % ROOT
 
 fd, path = tempfile.mkstemp(suffix=".py", prefix="hermes-verify-", dir=TMPDIR)
@@ -30,8 +41,6 @@ try:
     with os.fdopen(fd, "w") as f:
         f.write(INNER)
     print("created:", path)
-    import subprocess
-
     proc = subprocess.run([sys.executable, path], cwd=ROOT, capture_output=True, text=True)
     print(proc.stdout, end="")
     if proc.stderr:

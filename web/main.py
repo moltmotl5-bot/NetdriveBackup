@@ -135,13 +135,15 @@ async def health():
 
 
 def _ctx(request: Request, page: str, **extra):
+    agent_ok = NetDriverClient().health()
     return {
         "request": request,
         "nav": NAV,
         "active": page,
         "store": str(store_dir()),
         "agent_url": netdriver_url(),
-        "agent_ok": NetDriverClient().health(),
+        "agent_ok": agent_ok,
+        "agent_status": "Online" if agent_ok else "Offline",
         **extra,
     }
 

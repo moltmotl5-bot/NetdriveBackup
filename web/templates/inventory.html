@@ -2,12 +2,12 @@
 {% block title %}設備總表與版控 — NCCM v3{% endblock %}
 {% block content %}
 <h1>設備總表與版控</h1>
-<p class="lead">資料來源：<code>store/index.db</code>（備份成功後自動索引；亦可手動重建）。</p>
+<p class="lead">備份成功後自動建立索引；亦可手動重建。</p>
 {% if request.query_params.get('rebuild_ok') %}
 <p class="ok-banner">索引已重建：{{ request.query_params.get('rebuild_ok') }}</p>
 {% endif %}
 <form method="post" action="/inventory/rebuild" class="inline-form">
-  <button type="submit" class="btn-secondary">重建索引（掃描 store）</button>
+  <button type="submit" class="btn-secondary">重建索引</button>
 </form>
 <div class="inv-page-stack">
   <section class="inv-main">

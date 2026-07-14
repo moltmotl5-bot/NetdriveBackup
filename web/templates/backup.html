@@ -11,7 +11,7 @@
     <input name="ssh_user" required />
     <label>SSH 密碼</label>
     <input name="ssh_password" type="password" required />
-    <p class="muted">Lab：Cisco <code>Cisco@123</code>；Forti/Huawei <code>Admin@1234567</code>（多廠牌請分次備份）</p>
+    <p class="muted vendor-hint">支援廠牌（CSV 欄位 <code>Vendor</code>，小寫）：<strong>Cisco</strong>（IOS / IOS-XE Catalyst、Stack；Nexus）、<strong>Fortinet</strong>（FortiGate HA）、<strong>Huawei</strong>（VRP）。不支援 WLC。多廠牌若 SSH 帳密不同請分次備份。</p>
   </div>
   <div>
     <h2>設備清單 (CSV)</h2>
@@ -19,9 +19,9 @@
     <input type="file" name="csv_file" accept=".csv,text/csv" id="csv-file-input" />
     <label>或貼上內容</label>
     <textarea name="csv_text" rows="10" id="csv-text" placeholder="Site,IP,Vendor,Port">Site,IP,Vendor,Port
-lab,127.0.0.1,cisco,18020
-lab,127.0.0.1,fortinet,18037
-lab,127.0.0.1,huawei,18038</textarea>
+hq,10.1.1.10,cisco,22
+hq,10.1.1.20,fortinet,22
+dc,10.2.1.5,huawei,22</textarea>
   </div>
   <div class="full">
     <button type="submit" id="backup-submit">開始備份（背景）</button>

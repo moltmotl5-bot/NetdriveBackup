@@ -21,6 +21,7 @@
   {% if snapshot_id %}
   <a class="btn-secondary config-download"
      href="/inventory/download/config?snapshot_id={{ snapshot_id }}&device_id={{ device_id | urlencode }}">下載</a>
+  <span class="config-restore-warn" title="還原前請自行確認格式與設備相容性">⚠ 下載檔可能無法直接用於還原，請勿未經驗證即套用至生產設備。</span>
   {% endif %}
 </div>
 <pre class="config-preview">{{ config_preview }}</pre>

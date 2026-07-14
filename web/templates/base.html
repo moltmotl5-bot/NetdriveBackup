@@ -11,13 +11,12 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="brand">🛡️ NCCM v3</div>
-      <p class="meta">Agent: <span class="{% if agent_ok %}ok{% else %}bad{% endif %}">{{ agent_url }}</span></p>
+      <p class="meta">Agent: <span class="{% if agent_ok %}ok{% else %}bad{% endif %}">{{ agent_status }}</span></p>
       <nav>
         {% for key, label, href in nav %}
         <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
         {% endfor %}
       </nav>
-      <p class="meta store">store: {{ store }}</p>
       <a class="logout" href="/logout">登出</a>
     </aside>
     <main class="content">
