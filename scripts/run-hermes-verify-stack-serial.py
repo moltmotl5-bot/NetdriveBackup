@@ -43,6 +43,27 @@ for u in u3:
     assert "(" not in u.serial
 print("classic IOS stack serial vs 15.2(7)E10: OK")
 
+primary_missing = '''
+System serial number            : FDO1111ABCD
+*1       Active      0011.2233.4455  15     V01     Ready
+ 2       Standby     0011.2233.4466  14     V01     Ready
+Switch#   Ports    Model              SW Version        Serial No
+*1       32       WS-C3750X-24P-L     15.2(7)E10        V04
+ 2       32       WS-C3750X-24P-L     15.2(7)E10        FDO2222ABCD
+Switch 01
+---------
+System Serial Number            : FDO1111ABCD
+Switch 02
+---------
+System Serial Number            : FDO2222ABCD
+'''
+u4 = parse_cisco_stack_units(primary_missing)
+assert len(u4) >= 2
+active = next(u for u in u4 if u.role.lower() == "active")
+assert active.serial.startswith("FDO"), (active.serial, active.sw_version)
+assert active.serial == "FDO1111ABCD"
+print("primary active serial backfill: OK")
+
 legacy = '''
 *1       56       WS-C3850-48P-L       FCW1111ABCD  V02
  2       56       WS-C3850-48P-L       FCW2222ABCD  V02

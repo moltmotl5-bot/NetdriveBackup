@@ -54,11 +54,99 @@ def _looks_like_cisco_serial(token: str) -> bool:
         return False
     if re.match(r"^0x[0-9a-f.]+$", t, re.I):
         return False
-    if len(t) >= 8 and re.match(r"^[A-Z0-9]+$", t, re.I):
+    if re.match(r"^[A-Z]{3}[A-Z0-9]{3,}$", t, re.I):
         return True
-    if re.match(r"^[A-Z]{3}[A-Z0-9]{4,}$", t, re.I):
+    if len(t) >= 7 and re.match(r"^[A-Z0-9]+$", t, re.I):
         return True
     return False
+
+
+def _is_missing_serial(serial: str) -> bool:
+    s = (serial or "").strip()
+    return not s or s.lower() == "unknown" or not _looks_like_cisco_serial(s)
+
+
+def _parse_member_serial_from_body(body: str) -> str:
+    for pat in (
+        r"System [Ss]erial [Nn]umber\s*:\s*(\S+)",
+        r"Serial [Nn]umber\s*:\s*(\S+)",
+        r"Processor [Bb]oard ID\s+(\S+)",
+    ):
+        m = re.search(pat, body, re.I)
+        if m and _looks_like_cisco_serial(m.group(1)):
+            return m.group(1)
+    return ""
+
+
+def _parse_show_switch_member_serials(text: str) -> dict[int, str]:
+    """Serials from show switch / stack_info Switch NN sections."""
+    out: dict[int, str] = {}
+    block_pat = re.compile(
+        r"Switch\s+(\d+)\s*\n[-=\s]*\n(.*?)(?=^Switch\s+\d+\s*$|\Z)",
+        re.MULTILINE | re.DOTALL | re.IGNORECASE,
+    )
+    for m in block_pat.finditer(text or ""):
+        num = int(m.group(1))
+        serial = _parse_member_serial_from_body(m.group(2))
+        if serial:
+            out[num] = serial
+    return out
+
+
+def _ordered_system_serials(text: str) -> list[str]:
+    seen: list[str] = []
+    for m in re.finditer(
+        r"System [Ss]erial [Nn]umber\s*:\s*(\S+)",
+        text or "",
+        re.IGNORECASE,
+    ):
+        s = m.group(1).strip()
+        if s and _looks_like_cisco_serial(s) and s not in seen:
+            seen.append(s)
+    return seen
+
+
+def _backfill_stack_serials(
+    units: dict[int, StackUnit], combined: str, roles: dict[int, str]
+) -> dict[int, StackUnit]:
+    if not units:
+        return units
+    by_switch = _parse_show_switch_member_serials(combined)
+    ordered = _ordered_system_serials(combined)
+    nums_sorted = sorted(units.keys())
+    active_nums = {
+        n
+        for n, r in roles.items()
+        if (r or "").strip().lower() in ("active", "master", "primary")
+    }
+    if not active_nums:
+        for n, u in units.items():
+            if (u.role or "").strip().lower() in ("active", "master", "primary"):
+                active_nums.add(n)
+
+    updated: dict[int, StackUnit] = dict(units)
+    for num in nums_sorted:
+        u = updated[num]
+        if not _is_missing_serial(u.serial):
+            continue
+        serial = by_switch.get(num, "")
+        if not serial and ordered:
+            idx = nums_sorted.index(num)
+            if idx < len(ordered):
+                serial = ordered[idx]
+            elif num in active_nums and ordered:
+                serial = ordered[0]
+        if not serial:
+            continue
+        updated[num] = StackUnit(
+            u.switch_num,
+            u.role,
+            u.model,
+            serial,
+            u.sw_version,
+            u.hostname,
+        )
+    return updated
 
 
 def _assign_model_serial_sw(model: str, tokens: list[str]) -> tuple[str, str, str]:
@@ -152,13 +240,9 @@ def _parse_switch_blocks(text: str, roles: dict[int, str]) -> dict[int, StackUni
     for m in block_pat.finditer(text):
         num = int(m.group(1))
         body = m.group(2)
-        serial_m = re.search(
-            r"System [Ss]erial [Nn]umber\s*:\s*(\S+)",
-            body,
-        ) or re.search(r"Processor [Bb]oard ID\s+(\S+)", body)
+        serial = _parse_member_serial_from_body(body)
         model_m = re.search(r"Model [Nn]umber\s*:\s*(\S+)", body)
         sw_m = re.search(r"Image\s+software\s+version\s*:\s*(\S+)", body, re.I)
-        serial = serial_m.group(1) if serial_m else ""
         model = model_m.group(1) if model_m else ""
         sw = sw_m.group(1) if sw_m else ""
         role = roles.get(num, "Member")
@@ -246,6 +330,7 @@ def parse_cisco_stack_units(text: str, extra: str = "") -> list[StackUnit]:
         _parse_switch_blocks(combined, roles),
         _parse_iosxe_port_table(combined),
     )
+    units = _backfill_stack_serials(units, combined, roles)
 
     if len(units) < 2 and roles:
         for num, role in roles.items():
@@ -261,6 +346,7 @@ def parse_cisco_stack_units(text: str, extra: str = "") -> list[StackUnit]:
     if len(units) < 2:
         return []
 
+    units = _backfill_stack_serials(units, combined, roles)
     ordered = sorted(units.values(), key=lambda u: (_role_rank(u.role), u.switch_num))
     return ordered
 
