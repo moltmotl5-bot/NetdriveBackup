@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}API Token — NCCM{% endblock %}
+{% block content %}
+<h1>API Token 管理</h1>
+<p class="lead">供 <code>/api/v1</code> 整合使用。完整 secret 僅在建立當下顯示一次；之後僅能看 prefix。</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if message %}<p class="ok">{{ message }}</p>{% endif %}
+
+{% if reveal_token %}
+<section class="inv-result-below token-reveal">
+  <h2>請立即複製新 Token</h2>
+  <p class="error">關閉此頁後無法再次顯示。</p>
+  <pre class="config-preview">{{ reveal_token }}</pre>
+  <p class="meta">請求時加上標頭 <code>X-API-Key</code>，值為上方 token 全文。</p>
+</section>
+{% endif %}
+
+<section class="inv-result-below">
+  <h2>建立 Token</h2>
+  <form method="post" action="/admin/api-tokens" class="inv-filter-form">
+    <label>名稱</label>
+    <input name="name" required maxlength="128" placeholder="postman-uat" />
+    <label>Scopes</label>
+    <input name="scopes" value="inventory:read" readonly />
+    <button type="submit">建立</button>
+  </form>
+</section>
+
+<section class="inv-result-below">
+  <h2>Token 列表</h2>
+  {% include "partials/admin_api_tokens_table.html" %}
+</section>
+{% endblock %}

@@ -22,6 +22,7 @@ from nccm.registry.csv import load_devices_csv
 from web.auth import authenticate, ensure_portal_can_start
 from web.api import router as api_router
 from web.admin_users import build_admin_users_router
+from web.admin_api_tokens import build_admin_api_tokens_router
 from web.account import build_account_router
 from web.deps import (
     current_user,
@@ -52,7 +53,10 @@ NAV = [
     ("neighbors", "CDP/LLDP 鄰居", "/neighbors"),
     ("interfaces", "Interface Map", "/interfaces"),
 ]
-ADMIN_NAV = ("admin_users", "使用者管理", "/admin/users")
+ADMIN_NAV = [
+    ("admin_users", "使用者管理", "/admin/users"),
+    ("admin_api_tokens", "API Token", "/admin/api-tokens"),
+]
 
 
 def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
@@ -60,7 +64,7 @@ def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
     if role == "viewer":
         items = [x for x in items if x[0] != "backup"]
     if role == "admin":
-        items = [*items, ADMIN_NAV]
+        items = [*items, *ADMIN_NAV]
     return items
 
 
@@ -190,6 +194,7 @@ def _ctx(request: Request, page: str, **extra):
 
 app.include_router(build_account_router(templates, _ctx))
 app.include_router(build_admin_users_router(templates, _ctx))
+app.include_router(build_admin_api_tokens_router(templates, _ctx))
 
 
 @app.get("/backup", response_class=HTMLResponse)

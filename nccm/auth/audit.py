@@ -28,3 +28,27 @@ def audit_portal_login(request: Request, username: str, success: bool) -> None:
             f.write(line)
     except OSError:
         pass
+
+
+def audit_api_token_event(
+    request: Request,
+    *,
+    event: str,
+    token_name: str,
+    success: bool,
+    detail: str = "",
+) -> None:
+    log_path = os.getenv("NCCM_AUDIT_LOG", "nccm_auth.log")
+    safe_name = (token_name or "").replace("\n", "").replace("\r", "")[:128]
+    safe_detail = (detail or "").replace("\n", "").replace("\r", "")[:256]
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ip = client_ip(request)
+    line = (
+        f"{ts} ip={ip} token={safe_name!r} event={event} success={success}"
+        f" detail={safe_detail!r}\n"
+    )
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(line)
+    except OSError:
+        pass

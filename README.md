@@ -52,7 +52,7 @@ git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
 
 cp .env.example .env
-# 編輯 .env：NCCM_ADMIN_PASS 至少 12 字元；並設定 API_KEY（REST /api/v1）
+# 編輯 .env：NCCM_ADMIN_PASS 至少 12 字元；可選 API_KEY（REST 過渡雙軌）；建議上線後於 Portal「API Token」建立 token
 chmod 600 .env
 
 mkdir -p store
@@ -97,7 +97,7 @@ docker compose down
 | `NCCM_NETDRIVER_URL` | Portal 連 Agent 的 URL | `http://netdriver-agent:8000` |
 | `NCCM_STORE_DIR` | 備份根目錄（容器內） | `/data/store` → 掛載 `./store` |
 | `NCCM_SESSION_SECRET` | Cookie 簽章（多副本請固定） | 未設則每次重啟隨機 |
-| `API_KEY` | REST API `/api/v1` 金鑰（請求標頭 `X-API-Key`） | 來自 `.env`；**未設則 API 拒絕** |
+| `API_KEY` | REST `/api/v1` 過渡雙軌（建議改 Portal **API Token**） | 來自 `.env`；DB 與 env 皆無 token 來源時 API **500** |
 | `NCCM_PORT` | 對外 Web 埠 | `8501` |
 | `NETDRIVER_AGENT_PORT` | 對外 Agent API 埠 | `8000` |
 | `NETDRIVER_AGENT_CONFIG` | Agent 設定檔路徑（僅 Agent 容器） | `/app/config/agent/agent.yml` |
@@ -167,7 +167,7 @@ store/
 3. **CDP/LLDP 鄰居** — 設備列表同總表展開 Stack/HA；由快照解析鄰居表  
 4. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
 
-側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。Portal 帳號存於 **`store/portal_auth.db`**（密碼雜湊）；**admin** 可進 **使用者管理**；**viewer** 唯讀（無批次備份／重建索引／config 下載）。**首次以 `.env` bootstrap 登入後須立即變更密碼**（`/account/change-password`）。
+側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。Portal 帳號存於 **`store/portal_auth.db`**（密碼雜湊）；**admin** 可進 **使用者管理**、**API Token**；**viewer** 唯讀（無批次備份／重建索引／config 下載）。**首次以 `.env` bootstrap 登入後須立即變更密碼**（`/account/change-password`）。
 
 ---
 
@@ -322,15 +322,16 @@ MIT（與主專案相同）
 
 ### 設定
 
-1. 在 `.env` 設定 `API_KEY`（見 `.env.example`）；`docker compose` 的 `portal` 服務會經 `env_file` 載入。
-2. 客戶端每次請求帶標頭：`X-API-Key: <與 API_KEY 相同>`。
+1. **建議**：以 **admin** 登入 Portal → **API Token** 建立 token（僅建立當下顯示一次），請求帶 `X-API-Key`。
+2. **過渡**：`.env` 的 `API_KEY` 仍可用（雙軌）；首次啟動且 DB 無 token 時可自動匯入為 `env-bootstrap`（`NCCM_API_IMPORT_ENV=0` 可關閉）。
+3. 客戶端標頭：`X-API-Key: *** token 或 API_KEY>`。
 
 ### 基本資訊
 
 - **基礎路徑**：`/api/v1`
-- **驗證**：`GET /api/v1/inventory` 需要有效 `X-API-Key`；未設定伺服器 `API_KEY` 時回 **500**（fail-closed）。
+- **驗證**：`GET /api/v1/inventory` 需要有效 token（scope `inventory:read`）；無任何 token 來源時 **500**（fail-closed）。
 - **回應格式**：JSON（庫存列表）
-- **狀態碼**：200 成功；401 金鑰錯誤或缺失；500 伺服器未設定 `API_KEY`
+- **狀態碼**：200 成功；401 金鑰錯誤或缺失；403 scope 不足；500 伺服器未設定 token
 
 ### 已實作端點
 
@@ -349,17 +350,16 @@ MIT（與主專案相同）
 
 ### 安全注意事項
 
-- `API_KEY` 請使用長隨機字串，勿提交 Git；與 `NCCM_ADMIN_PASS` 分開管理。
-- 生產環境建議 HTTPS 反向代理，避免金鑰在網路上明文傳輸。
-- 目前僅支援單一 `API_KEY`。
+- Token 存於 `store/portal_auth.db`（雜湊）；可於 **API Token** 管理頁輪替／停用。
+- `API_KEY` 環境變數為過渡雙軌，日誌會標 deprecated；與 Portal 密碼分開管理。
 
 ### 使用範例（curl）
 
 ```bash
-# 與 .env 中 API_KEY 相同
-export API_KEY="your-long-random-secret"
+# Portal「API Token」建立的 nccm_… token，或過渡期 .env API_KEY
+export NCCM_API_TOKEN="nccm_your_token_from_portal"
 
-curl -sS -H "X-API-Key: $API_KEY" "http://localhost:8501/api/v1/inventory?limit=20"
+curl -sS -H "X-API-Key: $NCCM_API_TOKEN" "http://localhost:8501/api/v1/inventory?limit=20"
 
 curl -sS "http://localhost:8501/api/v1/health"
 ```

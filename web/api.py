@@ -1,37 +1,63 @@
 from __future__ import annotations
 
-import os
-from typing import Any, List, Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from nccm.auth import api_tokens as token_service
+from nccm.auth.audit import audit_api_token_event
 from nccm.storage.index_db import InventoryDisplayRow, list_inventory_display
+
+from fastapi import APIRouter
 
 router = APIRouter(tags=["API"])
 
+INVENTORY_SCOPE = "inventory:read"
 
-def _get_api_key(x_api_key: Optional[str] = Header(None)) -> str:
-    expected = os.environ.get("API_KEY")
-    if not expected:
-        # If no API key is set, deny access by default (secure fail‑closed)
+
+def _get_api_auth(
+    request: Request,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> token_service.ApiAuthResult:
+    if not token_service.any_api_auth_configured():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="API key not configured on server",
+            detail="API token not configured on server",
         )
-    if x_api_key is None or x_api_key != expected:
+    auth = token_service.authenticate_api_key(x_api_key)
+    if auth is None:
+        audit_api_token_event(
+            request,
+            event="api_request",
+            token_name="",
+            success=False,
+            detail="invalid_or_missing_key",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",
         )
-    return x_api_key or ""  # return the valid key (not used further)
+    if not token_service.token_has_scope(auth, INVENTORY_SCOPE):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient API token scope",
+        )
+    audit_api_token_event(
+        request,
+        event="api_request",
+        token_name=auth.token_name,
+        success=True,
+        detail=f"source={auth.source}",
+    )
+    return auth
 
 
 @router.get("/inventory", response_model=List[dict])
 async def get_inventory(
     request: Request,
-    api_key: str = Depends(_get_api_key),
+    _auth: token_service.ApiAuthResult = Depends(_get_api_auth),
     site: Optional[str] = Query(None, description="Filter by site"),
     vendor: Optional[str] = Query(None, description="Filter by vendor"),
     q: Optional[str] = Query(None, description="Free text search (IP, hostname, model, serial)"),
@@ -41,19 +67,16 @@ async def get_inventory(
     """
     Return a list of inventory items (expanded stack/HA members) as JSON.
     """
-    # Run the synchronous DB call in a threadpool to avoid blocking the event loop
     rows: List[InventoryDisplayRow] = await run_in_threadpool(
         lambda: list_inventory_display(
             query=q or "",
             site=site or "",
             vendor=vendor or "",
-            limit=limit + offset,  # fetch extra to allow slicing for offset
+            limit=limit + offset,
         )
     )
-    # Apply offset manually (simple pagination)
     sliced = rows[offset : offset + limit]
 
-    # Convert dataclasses to plain dicts for JSON serialization
     result: List[dict] = []
     for r in sliced:
         item = {
@@ -76,7 +99,6 @@ async def get_inventory(
     return result
 
 
-# Optional: health check for API
 @router.get("/health")
 async def api_health():
     return {"status": "ok"}

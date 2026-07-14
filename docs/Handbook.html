@@ -143,7 +143,7 @@
   <a href="#install-verify">安裝後檢查</a>
   <div class="group">設定</div>
   <a href="#config-env">Portal 環境變數</a>
-  <a href="#config-api">REST API（API_KEY）</a>
+  <a href="#config-api">REST API（API Token）</a>
   <a href="#config-agent">NetDriver Agent</a>
   <a href="#config-compose">Compose 與網路</a>
   <a href="#config-csv">設備清單 CSV</a>
@@ -277,7 +277,7 @@ curl -s http://localhost:8000/health</code></pre>
       <tr><td><code>NCCM_STORE_DIR</code></td><td>否</td><td>備份根目錄（容器內路徑）</td><td><code>/data/store</code>，掛載 <code>./store</code></td></tr>
       <tr><td><code>NCCM_APP_ROOT</code></td><td>否</td><td>應用根目錄</td><td><code>/app</code></td></tr>
       <tr><td><code>NCCM_SESSION_SECRET</code></td><td>否</td><td>Session cookie 簽章；多副本／重啟後要固定請設定</td><td>未設則每次啟動隨機</td></tr>
-      <tr><td><code>API_KEY</code></td><td>是（若使用 REST API）</td><td><code>/api/v1</code> 請求標頭 <code>X-API-Key</code>；未設時庫存 API 回 500</td><td>來自 <code>.env</code>（見 <code>.env.example</code>）</td></tr>
+      <tr><td><code>API_KEY</code></td><td>否（過渡）</td><td><code>/api/v1</code> 雙軌驗證；建議 Portal <strong>API Token</strong>。無任何 token 來源時庫存 API 回 500</td><td>見 <code>.env.example</code>；token 雜湊存 <code>portal_auth.db</code></td></tr>
       <tr><td><code>NCCM_PORT</code></td><td>否</td><td>對外映射 Web 埠</td><td><code>8501</code></td></tr>
       <tr><td><code>NETDRIVER_AGENT_PORT</code></td><td>否</td><td>對外映射 Agent API 埠</td><td><code>8000</code></td></tr>
       <tr><td><code>NCCM_AUDIT_LOG</code></td><td>否</td><td>登入稽核 log 檔路徑</td><td>預設 <code>nccm_auth.log</code></td></tr>
@@ -285,14 +285,13 @@ curl -s http://localhost:8000/health</code></pre>
   </table>
   <div class="note"><strong>設備 SSH 帳密</strong>僅在 Web「批次備份」頁輸入，<strong>不</strong>寫入 <code>.env</code>、映像或 <code>store/</code>。</div>
 
-  <h2 id="config-api">設定 — REST API（API_KEY）</h2>
-  <p>路徑前綴 <code>/api/v1</code>。與 Web Session 登入<strong>分開</strong>：程式整合請在 <code>.env</code> 設定 <code>API_KEY</code>，請求時帶 <code>X-API-Key</code> 標頭。</p>
+  <h2 id="config-api">設定 — REST API（API Token）</h2>
+  <p>路徑前綴 <code>/api/v1</code>。與 Web Session 登入<strong>分開</strong>：建議 admin 於 Portal「<strong>API Token</strong>」建立 token（存於 <code>portal_auth.db</code>，僅雜湊）；請求帶 <code>X-API-Key</code>。過渡期仍接受 <code>.env</code> 的 <code>API_KEY</code>（雙軌）。</p>
   <ul>
     <li><code>GET /api/v1/health</code> — 無需金鑰。</li>
-    <li><code>GET /api/v1/inventory</code> — 需有效 <code>X-API-Key</code>；伺服器未設定 <code>API_KEY</code> 時回 500（fail-closed）。</li>
+    <li><code>GET /api/v1/inventory</code> — 需有效 token（scope <code>inventory:read</code>）；無任何 token 來源時回 500（fail-closed）。</li>
   </ul>
-  <pre><code>export API_KEY="your-long-random-secret"
-curl -sS -H "X-API-Key: $API_KEY" "http://localhost:8501/api/v1/inventory?limit=20"</code></pre>
+  <pre><code>curl -sS -H "X-API-Key: YOUR_TOKEN" "http://localhost:8501/api/v1/inventory?limit=20"</code></pre>
   <p>完整說明見專案 <code>README.md</code>「API 介面」章節。</p>
 
   <h2 id="config-agent">設定 — NetDriver Agent</h2>

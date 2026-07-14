@@ -22,6 +22,21 @@ CREATE TABLE IF NOT EXISTS portal_users (
     must_change_password INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_portal_users_active ON portal_users(is_active);
+
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    token_prefix TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    scopes TEXT NOT NULL DEFAULT 'inventory:read',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    created_by TEXT,
+    last_used_at TEXT,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_active ON api_tokens(is_active);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix ON api_tokens(token_prefix);
 """
 
 

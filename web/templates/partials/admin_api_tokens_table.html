@@ -1,0 +1,36 @@
+<table class="inv-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>名稱</th>
+      <th>Prefix</th>
+      <th>Scopes</th>
+      <th>啟用</th>
+      <th>建立者</th>
+      <th>最後使用</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in tokens %}
+    <tr>
+      <td>{{ t.id }}</td>
+      <td>{{ t.name }}</td>
+      <td><code>{{ t.token_prefix }}…</code></td>
+      <td>{{ t.scopes }}</td>
+      <td>{% if t.is_active %}是{% else %}否{% endif %}</td>
+      <td>{{ t.created_by or "—" }}</td>
+      <td>{{ t.last_used_at or "—" }}</td>
+      <td>
+        {% if t.is_active %}
+        <form method="post" action="/admin/api-tokens/{{ t.id }}/deactivate" style="display:inline">
+          <button type="submit" class="btn-secondary">停用</button>
+        </form>
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8">尚無 token（可從 .env API_KEY 自動匯入或在此建立）</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

@@ -69,7 +69,7 @@ store/
 
 Auth: `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS` (min 12 chars), session cookie.
 
-REST API: `API_KEY` in `.env`; clients send `X-API-Key` on `GET /api/v1/inventory`. See `.env.example`.
+REST API: DB-backed API tokens in `portal_auth.db` (admin UI **API Token**); clients send `X-API-Key` on `GET /api/v1/inventory`. Phase A: `.env` `API_KEY` still accepted. See `.env.example` and README.
 
 ## Run
 
