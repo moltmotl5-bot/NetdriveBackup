@@ -215,6 +215,14 @@ docker compose ps
 docker compose logs -f netdriver-agent     # 查看 Agent 是否正常啟動
 ```
 
+#### 開發自檢（ad-hoc，非正式測試套件）
+需已安裝 `requirements-v3.txt`（或 Hermes venv 含 FastAPI）並設定 `NCCM_ADMIN_PASS`（≥12 字元）：
+```bash
+python3 scripts/hermes-verify-nccm-v3.py
+python3 scripts/hermes-verify-neighbors-detail.py      # CDP/LLDP 點設備 → partial/detail
+python3 scripts/run-hermes-verify-temp-neighbors.py    # 同上，使用系統 temp 的 hermes-verify-*.py
+```
+
 > **重要提醒**：
 > - 重大更新前建議先備份 `./store` 目錄。
 > - 若本次更新涉及索引結構或 hostname 解析，更新後請在 Web 按「**重建索引**」。

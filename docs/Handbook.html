@@ -256,6 +256,7 @@ export PYTHONPATH=.
 python -m uvicorn web.main:app --reload --host 0.0.0.0 --port 8501</code></pre>
     <p>自檢腳本（ad-hoc，非正式測試套件）：</p>
     <pre><code>python3 scripts/hermes-verify-nccm-v3.py
+python3 scripts/hermes-verify-neighbors-detail.py
 python3 scripts/smoke-web-nccm-v3.py   # 需 Portal 已啟動</code></pre>
   </section>
 
