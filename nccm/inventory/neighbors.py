@@ -10,6 +10,7 @@ from nccm.parsers.cdp_lldp import (
     _register_hostname,
     make_device_key,
     neighbors_from_backup_snapshot,
+    split_device_key,
 )
 from nccm.storage.index_db import (
     InventoryDisplayRow,
@@ -22,6 +23,65 @@ from nccm.storage.index_db import (
 def device_store_path(site: str, ip: str, hostname: str) -> Path:
     safe_host = re.sub(r"[^\w.\-]+", "_", (hostname or "").strip())[:64] or "unknown"
     return store_dir() / site / f"{ip}__{safe_host}"
+
+
+def resolve_neighbor_context(
+    device_key: str,
+) -> tuple[
+    InventoryDisplayRow | None,
+    Any | None,
+    Path,
+    str,
+    str,
+    str,
+]:
+    """Map device_key (often stack display hostname) to logical store + parse hostname."""
+    display_row: InventoryDisplayRow | None = None
+    for dr in list_inventory_display():
+        if make_device_key(dr.site, dr.ip, dr.hostname, dr.port) == device_key:
+            display_row = dr
+            break
+
+    logical_by_id = {r.device_id: r for r in list_inventory()}
+    logical = (
+        logical_by_id.get(display_row.device_id) if display_row else None
+    )
+
+    if not logical:
+        site, ip, host_part = split_device_key(device_key)
+        logical = next(
+            (
+                x
+                for x in list_inventory()
+                if x.site == site and x.ip == ip and x.hostname == host_part
+            ),
+            None,
+        )
+        if not display_row and logical:
+            display_row = next(
+                (
+                    dr
+                    for dr in list_inventory_display()
+                    if dr.device_id == logical.device_id
+                    and make_device_key(dr.site, dr.ip, dr.hostname, dr.port)
+                    == device_key
+                ),
+                None,
+            )
+
+    if logical:
+        store = device_store_path(logical.site, logical.ip, logical.hostname)
+        vendor = logical.vendor
+        device_id = logical.device_id
+        parse_hostname = display_row.hostname if display_row else logical.hostname
+    else:
+        site, ip, host_part = split_device_key(device_key)
+        store = device_store_path(site, ip, host_part)
+        vendor = display_row.vendor if display_row else ""
+        device_id = display_row.device_id if display_row else ""
+        parse_hostname = display_row.hostname if display_row else host_part
+
+    return display_row, logical, store, parse_hostname, vendor, device_id
 
 
 def build_hostname_lookup(rows: list[InventoryDisplayRow]) -> dict[str, str]:
@@ -43,6 +103,7 @@ def neighbor_device_rows(
     """Expanded inventory (stack / HA per member) with neighbor stats from latest snapshot."""
     inv = list_inventory_display(query=query, site=site, vendor=vendor)
     lookup = build_hostname_lookup(inv)
+    logical_by_id = {r.device_id: r for r in list_inventory()}
     out: list[dict[str, Any]] = []
 
     for r in inv:
@@ -55,6 +116,8 @@ def neighbor_device_rows(
             r.vendor,
             lookup,
         )
+        log = logical_by_id.get(r.device_id)
+        store_host = log.hostname if log else r.hostname
         out.append(
             {
                 "device_key": device_key,
@@ -74,7 +137,7 @@ def neighbor_device_rows(
                 "neighbor_count": len(neighbor_rows),
                 "cdp_status": cdp_status,
                 "lldp_status": lldp_status,
-                "store_path": str(device_store_path(r.site, r.ip, r.hostname)),
+                "store_path": str(device_store_path(r.site, r.ip, store_host)),
             }
         )
     return out, lookup
@@ -87,16 +150,31 @@ def neighbors_for_device(
     lookup: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], str, str, str]:
     """Return neighbor rows, cdp_status, lldp_status, version_label."""
-    site, ip, hostname = device_key.split("|", 2)
-    inv = list_inventory()
-    if lookup is None:
-        lookup = build_hostname_lookup(inv)
-    row = next(
-        (x for x in inv if x.site == site and x.ip == ip and x.hostname == hostname),
-        None,
+    _display, logical, store, parse_hostname, vendor, device_id = resolve_neighbor_context(
+        device_key
     )
-    vendor = row.vendor if row else ""
-    store = device_store_path(site, ip, hostname)
+    if lookup is None:
+        lookup = build_hostname_lookup(list_inventory_display())
+
+    snaps = list_snapshots_for_device(device_id) if device_id else []
+    if snaps:
+        snap = snaps[0]
+        if snapshot_ts:
+            for s in snaps:
+                if snapshot_ts in (s.snapshot_path, s.created_at or ""):
+                    snap = s
+                    break
+                base = os.path.basename(s.snapshot_path.rstrip("/"))
+                if snapshot_ts == base:
+                    snap = s
+                    break
+        snap_path = snap.snapshot_path
+        rows, cdp, lldp = neighbors_from_backup_snapshot(
+            snap_path, parse_hostname, vendor, lookup
+        )
+        label = os.path.basename(snap_path.rstrip("/")) or (snap.created_at or "—")
+        return rows, cdp, lldp, label
+
     from nccm.parsers.cdp_lldp import list_device_backup_versions
 
     versions = list_device_backup_versions(str(store), limit=10)
@@ -106,7 +184,9 @@ def neighbors_for_device(
     snap_root = store / "snapshots"
     base = snap_root if snap_root.is_dir() else store
     snap_path = os.path.join(str(base), ts)
-    rows, cdp, lldp = neighbors_from_backup_snapshot(snap_path, hostname, vendor, lookup)
+    rows, cdp, lldp = neighbors_from_backup_snapshot(
+        snap_path, parse_hostname, vendor, lookup
+    )
     return rows, cdp, lldp, ts
 
 
@@ -114,9 +194,9 @@ def neighbor_display_rows(
     neighbor_rows: list[dict[str, Any]],
     lookup: dict[str, str],
 ) -> list[dict[str, str]]:
-    inv = list_inventory()
+    inv_display = list_inventory_display()
     by_key = {
-        make_device_key(r.site, r.ip, r.hostname, r.port): r for r in inv
+        make_device_key(r.site, r.ip, r.hostname, r.port): r for r in inv_display
     }
 
     def label(remote_key: str | None, remote_hostname: str) -> str:

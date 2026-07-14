@@ -478,12 +478,12 @@ async def neighbors_detail_partial(
     )
     display_neighbors = neighbor_display_rows(neighbor_rows, lookup)
     from nccm.parsers.cdp_lldp import list_device_backup_versions
-    from nccm.inventory.neighbors import device_store_path
+    from nccm.inventory.neighbors import resolve_neighbor_context
 
     versions: list[str] = []
     if device_key:
-        site, ip, hostname = device_key.split("|", 2)
-        versions = list_device_backup_versions(str(device_store_path(site, ip, hostname)), 10)
+        _d, _l, store, _ph, _v, _did = resolve_neighbor_context(device_key)
+        versions = list_device_backup_versions(str(store), 10)
 
     return templates.TemplateResponse(
         request,
