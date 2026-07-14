@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import secrets
 from pathlib import Path
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -385,6 +386,36 @@ async def inventory_detail_partial(
             snapshot_id=sid,
             config_preview=config_preview,
         ),
+    )
+
+
+@app.get("/inventory/download/config")
+async def inventory_download_config(
+    snapshot_id: int,
+    device_id: str = "",
+    user: str = Depends(current_user),
+):
+    """Download full config.txt for the selected snapshot (Running-Configuration)."""
+    from nccm.storage.index_db import get_snapshot, parse_device_id
+
+    if snapshot_id <= 0:
+        raise HTTPException(status_code=400, detail="snapshot_id required")
+    snap = get_snapshot(snapshot_id)
+    if not snap:
+        raise HTTPException(status_code=404, detail="snapshot not found")
+    if device_id and snap.device_id != device_id:
+        raise HTTPException(status_code=403, detail="snapshot does not belong to device")
+    path = Path(snap.snapshot_path) / "config.txt"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="config.txt not found")
+    _site, ip, _port, host = parse_device_id(snap.device_id)
+    ts = path.parent.name or (snap.created_at or "snapshot")
+    safe_host = re.sub(r"[^\w.\-]+", "_", (snap.hostname or host or "unknown"))[:64]
+    filename = f"{ip}_{safe_host}_{ts}_config.txt"
+    return FileResponse(
+        path,
+        media_type="text/plain; charset=utf-8",
+        filename=filename,
     )
 
 

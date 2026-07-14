@@ -101,6 +101,9 @@ th, td { border: 1px solid var(--border); padding: 0.45rem 0.6rem; text-align: l
 .filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
 .filters input, .filters select { flex: 1; min-width: 120px; }
 .config-preview { background: #121a24; padding: 0.75rem; font-size: 0.75rem; max-height: 55vh; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.config-header { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin: 0.35rem 0 0.5rem; }
+.config-header h3 { margin: 0; }
+.config-download { margin: 0; text-decoration: none; color: var(--text); }
 .btn-secondary { background: #2a3548; width: auto; display: inline-block; padding: 0.4rem 0.8rem; margin-bottom: 0.5rem; }
 .inline-form { display: inline; }
 .ok-banner { color: var(--ok); font-size: 0.9rem; }

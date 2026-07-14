@@ -257,6 +257,7 @@ python -m uvicorn web.main:app --reload --host 0.0.0.0 --port 8501</code></pre>
     <p>自檢腳本（ad-hoc，非正式測試套件）：</p>
     <pre><code>python3 scripts/hermes-verify-nccm-v3.py
 python3 scripts/hermes-verify-neighbors-detail.py
+python3 scripts/run-hermes-verify-inventory-config-download.py
 python3 scripts/smoke-web-nccm-v3.py   # 需 Portal 已啟動</code></pre>
   </section>
 
@@ -373,7 +374,7 @@ dc,10.2.1.5,huawei,22</code></pre>
   <ul>
     <li>列表來自 <code>index.db</code>，可依 Site、<strong>Vendor（下拉，選項為已備份設備之廠牌）</strong>、關鍵字（IP / Hostname / Model / SN）篩選；鄰居與 Interface Map 頁同樣使用 Vendor 下拉。</li>
     <li>設備表約顯示 10 列高度，其餘於表內捲動；點列或「檢視」開啟下方詳情。</li>
-    <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config）。</li>
+    <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config），並以<strong>下載</strong>取得完整檔案（<code>GET /inventory/download/config</code>，需登入）。</li>
     <li>Hostname 優先從 running-config 擷取；若舊快照顯示 unknown，可按「重建索引」從 config.txt 回填。</li>
     <li><strong>Cisco Stack / FortiGate HA</strong>：總表、鄰居、Interface Map 的設備列表皆<strong>每台實體機一行</strong>（Stack#、Role Primary/Secondary/Member、各自 Model/Serial）。Cisco 成員 hostname 為 <code>管理名 · SW#</code>；Forti 為 HA 解析之主機名。錨點列標 <strong>· 組態</strong>；虛擬 IP 只備一份 config。Cisco 備份含 <code>show switch</code>（<code>stack_info.txt</code>，非 Nexus）。異常時重新備份後按「重建索引」。</li>
     <li><strong>重建索引</strong>：掃描整個 <code>store/</code> 重建 <code>index.db</code>（手動還原資料或修復索引時使用）。</li>

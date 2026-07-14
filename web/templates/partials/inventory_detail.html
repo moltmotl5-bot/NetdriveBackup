@@ -16,7 +16,13 @@
     {% endfor %}
   </select>
 </form>
-<h3>Running-Configuration</h3>
+<div class="config-header">
+  <h3>Running-Configuration</h3>
+  {% if snapshot_id %}
+  <a class="btn-secondary config-download"
+     href="/inventory/download/config?snapshot_id={{ snapshot_id }}&device_id={{ device_id | urlencode }}">下載</a>
+  {% endif %}
+</div>
 <pre class="config-preview">{{ config_preview }}</pre>
 {% else %}
 <p class="muted">此設備尚無成功備份快照。</p>
