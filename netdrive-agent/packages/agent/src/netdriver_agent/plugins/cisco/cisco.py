@@ -14,6 +14,8 @@ from netdriver_core.utils.asyncu import async_timeout
 class CiscoBase(Base):
     """ Cisco Base Plugin """
 
+    _CANCEL_MORE_MODE = Mode.LOGIN
+
     info = PluginInfo(
         vendor="cisco",
         model="base",
@@ -42,6 +44,16 @@ class CiscoBase(Base):
 
     def get_more_pattern(self) -> tuple[re.Pattern, str]:
         return (CiscoBase.PatternHelper.get_more_pattern(), self._CMD_MORE)
+
+    async def switch_mode(self, mode: Mode) -> str:
+        """Never send the enable/disable CLI on Cisco; stay at login or current privilege prompt."""
+        if mode == Mode.ENABLE:
+            self._logger.info("Cisco: skip enable command (login-only policy)")
+            return ""
+        if mode == Mode.LOGIN and self._mode == Mode.ENABLE:
+            self._logger.info("Cisco: skip disable; keep current exec prompt for login-mode commands")
+            return ""
+        return await super().switch_mode(mode)
 
     @async_timeout(5)
     async def enable(self) -> str:

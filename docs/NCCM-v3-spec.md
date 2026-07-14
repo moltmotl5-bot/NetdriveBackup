@@ -56,7 +56,7 @@ store/
 2. `show version` in **login** mode (no `enable`).
 3. Classify → `nexus` | `catalyst` | `isr` | `asr` | `asa`.
 4. Reconnect if model/version differ from probe.
-5. Run backup command set from `nccm.profiles` (Cisco config: `show running-config view full`; `/api/v1/cmd` command object uses **`login`** not **`mode`**).
+5. Run backup command set from `nccm.profiles` (Cisco: all commands `login`; config `show running-config view full`; Agent Cisco plugin skips `enable` CLI including session paging setup).
 
 ## UI pages (parity with AutoSwitchBackup2)
 

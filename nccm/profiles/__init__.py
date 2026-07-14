@@ -66,19 +66,19 @@ def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
     if v == "cisco":
         if m == "nexus":
             return [
-                CommandSpec("version_info", "show version"),
-                CommandSpec("config", "show running-config view full", timeout=300),
-                CommandSpec("interfaces", "show interface status"),
-                CommandSpec("cdp", "show cdp neighbors"),
-                CommandSpec("lldp", "show lldp neighbors"),
+                CommandSpec("version_info", "show version", login="login"),
+                CommandSpec("config", "show running-config view full", login="login", timeout=300),
+                CommandSpec("interfaces", "show interface status", login="login"),
+                CommandSpec("cdp", "show cdp neighbors", login="login"),
+                CommandSpec("lldp", "show lldp neighbors", login="login"),
             ]
         return [
-            CommandSpec("version_info", "show version"),
-            CommandSpec("stack_info", "show switch"),
-            CommandSpec("config", "show running-config view full", timeout=300),
-            CommandSpec("interfaces", "show interface status"),
-            CommandSpec("cdp", "show cdp neighbors"),
-            CommandSpec("lldp", "show lldp neighbors"),
+            CommandSpec("version_info", "show version", login="login"),
+            CommandSpec("stack_info", "show switch", login="login"),
+            CommandSpec("config", "show running-config view full", login="login", timeout=300),
+            CommandSpec("interfaces", "show interface status", login="login"),
+            CommandSpec("cdp", "show cdp neighbors", login="login"),
+            CommandSpec("lldp", "show lldp neighbors", login="login"),
         ]
     if v == "huawei":
         return [

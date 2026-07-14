@@ -21,7 +21,13 @@ def main() -> int:
     config = next(s for s in specs if s.artifact == "config")
     assert config.command == "show running-config view full", config.command
     assert config.login == "login", config.login
+    for s in backup_commands("cisco", "nexus") + backup_commands("cisco", "catalyst"):
+        assert s.login == "login", (s.artifact, s.login)
 
+    from nccm.backup.runner import _enable_password_for_vendor
+
+    assert _enable_password_for_vendor("cisco", "secret") == ""
+    assert _enable_password_for_vendor("fortinet", "secret") == "secret"
     nexus_specs = backup_commands("cisco", "nexus")
     nexus_cfg = next(s for s in nexus_specs if s.artifact == "config")
     assert nexus_cfg.command == "show running-config view full"

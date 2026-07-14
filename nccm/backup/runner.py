@@ -32,6 +32,13 @@ _VERSION_FALLBACK: dict[str, str] = {
 }
 
 
+def _enable_password_for_vendor(vendor: str, enable_password: str) -> str:
+    """Cisco backups never send enable password to NetDriver (login-only)."""
+    if normalize_vendor(vendor) == "cisco":
+        return ""
+    return enable_password if enable_password is not None else ""
+
+
 def _fetch_version_text(
     client: NetDriverClient,
     row: DeviceRow,
@@ -148,9 +155,10 @@ def backup_device(
     discovery = ""
     version_text = ""
     last_spec = None
+    ep = _enable_password_for_vendor(row.vendor, enable_password)
     try:
         profile, discovery, version_text = _resolve_profile(
-            client, row, username, password, enable_password, _log
+            client, row, username, password, ep, _log
         )
         hostname = hostname_from_output(row.vendor, version_text)
         if row.hostname_hint and hostname == "unknown":
@@ -177,7 +185,7 @@ def backup_device(
                     profile=profile,
                     command=spec.command,
                     login=spec.login,
-                    enable_password=enable_password,
+                    enable_password=ep,
                     timeout=spec.timeout,
                 )
             except NetDriverError as exc:
