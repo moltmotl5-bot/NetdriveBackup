@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS portal_users (
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    last_login_at TEXT
+    last_login_at TEXT,
+    must_change_password INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_portal_users_active ON portal_users(is_active);
 """
@@ -37,6 +38,15 @@ class PortalUser:
     created_at: str
     updated_at: str
     last_login_at: str | None
+    must_change_password: bool = False
+
+
+def _migrate_portal_users(conn: sqlite3.Connection) -> None:
+    cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(portal_users)")}
+    if "must_change_password" not in cols:
+        conn.execute(
+            "ALTER TABLE portal_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"
+        )
 
 
 def init_auth_db() -> None:
@@ -44,6 +54,7 @@ def init_auth_db() -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
         conn.executescript(_SCHEMA)
+        _migrate_portal_users(conn)
         conn.commit()
 
 
@@ -68,4 +79,5 @@ def _row_to_user(row: sqlite3.Row) -> PortalUser:
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         last_login_at=row["last_login_at"],
+        must_change_password=bool(row["must_change_password"] if "must_change_password" in row.keys() else 0),
     )

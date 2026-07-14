@@ -22,6 +22,7 @@ from nccm.registry.csv import load_devices_csv
 from web.auth import authenticate, ensure_portal_can_start
 from web.api import router as api_router
 from web.admin_users import build_admin_users_router
+from web.account import build_account_router
 from web.deps import (
     current_user,
     require_operator,
@@ -64,6 +65,7 @@ def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
 
 
 _PUBLIC_PATHS = {"/login", "/health", "/openapi.json", "/docs", "/redoc"}
+_MUST_CHANGE_PASSWORD_ALLOW = {"/account/change-password", "/logout"}
 
 
 class SessionGateMiddleware:
@@ -89,6 +91,11 @@ class SessionGateMiddleware:
             response = RedirectResponse(url="/login", status_code=303)
             await response(scope, receive, send)
             return
+        if session.get("must_change_password"):
+            if path not in _MUST_CHANGE_PASSWORD_ALLOW:
+                response = RedirectResponse(url="/account/change-password", status_code=303)
+                await response(scope, receive, send)
+                return
         await self.app(scope, receive, send)
 
 
@@ -123,8 +130,11 @@ async def login_submit(
             username=portal_user.username,
             role=portal_user.role,
             user_id=portal_user.id,
+            must_change_password=portal_user.must_change_password,
         )
         audit_portal_login(request, portal_user.username, True)
+        if portal_user.must_change_password:
+            return RedirectResponse(url="/account/change-password", status_code=303)
         dest = "/inventory" if portal_user.role == "viewer" else "/backup"
         return RedirectResponse(url=dest, status_code=303)
     audit_portal_login(request, username, False)
@@ -161,9 +171,10 @@ async def health():
 def _ctx(request: Request, page: str, **extra):
     agent_ok = NetDriverClient().health()
     role = session_role(request)
+    minimal = bool(extra.get("force_minimal_nav"))
     base = {
         "request": request,
-        "nav": _nav_for_role(role),
+        "nav": [] if minimal else _nav_for_role(role),
         "active": page,
         "store": str(store_dir()),
         "agent_url": netdriver_url(),
@@ -177,6 +188,7 @@ def _ctx(request: Request, page: str, **extra):
     return base
 
 
+app.include_router(build_account_router(templates, _ctx))
 app.include_router(build_admin_users_router(templates, _ctx))
 
 

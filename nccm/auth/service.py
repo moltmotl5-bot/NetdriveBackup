@@ -48,7 +48,13 @@ def get_user_by_id(user_id: int) -> auth_db.PortalUser | None:
         return auth_db._row_to_user(row) if row else None
 
 
-def create_user(username: str, password: str, role: Role = "viewer") -> auth_db.PortalUser:
+def create_user(
+    username: str,
+    password: str,
+    role: Role = "viewer",
+    *,
+    must_change_password: bool = False,
+) -> auth_db.PortalUser:
     name = (username or "").strip()
     if not name:
         raise ValueError("username required")
@@ -60,10 +66,10 @@ def create_user(username: str, password: str, role: Role = "viewer") -> auth_db.
     with auth_db.connect() as conn:
         cur = conn.execute(
             """
-            INSERT INTO portal_users (username, password_hash, role, is_active, created_at, updated_at)
-            VALUES (?, ?, ?, 1, ?, ?)
+            INSERT INTO portal_users (username, password_hash, role, is_active, created_at, updated_at, must_change_password)
+            VALUES (?, ?, ?, 1, ?, ?, ?)
             """,
-            (name, ph, role, now, now),
+            (name, ph, role, now, now, 1 if must_change_password else 0),
         )
         uid = int(cur.lastrowid)
         row = conn.execute("SELECT * FROM portal_users WHERE id = ?", (uid,)).fetchone()
@@ -158,7 +164,55 @@ def _import_env_user_to_db(username: str, password: str) -> auth_db.PortalUser:
     existing = get_user_by_username(username)
     if existing:
         return existing
-    return create_user(username, password, role="admin")
+    return create_user(username, password, role="admin", must_change_password=True)
+
+
+def _set_must_change_password(user_id: int, value: bool) -> None:
+    now = auth_db._utc_now()
+    with auth_db.connect() as conn:
+        conn.execute(
+            "UPDATE portal_users SET must_change_password = ?, updated_at = ? WHERE id = ?",
+            (1 if value else 0, now, int(user_id)),
+        )
+
+
+def change_password_self(
+    user_id: int, current_password: str, new_password: str
+) -> auth_db.PortalUser:
+    """Logged-in user changes password; clears must_change_password."""
+    user = get_user_by_id(user_id)
+    if not user or not user.is_active:
+        raise ValueError("user not found")
+    with auth_db.connect() as conn:
+        row = conn.execute(
+            "SELECT password_hash FROM portal_users WHERE id = ?", (int(user_id),)
+        ).fetchone()
+    if not row or not verify_password(current_password, str(row["password_hash"])):
+        raise ValueError("目前密碼不正確")
+    set_password(int(user_id), new_password)
+    _set_must_change_password(int(user_id), False)
+    refreshed = get_user_by_id(int(user_id))
+    if not refreshed:
+        raise ValueError("user not found")
+    return refreshed
+
+
+def change_password_env_login(
+    username: str, current_password: str, new_password: str
+) -> auth_db.PortalUser:
+    """Break-glass / env session (uid=0): verify env creds then set new DB password."""
+    name = (username or "").strip()
+    if not _verify_env_login(name, current_password):
+        raise ValueError("目前密碼不正確")
+    existing = get_user_by_username(name)
+    if existing:
+        set_password(existing.id, new_password)
+        _set_must_change_password(existing.id, False)
+        out = get_user_by_id(existing.id)
+        if not out:
+            raise ValueError("user not found")
+        return out
+    return create_user(name, new_password, role="admin", must_change_password=False)
 
 
 def authenticate(username: str, password: str) -> auth_db.PortalUser | None:
@@ -193,6 +247,7 @@ def authenticate(username: str, password: str) -> auth_db.PortalUser | None:
             created_at="",
             updated_at="",
             last_login_at=None,
+            must_change_password=True,
         )
 
     return None

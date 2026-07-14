@@ -18,10 +18,22 @@ def session_user_id(request: Request) -> int:
         return 0
 
 
-def set_session_user(request: Request, *, username: str, role: str, user_id: int) -> None:
+def set_session_user(
+    request: Request,
+    *,
+    username: str,
+    role: str,
+    user_id: int,
+    must_change_password: bool = False,
+) -> None:
     request.session["user"] = username
     request.session["role"] = role
     request.session["uid"] = int(user_id)
+    request.session["must_change_password"] = bool(must_change_password)
+
+
+def session_must_change_password(request: Request) -> bool:
+    return bool(request.session.get("must_change_password"))
 
 
 def require_user(request: Request) -> str:

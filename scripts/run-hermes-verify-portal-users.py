@@ -37,13 +37,6 @@ assert passwords.verify_password("BootstrapPass12!", h)
 
 init_auth_db()
 assert service.user_count() == 0
-u = service.authenticate("bootadmin", "BootstrapPass12!")
-assert u and u.role == "admin" and u.id > 0
-assert service.user_count() == 1
-
-service.create_user("viewer1", "ViewerPass12345", role="viewer")
-v = service.authenticate("viewer1", "ViewerPass12345")
-assert v and v.role == "viewer"
 
 from fastapi.testclient import TestClient
 from web.main import app
@@ -54,11 +47,30 @@ r = client.post(
     data={"username": "bootadmin", "password": "BootstrapPass12!"},
     follow_redirects=False,
 )
-assert r.status_code == 303, r.status_code
+assert r.status_code == 303
+assert "/account/change-password" in (r.headers.get("location") or "")
+r = client.get("/backup", follow_redirects=False)
+assert r.status_code == 303
+assert "/account/change-password" in (r.headers.get("location") or "")
+r = client.post(
+    "/account/change-password",
+    data={
+        "current_password": "BootstrapPass12!",
+        "new_password": "NewAdminPass1234!",
+        "confirm_password": "NewAdminPass1234!",
+    },
+    follow_redirects=False,
+)
+assert r.status_code == 303
+assert service.authenticate("bootadmin", "NewAdminPass1234!") is not None
+u = service.get_user_by_username("bootadmin")
+assert u and not u.must_change_password
+
 r = client.get("/admin/users")
 assert r.status_code == 200, r.status_code
 assert "使用者管理" in r.text
 
+service.create_user("viewer1", "ViewerPass12345", role="viewer")
 client.post("/logout", follow_redirects=False)
 r = client.post(
     "/login",
