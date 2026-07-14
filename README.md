@@ -167,7 +167,7 @@ store/
 3. **CDP/LLDP 鄰居** — 設備列表同總表展開 Stack/HA；由快照解析鄰居表  
 4. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
 
-側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。
+側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。Portal 帳號存於 **`store/portal_auth.db`**（密碼雜湊）；**admin** 可進 **使用者管理**；**viewer** 唯讀（無批次備份／重建索引／config 下載）。
 
 ---
 

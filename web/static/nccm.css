@@ -110,3 +110,11 @@ th, td { border: 1px solid var(--border); padding: 0.45rem 0.6rem; text-align: l
 .ok-banner { color: var(--ok); font-size: 0.9rem; }
 .muted { color: var(--muted); }
 .version-pick select { margin-bottom: 0.75rem; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+.admin-user-form { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; }
+.admin-user-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.admin-actions .inline-form { display: inline-flex; gap: 0.25rem; align-items: center; }
+.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+.admin-users-scroll { max-height: 50vh; }
+.page-head .lead { color: var(--muted); }

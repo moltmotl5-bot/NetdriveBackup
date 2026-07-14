@@ -6,9 +6,11 @@
 {% if request.query_params.get('rebuild_ok') %}
 <p class="ok-banner">索引已重建：{{ request.query_params.get('rebuild_ok') }}</p>
 {% endif %}
+{% if portal_role == 'admin' %}
 <form method="post" action="/inventory/rebuild" class="inline-form">
   <button type="submit" class="btn-secondary">重建索引</button>
 </form>
+{% endif %}
 <div class="inv-page-stack">
   <section class="inv-main">
     <form id="inv-filters" class="filters"

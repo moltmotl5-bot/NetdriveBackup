@@ -16,6 +16,13 @@ def store_dir() -> Path:
     return p
 
 
+def auth_db_path() -> Path:
+    override = os.environ.get("NCCM_AUTH_DB", "").strip()
+    if override:
+        return Path(override)
+    return store_dir() / "portal_auth.db"
+
+
 def netdriver_url() -> str:
     return (os.environ.get("NCCM_NETDRIVER_URL") or "http://127.0.0.1:8000").rstrip("/")
 

@@ -1,0 +1,40 @@
+<div class="table-scroll admin-users-scroll">
+<table class="data-table admin-users-table">
+  <thead>
+    <tr>
+      <th>帳號</th>
+      <th>角色</th>
+      <th>狀態</th>
+      <th>最後登入</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.username }}{% if u.id == current_uid %} <span class="muted">（你）</span>{% endif %}</td>
+      <td>{{ u.role }}</td>
+      <td>{% if u.is_active %}<span class="ok">啟用</span>{% else %}<span class="bad">停用</span>{% endif %}</td>
+      <td class="muted">{{ u.last_login_at or '—' }}</td>
+      <td class="admin-actions">
+        <form method="post" action="/admin/users/{{ u.id }}/toggle" class="inline-form">
+          <button type="submit" class="btn-secondary btn-sm">{% if u.is_active %}停用{% else %}啟用{% endif %}</button>
+        </form>
+        <form method="post" action="/admin/users/{{ u.id }}/role" class="inline-form">
+          <select name="role" onchange="this.form.submit()">
+            <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>admin</option>
+            <option value="viewer" {% if u.role == 'viewer' %}selected{% endif %}>viewer</option>
+          </select>
+        </form>
+        <form method="post" action="/admin/users/{{ u.id }}/password" class="inline-form password-reset">
+          <input name="new_password" type="password" placeholder="新密碼 ≥12" minlength="12" required />
+          <button type="submit" class="btn-secondary btn-sm">重設密碼</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">尚無使用者（首次 env 登入會自動建立管理員）。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>

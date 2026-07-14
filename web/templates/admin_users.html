@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}使用者管理 — NCCM{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>使用者管理</h1>
+  <p class="lead">Portal 帳號儲存於 <code>portal_auth.db</code>（密碼雜湊，非明文）。</p>
+</section>
+{% if message %}<p class="ok-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<section class="panel">
+  <h2>新增使用者</h2>
+  <form method="post" action="/admin/users" class="admin-user-form">
+    <label>帳號 <input name="username" required autocomplete="username" /></label>
+    <label>密碼 <input name="password" type="password" required autocomplete="new-password" minlength="12" /></label>
+    <label>角色
+      <select name="role">
+        <option value="viewer">viewer（唯讀）</option>
+        <option value="admin">admin</option>
+      </select>
+    </label>
+    <button type="submit" class="btn-primary">新增</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>帳號列表</h2>
+  {% include "partials/admin_users_table.html" %}
+</section>
+{% endblock %}

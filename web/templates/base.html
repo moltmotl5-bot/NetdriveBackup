@@ -17,6 +17,7 @@
         <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
         {% endfor %}
       </nav>
+      {% if portal_user %}<p class="meta">使用者: {{ portal_user }}{% if portal_role %} ({{ portal_role }}){% endif %}</p>{% endif %}
       <a class="logout" href="/logout">登出</a>
     </aside>
     <main class="content">

@@ -19,8 +19,18 @@ from nccm.backup.job_manager import get_job, start_backup_job_async
 from nccm.config import netdriver_url, store_dir
 from nccm.netdriver.client import NetDriverClient
 from nccm.registry.csv import load_devices_csv
-from web.auth import load_portal_credentials, verify_login
+from web.auth import authenticate, ensure_portal_can_start
 from web.api import router as api_router
+from web.admin_users import build_admin_users_router
+from web.deps import (
+    current_user,
+    require_operator,
+    session_role,
+    session_user_id,
+    session_username,
+    set_session_user,
+)
+from nccm.auth.audit import audit_portal_login
 
 load_dotenv()
 
@@ -41,6 +51,16 @@ NAV = [
     ("neighbors", "CDP/LLDP 鄰居", "/neighbors"),
     ("interfaces", "Interface Map", "/interfaces"),
 ]
+ADMIN_NAV = ("admin_users", "使用者管理", "/admin/users")
+
+
+def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
+    items = list(NAV)
+    if role == "viewer":
+        items = [x for x in items if x[0] != "backup"]
+    if role == "admin":
+        items = [*items, ADMIN_NAV]
+    return items
 
 
 _PUBLIC_PATHS = {"/login", "/health", "/openapi.json", "/docs", "/redoc"}
@@ -76,13 +96,9 @@ app.add_middleware(SessionGateMiddleware)
 app.add_middleware(SessionMiddleware, secret_key=_secret)
 
 
-def current_user(request: Request) -> str:
-    return str(request.session.get("user") or "")
-
-
 @app.on_event("startup")
 async def _check_portal_env() -> None:
-    load_portal_credentials()
+    ensure_portal_can_start()
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -100,10 +116,18 @@ async def login_submit(
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
 ):
-    valid_user, valid_pass = load_portal_credentials()
-    if verify_login(username, password, valid_user, valid_pass):
-        request.session["user"] = username
-        return RedirectResponse(url="/backup", status_code=303)
+    portal_user = authenticate(username, password)
+    if portal_user:
+        set_session_user(
+            request,
+            username=portal_user.username,
+            role=portal_user.role,
+            user_id=portal_user.id,
+        )
+        audit_portal_login(request, portal_user.username, True)
+        dest = "/inventory" if portal_user.role == "viewer" else "/backup"
+        return RedirectResponse(url=dest, status_code=303)
+    audit_portal_login(request, username, False)
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -136,22 +160,30 @@ async def health():
 
 def _ctx(request: Request, page: str, **extra):
     agent_ok = NetDriverClient().health()
-    return {
+    role = session_role(request)
+    base = {
         "request": request,
-        "nav": NAV,
+        "nav": _nav_for_role(role),
         "active": page,
         "store": str(store_dir()),
         "agent_url": netdriver_url(),
         "agent_ok": agent_ok,
         "agent_status": "Online" if agent_ok else "Offline",
-        **extra,
+        "portal_user": session_username(request),
+        "portal_role": role,
+        "current_uid": session_user_id(request),
     }
+    base.update(extra)
+    return base
+
+
+app.include_router(build_admin_users_router(templates, _ctx))
 
 
 @app.get("/backup", response_class=HTMLResponse)
 async def backup_page(
     request: Request,
-    user: str = Depends(current_user),
+    user: str = Depends(require_operator),
     run_id: str = "",
 ):
     return templates.TemplateResponse(
@@ -187,7 +219,7 @@ def _devices_from_csv_text(csv_text: str) -> list:
 @app.post("/backup/start")
 async def backup_start(
     request: Request,
-    user: str = Depends(current_user),
+    user: str = Depends(require_operator),
     csv_text: Annotated[str, Form()] = "",
     csv_file: UploadFile | None = File(None),
     ssh_user: Annotated[str, Form()] = "",
@@ -221,7 +253,7 @@ async def backup_start(
 async def backup_events(
     job_id: str,
     request: Request,
-    user: str = Depends(current_user),
+    user: str = Depends(require_operator),
 ):
     job = get_job(job_id)
     if not job:
@@ -260,7 +292,7 @@ async def backup_events(
 @app.post("/backup", response_class=HTMLResponse)
 async def backup_run_legacy(
     request: Request,
-    user: str = Depends(current_user),
+    user: str = Depends(require_operator),
     csv_text: Annotated[str, Form()] = "",
     ssh_user: Annotated[str, Form()] = "",
     ssh_password: Annotated[str, Form()] = "",
@@ -330,7 +362,7 @@ async def inventory_page(
 
 
 @app.post("/inventory/rebuild", response_class=HTMLResponse)
-async def inventory_rebuild(request: Request, user: str = Depends(current_user)):
+async def inventory_rebuild(request: Request, user: str = Depends(require_operator)):
     from nccm.storage.index_db import rebuild_index
 
     d, s = rebuild_index()
@@ -399,7 +431,7 @@ async def inventory_detail_partial(
 async def inventory_download_config(
     snapshot_id: int,
     device_id: str = "",
-    user: str = Depends(current_user),
+    user: str = Depends(require_operator),
 ):
     """Download full config.txt for the selected snapshot (Running-Configuration)."""
     from nccm.storage.index_db import get_snapshot, parse_device_id
