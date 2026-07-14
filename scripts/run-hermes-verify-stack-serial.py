@@ -30,6 +30,19 @@ for u in units:
     assert "16.12" not in u.serial
 print("iosxe stack serial vs sw_version: OK")
 
+classic_ios = '''
+Switch#   Ports    Model              SW Version        Serial No
+*1       32       WS-C3750X-24P-L     15.2(7)E10        FDO1234X5YZ
+ 2       32       WS-C3750X-24P-L     15.2(7)E10        FDO5678X5YZ
+'''
+u3 = parse_cisco_stack_units(classic_ios)
+assert len(u3) >= 2, len(u3)
+for u in u3:
+    assert u.serial.startswith("FDO"), (u.switch_num, u.serial, u.sw_version)
+    assert u.sw_version == "15.2(7)E10", (u.switch_num, u.sw_version)
+    assert "(" not in u.serial
+print("classic IOS stack serial vs 15.2(7)E10: OK")
+
 legacy = '''
 *1       56       WS-C3850-48P-L       FCW1111ABCD  V02
  2       56       WS-C3850-48P-L       FCW2222ABCD  V02

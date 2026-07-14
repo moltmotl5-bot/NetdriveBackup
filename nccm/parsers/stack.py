@@ -35,10 +35,14 @@ def _looks_like_sw_version(token: str) -> bool:
     t = (token or "").strip()
     if not t:
         return False
+    # Classic IOS image: 15.2(7)E10, 12.2(55)SE12
+    if re.match(r"^\d+\.\d+\([^)]+\)[A-Za-z0-9]*$", t):
+        return True
+    if re.match(r"^\d+\.\d+\([^)]+\)$", t):
+        return True
+    # IOS-XE / IOS: 16.12.05, 17.09.04a
     if re.match(r"^\d+(\.\d+)+[a-zA-Z0-9]*$", t):
         return True
-    if re.match(r"^[vV]\d", t) and "." not in t:
-        return False
     return False
 
 
@@ -70,7 +74,9 @@ def _assign_model_serial_sw(model: str, tokens: list[str]) -> tuple[str, str, st
         return model, rest[0], ""
     if _looks_like_sw_version(rest[0]) and len(rest) >= 2:
         return model, rest[1] if _looks_like_cisco_serial(rest[1]) else "", rest[0]
-    return model, rest[0] if not _looks_like_sw_version(rest[0]) else "", rest[0] if _looks_like_sw_version(rest[0]) else ""
+    if _looks_like_sw_version(rest[0]):
+        return model, "", rest[0]
+    return model, rest[0], ""
 
 
 def _prefer_serial(candidate: str, fallback: str) -> str:

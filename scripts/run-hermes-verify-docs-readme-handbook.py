@@ -16,6 +16,7 @@ ROOT = %r
 readme = (pathlib.Path(ROOT) / "README.md").read_text(encoding="utf-8")
 handbook = (pathlib.Path(ROOT) / "docs/Handbook.html").read_text(encoding="utf-8")
 assert "run-hermes-verify-inventory-config-download.py" in readme
+assert "run-hermes-verify-stack-serial.py" in readme
 assert "API_KEY" in (pathlib.Path(ROOT) / ".env.example").read_text(encoding="utf-8")
 assert "下載" in readme and "config.txt" in readme
 assert "/inventory/download/config" in handbook
