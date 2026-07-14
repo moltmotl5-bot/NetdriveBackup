@@ -11,7 +11,12 @@ from nccm.parsers.cdp_lldp import (
     make_device_key,
     neighbors_from_backup_snapshot,
 )
-from nccm.storage.index_db import InventoryDisplayRow, list_inventory_display, list_snapshots_for_device
+from nccm.storage.index_db import (
+    InventoryDisplayRow,
+    list_inventory,
+    list_inventory_display,
+    list_snapshots_for_device,
+)
 
 
 def device_store_path(site: str, ip: str, hostname: str) -> Path:
