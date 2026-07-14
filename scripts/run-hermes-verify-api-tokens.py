@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ad-hoc: DB api_tokens + env API_KEY dual-track for /api/v1."""
+"""Ad-hoc: DB-only api_tokens for /api/v1 (no .env API_KEY)."""
 from __future__ import annotations
 
 import os
@@ -25,7 +25,6 @@ os.environ["NCCM_ADMIN_USER"] = "admin"
 os.environ["NCCM_ADMIN_PASS"] = "password123456"
 os.environ["NCCM_SESSION_SECRET"] = "testsecret"
 os.environ["NCCM_NETDRIVER_URL"] = "http://127.0.0.1:9"
-os.environ["NCCM_API_IMPORT_ENV"] = "0"
 os.environ.pop("API_KEY", None)
 
 sys.path.insert(0, ROOT)
@@ -44,14 +43,13 @@ def fresh_client():
 with mock.patch("dotenv.load_dotenv", lambda *a, **k: None):
     c = fresh_client()
     assert c.get("/api/v1/inventory").status_code == 500
-    print("no token source -> 500 OK")
+    print("no active token -> 500 OK")
 
     from nccm.auth.db import init_auth_db
     from nccm.auth import api_tokens as ts
 
     init_auth_db()
     tok, plain = ts.create_token("verify-token", created_by="test")
-    assert plain.startswith("nccm_")
     c2 = fresh_client()
     assert c2.get("/api/v1/inventory").status_code == 401
     r = c2.get("/api/v1/inventory", headers={"X-API-Key": plain})
@@ -60,16 +58,20 @@ with mock.patch("dotenv.load_dotenv", lambda *a, **k: None):
 
     ts.set_token_active(tok.id, False)
     assert ts.active_token_count() == 0
-    assert ts.authenticate_api_key(plain) is None
     st = c2.get("/api/v1/inventory", headers={"X-API-Key": plain}).status_code
     assert st in (401, 500), st
     print("deactivated token ->", st, "OK")
 
     os.environ["API_KEY"] = "test-api-key-32chars-minimum!!"
+    c3 = fresh_client()
+    assert c3.get("/api/v1/inventory", headers={"X-API-Key": "test-api-key-32chars-minimum!!"}).status_code == 500
+    print("env API_KEY ignored -> 500 OK (no active tokens)")
+
+    _, plain2 = ts.create_token("second", created_by="test")
     c4 = fresh_client()
-    r4 = c4.get("/api/v1/inventory", headers={"X-API-Key": "test-api-key-32chars-minimum!!"})
-    assert r4.status_code == 200, (r4.status_code, r4.text[:120])
-    print("env API_KEY dual-track -> 200 OK")
+    assert c4.get("/api/v1/inventory", headers={"X-API-Key": "test-api-key-32chars-minimum!!"}).status_code == 401
+    assert c4.get("/api/v1/inventory", headers={"X-API-Key": plain2}).status_code == 200
+    print("env API_KEY ignored -> 401 OK (DB token required)")
 
     assert c4.get("/api/v1/health").json().get("status") == "ok"
     print("=== ad-hoc api-tokens verify PASSED ===")

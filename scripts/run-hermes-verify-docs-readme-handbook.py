@@ -15,8 +15,8 @@ import sys
 ROOT = %r
 readme = (pathlib.Path(ROOT) / "README.md").read_text(encoding="utf-8")
 handbook = (pathlib.Path(ROOT) / "docs/Handbook.html").read_text(encoding="utf-8")
-assert "API_KEY" in (pathlib.Path(ROOT) / ".env.example").read_text(encoding="utf-8")
-assert "下載" in readme and "config.txt" in readme
+assert "API_KEY=" not in (pathlib.Path(ROOT) / ".env.example").read_text(encoding="utf-8")
+assert "API Token" in readme
 assert "還原" in readme
 assert "/inventory/download/config" in handbook
 assert "還原" in handbook

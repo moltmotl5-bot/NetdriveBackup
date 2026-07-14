@@ -1,0 +1,83 @@
+<section class="inv-result-below api-manual">
+  <h2>REST API 使用手冊</h2>
+  <p class="lead">外部整合請使用本頁建立的 <strong>API Token</strong>（存於 <code>portal_auth.db</code>，僅雜湊）。<strong>不在</strong> <code>.env</code> 設定 API 金鑰。</p>
+
+  <h3>驗證方式</h3>
+  <ul>
+    <li>路徑前綴：<code>/api/v1</code>（不經 Web Session 閘道）</li>
+    <li>每次請求標頭 <code>X-API-Key</code> = 建立當下顯示的完整 <code>nccm_…</code> token</li>
+    <li>Scope：<code>inventory:read</code>（目前庫存列表端點）</li>
+    <li>伺服器尚無任何<strong>啟用中</strong> token 時，受保護端點回 <strong>500</strong>（fail-closed）</li>
+  </ul>
+
+  <h3>端點</h3>
+  <table class="inv-table api-manual-table">
+    <thead>
+      <tr><th>方法</th><th>路徑</th><th>驗證</th><th>說明</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>GET</code></td>
+        <td><code>/api/v1/health</code></td>
+        <td>無</td>
+        <td>回 <code>{"status":"ok"}</code></td>
+      </tr>
+      <tr>
+        <td><code>GET</code></td>
+        <td><code>/api/v1/inventory</code></td>
+        <td>Token</td>
+        <td>庫存 JSON 陣列（Stack/HA 已展開）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3><code>GET /api/v1/inventory</code> 查詢參數</h3>
+  <table class="inv-table api-manual-table">
+    <thead>
+      <tr><th>參數</th><th>說明</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>site</code></td><td>依站點篩選</td></tr>
+      <tr><td><code>vendor</code></td><td>依廠牌篩選</td></tr>
+      <tr><td><code>q</code></td><td>關鍵字（IP、hostname、model、serial）</td></tr>
+      <tr><td><code>limit</code></td><td>筆數上限，預設 100，最大 500</td></tr>
+      <tr><td><code>offset</code></td><td>略過筆數，預設 0</td></tr>
+    </tbody>
+  </table>
+
+  <h3>回應欄位（每筆設備）</h3>
+  <p class="meta"><code>device_id</code>、<code>site</code>、<code>ip</code>、<code>port</code>、<code>hostname</code>、<code>vendor</code>、<code>sw_version</code>、<code>model_summary</code>、<code>serial_summary</code>、<code>snapshot_count</code>、<code>stack_switch</code>、<code>stack_role</code>、<code>is_config_anchor</code>、<code>cluster_type</code></p>
+
+  <h3>HTTP 狀態碼</h3>
+  <ul>
+    <li><strong>200</strong> — 成功</li>
+    <li><strong>401</strong> — 缺少或無效的 <code>X-API-Key</code></li>
+    <li><strong>403</strong> — Token scope 不足</li>
+    <li><strong>500</strong> — 伺服器尚未建立任何啟用中的 API Token</li>
+  </ul>
+
+  <h3>curl 範例</h3>
+  <pre class="config-preview">export NCCM_API_TOKEN="nccm_your_token_from_this_page"
+
+curl -sS -H "X-API-Key: $NCCM_API_TOKEN" \
+  "http://localhost:8501/api/v1/inventory?limit=20"
+
+curl -sS "http://localhost:8501/api/v1/health"</pre>
+
+  <h3>Postman</h3>
+  <ol>
+    <li>Method：<code>GET</code>，URL：<code>{{baseUrl}}/api/v1/inventory</code></li>
+    <li>Headers：<code>X-API-Key</code> = 完整 token（勿加 Bearer）</li>
+    <li>無需 Cookie／Session</li>
+  </ol>
+
+  <h3>安全與維運</h3>
+  <ul>
+    <li>Token 僅建立時顯示一次；遺失請<strong>停用舊 token 並建立新 token</strong></li>
+    <li>定期輪替；不同整合（Postman、腳本、第三方）請用不同名稱的 token</li>
+    <li>生產環境請以 HTTPS 反向代理，避免 token 明文傳輸</li>
+    <li>備份 <code>store/portal_auth.db</code> 時一併保護 token 雜湊</li>
+  </ul>
+
+  <p class="meta">進階：可於部署環境設定選用變數 <code>NCCM_API_TOKEN_PEPPER</code> 加強雜湊（勿遺失，否則既有 token 失效）。此項<strong>不</strong>寫入 <code>.env.example</code>。</p>
+</section>

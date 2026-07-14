@@ -15,7 +15,6 @@ DEFAULT_SCOPES = "inventory:read"
 _TOKEN_PREFIX_LEN = 8
 _last_used_touch: dict[int, float] = {}
 _LAST_USED_INTERVAL_SEC = 300.0
-_env_deprecated_logged = False
 
 Scope = str
 
@@ -37,7 +36,7 @@ class ApiToken:
 class ApiAuthResult:
     """Successful API authentication."""
 
-    source: str  # "db" | "env"
+    source: str  # "db"
     token_id: int
     token_name: str
     scopes: frozenset[str]
@@ -172,51 +171,11 @@ def _verify_db_token(presented: str) -> ApiToken | None:
     return None
 
 
-def _env_api_key() -> str:
-    return (os.environ.get("API_KEY") or "").strip()
-
-
-def _import_env_disabled() -> bool:
-    v = (os.environ.get("NCCM_API_IMPORT_ENV") or "1").strip().lower()
-    return v in ("0", "false", "no", "off")
-
-
-def import_env_api_key_if_empty() -> bool:
-    """One-time import of API_KEY into DB when no active tokens. Returns True if imported."""
-    if _import_env_disabled():
-        return False
-    if active_token_count() > 0:
-        return False
-    key = _env_api_key()
-    if not key:
-        return False
-    prefix = key[:_TOKEN_PREFIX_LEN]
-    now = auth_db._utc_now()
-    th = hash_api_token(key)
-    with auth_db.connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO api_tokens (
-                name, token_prefix, token_hash, scopes, is_active,
-                created_at, created_by, last_used_at, expires_at
-            ) VALUES ('env-bootstrap', ?, ?, ?, 1, ?, 'system', NULL, NULL)
-            """,
-            (prefix, th, DEFAULT_SCOPES, now),
-        )
-    _log.info("Imported API_KEY into api_tokens as env-bootstrap (hash only)")
-    return True
-
-
 def any_api_auth_configured() -> bool:
-    import_env_api_key_if_empty()
-    if active_token_count() > 0:
-        return True
-    return bool(_env_api_key())
+    return active_token_count() > 0
 
 
 def authenticate_api_key(presented: str | None) -> ApiAuthResult | None:
-    global _env_deprecated_logged
-    import_env_api_key_if_empty()
     raw = (presented or "").strip()
     if not raw:
         return None
@@ -228,20 +187,6 @@ def authenticate_api_key(presented: str | None) -> ApiAuthResult | None:
             token_id=tok.id,
             token_name=tok.name,
             scopes=_parse_scopes(tok.scopes),
-        )
-
-    env_key = _env_api_key()
-    if env_key and secrets.compare_digest(raw, env_key):
-        if not _env_deprecated_logged:
-            _log.warning(
-                "API_KEY env match accepted (deprecated); prefer DB api_tokens"
-            )
-            _env_deprecated_logged = True
-        return ApiAuthResult(
-            source="env",
-            token_id=0,
-            token_name="env:API_KEY",
-            scopes=frozenset([DEFAULT_SCOPES]),
         )
     return None
 

@@ -52,7 +52,7 @@ git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
 
 cp .env.example .env
-# 編輯 .env：NCCM_ADMIN_PASS 至少 12 字元；可選 API_KEY（REST 過渡雙軌）；建議上線後於 Portal「API Token」建立 token
+# 編輯 .env：NCCM_ADMIN_PASS 至少 12 字元；REST API 請於 Portal「API Token」建立（見該頁手冊）
 chmod 600 .env
 
 mkdir -p store
@@ -97,7 +97,9 @@ docker compose down
 | `NCCM_NETDRIVER_URL` | Portal 連 Agent 的 URL | `http://netdriver-agent:8000` |
 | `NCCM_STORE_DIR` | 備份根目錄（容器內） | `/data/store` → 掛載 `./store` |
 | `NCCM_SESSION_SECRET` | Cookie 簽章（多副本請固定） | 未設則每次重啟隨機 |
-| `API_KEY` | REST `/api/v1` 過渡雙軌（建議改 Portal **API Token**） | 來自 `.env`；DB 與 env 皆無 token 來源時 API **500** |
+
+**REST API**：不在 `.env` 設定；admin 於 **API Token** 頁建立 token 並參閱該頁手冊。
+
 | `NCCM_PORT` | 對外 Web 埠 | `8501` |
 | `NETDRIVER_AGENT_PORT` | 對外 Agent API 埠 | `8000` |
 | `NETDRIVER_AGENT_CONFIG` | Agent 設定檔路徑（僅 Agent 容器） | `/app/config/agent/agent.yml` |
@@ -322,14 +324,14 @@ MIT（與主專案相同）
 
 ### 設定
 
-1. **建議**：以 **admin** 登入 Portal → **API Token** 建立 token（僅建立當下顯示一次），請求帶 `X-API-Key`。
-2. **過渡**：`.env` 的 `API_KEY` 仍可用（雙軌）；首次啟動且 DB 無 token 時可自動匯入為 `env-bootstrap`（`NCCM_API_IMPORT_ENV=0` 可關閉）。
-3. 客戶端標頭：`X-API-Key: *** token 或 API_KEY>`。
+1. 以 **admin** 登入 Portal → **API Token** 建立 token（僅建立當下顯示一次）。
+2. 同一頁面下方有 **REST API 使用手冊**（端點、參數、Postman、curl）。
+3. 客戶端標頭：`X-API-Key: *** token>`。
 
 ### 基本資訊
 
 - **基礎路徑**：`/api/v1`
-- **驗證**：`GET /api/v1/inventory` 需要有效 token（scope `inventory:read`）；無任何 token 來源時 **500**（fail-closed）。
+- **驗證**：`GET /api/v1/inventory` 需要有效 token（scope `inventory:read`）；尚無啟用中 token 時 **500**（fail-closed）。
 - **回應格式**：JSON（庫存列表）
 - **狀態碼**：200 成功；401 金鑰錯誤或缺失；403 scope 不足；500 伺服器未設定 token
 
@@ -350,13 +352,13 @@ MIT（與主專案相同）
 
 ### 安全注意事項
 
-- Token 存於 `store/portal_auth.db`（雜湊）；可於 **API Token** 管理頁輪替／停用。
-- `API_KEY` 環境變數為過渡雙軌，日誌會標 deprecated；與 Portal 密碼分開管理。
+- Token 存於 `store/portal_auth.db`（雜湊）；於 **API Token** 管理頁輪替／停用；完整說明見該頁手冊。
+- 生產環境建議 HTTPS 反向代理。
 
 ### 使用範例（curl）
 
 ```bash
-# Portal「API Token」建立的 nccm_… token，或過渡期 .env API_KEY
+# Portal「API Token」頁建立的 nccm_… token
 export NCCM_API_TOKEN="nccm_your_token_from_portal"
 
 curl -sS -H "X-API-Key: $NCCM_API_TOKEN" "http://localhost:8501/api/v1/inventory?limit=20"

@@ -2,7 +2,7 @@
 {% block title %}API Token — NCCM{% endblock %}
 {% block content %}
 <h1>API Token 管理</h1>
-<p class="lead">供 <code>/api/v1</code> 整合使用。完整 secret 僅在建立當下顯示一次；之後僅能看 prefix。</p>
+<p class="lead">供 <code>/api/v1</code> 整合使用。完整 secret 僅在建立當下顯示一次；之後僅能看 prefix。詳見下方<strong> REST API 使用手冊</strong>。</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if message %}<p class="ok">{{ message }}</p>{% endif %}
 
@@ -30,4 +30,6 @@
   <h2>Token 列表</h2>
   {% include "partials/admin_api_tokens_table.html" %}
 </section>
+
+{% include "partials/api_token_manual.html" %}
 {% endblock %}
