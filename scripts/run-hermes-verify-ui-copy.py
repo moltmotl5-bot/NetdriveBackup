@@ -21,7 +21,8 @@ detail = (pathlib.Path(ROOT) / "web/templates/partials/inventory_detail.html").r
 readme = (pathlib.Path(ROOT) / "README.md").read_text(encoding="utf-8")
 handbook = (pathlib.Path(ROOT) / "docs/Handbook.html").read_text(encoding="utf-8")
 
-assert "{{ agent_status }}" in base
+assert "sidebar-footer" in base
+assert 'class="logout"' in base
 assert "{{ agent_url }}" not in base
 assert "store: {{ store }}" not in base
 assert "Online" in (pathlib.Path(ROOT) / "web/main.py").read_text(encoding="utf-8")

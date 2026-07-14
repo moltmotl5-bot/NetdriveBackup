@@ -10,15 +10,19 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand">🛡️ NCCM v3</div>
-      <p class="meta">Agent: <span class="{% if agent_ok %}ok{% else %}bad{% endif %}">{{ agent_status }}</span></p>
-      <nav>
-        {% for key, label, href in nav %}
-        <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
-        {% endfor %}
-      </nav>
-      {% if portal_user %}<p class="meta">使用者: {{ portal_user }}{% if portal_role %} ({{ portal_role }}){% endif %}</p>{% endif %}
-      <a class="logout" href="/logout">登出</a>
+      <div class="sidebar-body">
+        <div class="brand">🛡️ NCCM v3</div>
+        <p class="meta">Agent: <span class="{% if agent_ok %}ok{% else %}bad{% endif %}">{{ agent_status }}</span></p>
+        <nav>
+          {% for key, label, href in nav %}
+          <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
+          {% endfor %}
+        </nav>
+      </div>
+      <div class="sidebar-footer">
+        {% if portal_user %}<p class="meta sidebar-user">使用者: {{ portal_user }}{% if portal_role %} ({{ portal_role }}){% endif %}</p>{% endif %}
+        <a class="logout" href="/logout">登出</a>
+      </div>
     </aside>
     <main class="content">
       {% block content %}{% endblock %}
