@@ -176,7 +176,7 @@ def backup_device(
                     password=password,
                     profile=profile,
                     command=spec.command,
-                    mode=spec.mode,
+                    login=spec.login,
                     enable_password=enable_password,
                     timeout=spec.timeout,
                 )

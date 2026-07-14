@@ -32,7 +32,7 @@ class CommandRequestHandler:
             cmd_exec_success: int = 0
             for cmd in command.commands:
                 task_ret: CmdTaskResult = await session.send_cmd(
-                    cmd.command, command.vsys, cmd.mode, timeout=command.timeout, detail_output=cmd.detail_output)
+                    cmd.command, command.vsys, cmd.login, timeout=command.timeout, detail_output=cmd.detail_output)
                 output.append(f"\n===== start exec cmd: [{cmd.command}] {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')} =====\n")
                 output.append(task_ret.output)
                 output.append(f"\n===== end exec cmd: [{cmd.command}] {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')} =====\n")

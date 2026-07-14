@@ -53,10 +53,10 @@ store/
 ## Cisco discovery (no CSV model)
 
 1. Connect with probe profile: `catalyst` + version `17.0` (or user CSV if present).
-2. `show version` in enable mode.
+2. `show version` in **login** mode (no `enable`).
 3. Classify → `nexus` | `catalyst` | `isr` | `asr` | `asa`.
 4. Reconnect if model/version differ from probe.
-5. Run backup command set from `nccm.profiles`.
+5. Run backup command set from `nccm.profiles` (Cisco config: `show running-config view full`; `/api/v1/cmd` command object uses **`login`** not **`mode`**).
 
 ## UI pages (parity with AutoSwitchBackup2)
 

@@ -70,7 +70,7 @@ class NetDriverClient:
         password: str,
         profile: NetDriverProfile,
         command: str,
-        mode: str = "enable",
+        login: str = "login",
         enable_password: str = "",
         timeout: int = 120,
     ) -> str:
@@ -91,7 +91,7 @@ class NetDriverClient:
             "commands": [
                 {
                     "type": "raw",
-                    "mode": mode,
+                    "login": login,
                     "command": command,
                     "template": "",
                     "detail_output": True,

@@ -10,7 +10,7 @@ from nccm.models import NetDriverProfile
 class CommandSpec:
     artifact: str
     command: str
-    mode: str = "enable"
+    login: str = "login"
     timeout: int = 120
 
 
@@ -65,11 +65,9 @@ def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
     m = (model or "").strip().lower()
     if v == "cisco":
         if m == "nexus":
-            # Prefer plain show running-config; agent disables paging + handles --More--
-            # (some NX-OS builds reject or mishandle "| no-more" on this command)
             return [
                 CommandSpec("version_info", "show version"),
-                CommandSpec("config", "show running-config", timeout=300),
+                CommandSpec("config", "show running-config view full", timeout=300),
                 CommandSpec("interfaces", "show interface status"),
                 CommandSpec("cdp", "show cdp neighbors"),
                 CommandSpec("lldp", "show lldp neighbors"),
@@ -77,7 +75,7 @@ def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
         return [
             CommandSpec("version_info", "show version"),
             CommandSpec("stack_info", "show switch"),
-            CommandSpec("config", "show running-config", timeout=300),
+            CommandSpec("config", "show running-config view full", timeout=300),
             CommandSpec("interfaces", "show interface status"),
             CommandSpec("cdp", "show cdp neighbors"),
             CommandSpec("lldp", "show lldp neighbors"),

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 from typing import List, Any
 from asgi_correlation_id import correlation_id
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices, ConfigDict
 
 from netdriver_agent.models.common import CommonRequest, CommonResponse
 from netdriver_core.dev.mode import Mode
@@ -38,9 +38,15 @@ class CommandResponse(CommonResponse):
 
 
 class Command(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     type: str = Field(description="Type", pattern="raw|textfsm")
-    mode: Mode = Field(description="Execution mode", pattern="login|enable|config",
-                       examples=["enable"])
+    login: Mode = Field(
+        description="Execution mode (prefer login; avoid enable)",
+        pattern="login|enable|config",
+        validation_alias=AliasChoices("login", "mode"),
+        examples=["login"],
+    )
     command: str = Field(description="Command", examples=["show version"])
     template: str = Field("", description="Template content, can be empty when type is raw",
                           examples=[""])
