@@ -22,7 +22,7 @@ readme = (pathlib.Path(ROOT) / "README.md").read_text(encoding="utf-8")
 handbook = (pathlib.Path(ROOT) / "docs/Handbook.html").read_text(encoding="utf-8")
 css = (pathlib.Path(ROOT) / "web/static/nccm.css").read_text(encoding="utf-8")
 
-assert "sidebar-footer" in base
+assert "sidebar-user-row" in base
 assert "position: fixed" in css
 assert "margin-left: 240px" in css
 assert 'class="logout"' in base

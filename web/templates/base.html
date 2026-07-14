@@ -20,8 +20,12 @@
         </nav>
       </div>
       <div class="sidebar-footer">
-        {% if portal_user %}<p class="meta sidebar-user">使用者: {{ portal_user }}{% if portal_role %} ({{ portal_role }}){% endif %}</p>{% endif %}
-        <a class="logout" href="/logout">登出</a>
+        <div class="sidebar-user-row">
+          {% if portal_user %}
+          <span class="meta sidebar-user">使用者: {{ portal_user }}{% if portal_role %} ({{ portal_role }}){% endif %}</span>
+          {% endif %}
+          <a class="logout" href="/logout">登出</a>
+        </div>
       </div>
     </aside>
     <main class="content">
