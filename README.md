@@ -225,6 +225,7 @@ python3 scripts/run-hermes-verify-temp-neighbors.py    # 同上，使用系統 t
 python3 scripts/run-hermes-verify-inventory-config-download.py  # 設備詳情 Running-Config 下載
 python3 scripts/run-hermes-verify-stack-neighbors-all.py        # Stack 鄰居路徑解析 + 鄰居 partial
 python3 scripts/run-hermes-verify-api-key.py                    # REST API_KEY / X-API-Key
+python3 scripts/run-hermes-verify-stack-serial.py               # Stack 序號 vs IOS-XE SW Version 欄
 ```
 
 > **重要提醒**：

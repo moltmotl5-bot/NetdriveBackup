@@ -31,6 +31,58 @@ def _role_rank(role: str) -> int:
     return _ROLE_ORDER.get((role or "").strip().lower(), 3)
 
 
+def _looks_like_sw_version(token: str) -> bool:
+    t = (token or "").strip()
+    if not t:
+        return False
+    if re.match(r"^\d+(\.\d+)+[a-zA-Z0-9]*$", t):
+        return True
+    if re.match(r"^[vV]\d", t) and "." not in t:
+        return False
+    return False
+
+
+def _looks_like_cisco_serial(token: str) -> bool:
+    t = (token or "").strip()
+    if not t or t.lower() in ("unknown", "ready", "v01", "v02", "v03"):
+        return False
+    if _looks_like_sw_version(t):
+        return False
+    if re.match(r"^0x[0-9a-f.]+$", t, re.I):
+        return False
+    if len(t) >= 8 and re.match(r"^[A-Z0-9]+$", t, re.I):
+        return True
+    if re.match(r"^[A-Z]{3}[A-Z0-9]{4,}$", t, re.I):
+        return True
+    return False
+
+
+def _assign_model_serial_sw(model: str, tokens: list[str]) -> tuple[str, str, str]:
+    """IOS-XE stack row tokens after Ports: Model [SW Version] Serial [H/W ...]."""
+    model = model or (tokens[0] if tokens else "")
+    rest = tokens[1:] if tokens and tokens[0] == model else tokens
+    if not rest:
+        return model, "", ""
+
+    if len(rest) >= 2 and _looks_like_sw_version(rest[0]) and _looks_like_cisco_serial(rest[1]):
+        return model, rest[1], rest[0]
+    if _looks_like_cisco_serial(rest[0]):
+        return model, rest[0], ""
+    if _looks_like_sw_version(rest[0]) and len(rest) >= 2:
+        return model, rest[1] if _looks_like_cisco_serial(rest[1]) else "", rest[0]
+    return model, rest[0] if not _looks_like_sw_version(rest[0]) else "", rest[0] if _looks_like_sw_version(rest[0]) else ""
+
+
+def _prefer_serial(candidate: str, fallback: str) -> str:
+    if _looks_like_cisco_serial(candidate):
+        return candidate
+    if _looks_like_cisco_serial(fallback):
+        return fallback
+    if candidate and not _looks_like_sw_version(candidate):
+        return candidate
+    return fallback or candidate or ""
+
+
 def normalize_stack_display_role(role: str, *, vendor: str = "") -> str:
     """Align Cisco stack roles with FortiGate HA labels (Primary / Secondary / Member)."""
     r = (role or "").strip().lower()
@@ -116,26 +168,32 @@ def _parse_switch_blocks(text: str, roles: dict[int, str]) -> dict[int, StackUni
 
 
 def _parse_iosxe_port_table(text: str) -> dict[int, StackUnit]:
-    """IOS-XE stack summary table inside show version (Switch# Ports Model Serial ...)."""
+    """IOS-XE stack summary table inside show version (Switch# Ports Model [SW Ver] Serial ...)."""
     units: dict[int, StackUnit] = {}
     active_nums: set[int] = set()
-    for m in re.finditer(
-        r"^\s*(\*?)\s*(\d+)\s+\d+\s+(\S+)\s+(\S+)\s+",
-        text,
-        re.MULTILINE,
-    ):
+    for line in text.splitlines():
+        m = re.match(
+            r"^\s*(\*?)\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$",
+            line,
+        )
+        if not m:
+            continue
         starred = bool(m.group(1))
         num = int(m.group(2))
-        model = m.group(3)
-        serial = m.group(4)
+        model = m.group(4)
+        tail_tokens = m.group(5).split()
+        model, serial, sw = _assign_model_serial_sw(model, tail_tokens)
+        if not serial and not model:
+            continue
         if starred:
             active_nums.add(num)
         role = "Active" if starred else "Member"
         units[num] = StackUnit(
             switch_num=num,
             role=role,
-            model=model,
-            serial=serial,
+            model=model or "Unknown",
+            serial=serial or "Unknown",
+            sw_version=sw,
             hostname="",
         )
     if len(units) >= 2 and len(active_nums) == 1:
@@ -164,7 +222,7 @@ def _merge_units(*maps: dict[int, StackUnit]) -> dict[int, StackUnit]:
                 num,
                 u.role if u.role != "Member" else prev.role,
                 u.model if u.model not in ("", "Unknown") else prev.model,
-                u.serial if u.serial not in ("", "Unknown") else prev.serial,
+                _prefer_serial(u.serial, prev.serial),
                 u.sw_version or prev.sw_version,
                 u.hostname or prev.hostname,
             )
