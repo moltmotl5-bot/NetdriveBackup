@@ -134,6 +134,18 @@ dc,10.2.1.5,huawei,22
 
 Web 支援 **上傳 CSV** 或貼上內容；備份在背景執行，頁面以 **SSE** 顯示 log。
 
+### 各廠牌 NetDriver 備份邏輯（分離）
+
+程式在 `nccm/profiles/`：`cisco_backup_commands()`、`huawei_backup_commands()`、`fortinet_backup_commands()`。Portal 呼叫 Agent `/api/v1/cmd` 時，**命令物件欄位依廠牌不同**（`nccm/netdriver/client.py` → `command_entry()`）：
+
+| 廠牌 | Agent 執行模式 | JSON 欄位 | 設定備份指令（摘要） |
+|------|----------------|-----------|----------------------|
+| **Cisco** | `login`（不送 `enable` CLI；Agent `CiscoBase` 略過 enable） | `login` | Nexus：`show running-config`；其餘 IOS：`show running-config view full` |
+| **Huawei** | `enable`（外掛不支援 `login`） | `mode` | `display current-configuration` 等 |
+| **Fortinet** | `enable` | `mode` | `show full-configuration` 等 |
+
+Cisco 備份**不傳** `enable_password`；Huawei／Fortinet 仍可使用 Portal 的 enable 密碼（若設備需要）。版本探測指令亦使用各廠 `default_agent_mode()`。
+
 ---
 
 ## 備份儲存結構

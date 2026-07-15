@@ -58,6 +58,16 @@ store/
 4. Reconnect if model/version differ from probe.
 5. Run backup command set from vendor-specific helpers (`cisco_backup_commands`, `huawei_backup_commands`, `fortinet_backup_commands`). Agent payload: Cisco uses **`login`** field (`login` mode); Huawei/Fortinet use **`mode`** field (`enable` mode).
 
+## Backup by vendor (NCCM → Agent)
+
+| Vendor | Module | `agent_mode` | `/api/v1/cmd` command key | Notes |
+|--------|--------|--------------|---------------------------|-------|
+| cisco | `cisco_backup_commands(model)` | `login` | `login` | No `enable_password` from NCCM; IOS vs NX-OS config command via `cisco_running_config_command()` |
+| huawei | `huawei_backup_commands()` | `enable` | `mode` | Fixes `Unsupported mode: login` when Cisco-style payload was sent to Huawei plugin |
+| fortinet | `fortinet_backup_commands()` | `enable` | `mode` | Same as Huawei for Agent mode support |
+
+Agent model field `login` still accepts legacy JSON key `mode` (Pydantic alias); NCCM sends `mode` only for non-Cisco vendors.
+
 ## UI pages (parity with AutoSwitchBackup2)
 
 | Route | Legacy nav |
