@@ -243,9 +243,13 @@ def _sync_stack_units(
 
 def _read_version_from_snapshot(snap_dir: Path, vendor: str) -> Any:
     vf = snap_dir / "version_info.txt"
-    if not vf.is_file():
+    text = vf.read_text(encoding="utf-8", errors="replace") if vf.is_file() else ""
+    mfg = snap_dir / "manufacture_info.txt"
+    if normalize_vendor(vendor) == "huawei" and mfg.is_file():
+        text = f"{text}\n{mfg.read_text(encoding='utf-8', errors='replace')}"
+    if not text.strip():
         return parse_version_info("", vendor)
-    return parse_version_info(vf.read_text(encoding="utf-8", errors="replace"), vendor)
+    return parse_version_info(text, vendor)
 
 
 def index_manifest(manifest: dict[str, Any], snapshot_path: Path) -> int:

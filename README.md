@@ -141,7 +141,7 @@ Web 支援 **上傳 CSV** 或貼上內容；備份在背景執行，頁面以 **
 | 廠牌 | Agent 執行模式 | JSON 欄位 | 設定備份指令（摘要） |
 |------|----------------|-----------|----------------------|
 | **Cisco** | `login`（不送 `enable` CLI；Agent `CiscoBase` 略過 enable） | `login` | Nexus：`show running-config`；其餘 IOS：`show running-config view full` |
-| **Huawei** | `enable`（外掛不支援 `login`） | `mode` | `display current-configuration` 等 |
+| **Huawei** | `enable` | `mode` | `display current-configuration` 等；另備份 **`display device manufacture-info`** → 庫存 **序號** |
 | **Fortinet** | `enable` | `mode` | `show full-configuration` 等 |
 
 Cisco 備份**不傳** `enable_password`；Huawei／Fortinet 仍可使用 Portal 的 enable 密碼（若設備需要）。版本探測指令亦使用各廠 `default_agent_mode()`。
@@ -160,6 +160,7 @@ store/
                 ├── manifest.json
                 ├── config.txt
                 ├── version_info.txt
+                ├── manufacture_info.txt   # Huawei：序號來源
                 ├── cdp_neighbors.txt   # Cisco 等
                 ├── lldp_neighbors.txt
                 └── interfaces.txt

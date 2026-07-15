@@ -117,14 +117,8 @@ def parse_huawei(content: str) -> VersionFields:
         if match_ver:
             sw_version = match_ver.group(1)
 
-    serials_list = re.findall(r"BarCode=(\S+)", content)
-    if not serials_list:
-        serials_list = re.findall(
-            r"Equipment serial number\s*:\s*([A-Za-z0-9]+)", content, re.IGNORECASE
-        )
-    models_list = re.findall(r"Item=(\S+)", content)
-    if not models_list:
-        models_list = re.findall(r"HUAWEI\s+([A-Za-z0-9-]+)", content, re.IGNORECASE)
+    serials_list = _huawei_serials_from_text(content)
+    models_list = _huawei_models_from_text(content)
 
     return VersionFields(
         vendor_label=vendor,
@@ -132,6 +126,44 @@ def parse_huawei(content: str) -> VersionFields:
         models=_join_unique(models_list),
         serials=_join_unique(serials_list),
     )
+
+
+def _huawei_serials_from_text(content: str) -> list[str]:
+    serials_list: list[str] = []
+    for m in re.finditer(
+        r"^\s*\d+\s+[-\d]+\s+\S+\s+(21\d{10,22})\s",
+        content,
+        re.MULTILINE,
+    ):
+        serials_list.append(m.group(1))
+    serials_list.extend(
+        re.findall(
+            r"(?:Serial[- ]?number|BarCode|Device serial number)\s*[:=]\s*(\S+)",
+            content,
+            re.IGNORECASE,
+        )
+    )
+    if not serials_list:
+        serials_list = re.findall(r"BarCode=(\S+)", content)
+    if not serials_list:
+        serials_list = re.findall(
+            r"Equipment serial number\s*:\s*([A-Za-z0-9]+)", content, re.IGNORECASE
+        )
+    return serials_list
+
+
+def _huawei_models_from_text(content: str) -> list[str]:
+    models_list: list[str] = []
+    for m in re.finditer(
+        r"^\s*\d+\s+[-\d]+\s+(\S+)\s+21\d+",
+        content,
+        re.MULTILINE,
+    ):
+        models_list.append(m.group(1))
+    models_list.extend(re.findall(r"Item=(\S+)", content))
+    if not models_list:
+        models_list = re.findall(r"HUAWEI\s+([A-Za-z0-9-]+)", content, re.IGNORECASE)
+    return models_list
 
 
 def parse_version_info(content: str, vendor_hint: str = "") -> VersionFields:

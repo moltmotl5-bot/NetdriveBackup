@@ -32,6 +32,12 @@ common:
       Copyright (C) 2012-2018 Huawei Technologies Co., Ltd.
       HUAWEI CE6800 uptime is 21 days, 16 hours, 25 minutes
       SVRP Platform Version 1.0
+  - cmd: "display device manufacture-info"
+    output: |
+      Device Manufacture Information:
+      Slot  Card  Type                         Serial-number         Manu-date
+      -------------------------------------------------------------------------------
+      1     -     CE6850-48S4Q-EI              2102351234567890      2020-03-04
   - cmd: "display current-configuration"
     output: |
       !Software Version V200R005C10SPC607B607
