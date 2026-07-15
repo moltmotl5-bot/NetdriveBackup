@@ -206,6 +206,35 @@ def member_display_hostname(
     return f"{base} · SW{unit.switch_num}"
 
 
+def parse_huawei_stack_units(
+    manufacture_text: str,
+    *,
+    default_sw: str = "",
+    default_model: str = "",
+) -> list[StackUnit]:
+    """iStack / multi-member from manufacture-info Slot rows (≥2 distinct serials)."""
+    from nccm.parsers.version import parse_huawei_manufacture_rows
+
+    rows = parse_huawei_manufacture_rows(manufacture_text)
+    if len(rows) < 2:
+        return []
+    primary_slot = min(r.slot for r in rows)
+    units: list[StackUnit] = []
+    for i, r in enumerate(sorted(rows, key=lambda x: x.slot), start=1):
+        role = "Primary" if r.slot == primary_slot else "Member"
+        units.append(
+            StackUnit(
+                switch_num=i,
+                role=role,
+                model=(r.model or default_model or "Unknown").strip(),
+                serial=r.serial,
+                sw_version=default_sw or "",
+                hostname="",
+            )
+        )
+    return sorted(units, key=lambda u: u.switch_num)
+
+
 def is_cisco_stack_version(text: str) -> bool:
     t = text or ""
     if re.search(r"Switch/Stack\s+Mac", t, re.I):

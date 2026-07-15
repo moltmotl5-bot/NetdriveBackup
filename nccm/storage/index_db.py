@@ -9,7 +9,11 @@ from typing import Any, Iterator
 
 from nccm.config import store_dir
 from nccm.profiles import normalize_vendor
-from nccm.parsers.stack import config_anchor_unit, parse_cisco_stack_units, parse_fortigate_ha_units
+from nccm.parsers.stack import (
+    parse_cisco_stack_units,
+    parse_fortigate_ha_units,
+    parse_huawei_stack_units,
+)
 from nccm.parsers.version import huawei_inventory_fields_from_snapshot, parse_version_info
 from nccm.storage.writer import safe_hostname
 
@@ -202,6 +206,13 @@ def _read_stack_info(snap_dir: Path) -> str:
     return ""
 
 
+def _read_manufacture_info(snap_dir: Path) -> str:
+    f = snap_dir / "manufacture_info.txt"
+    if f.is_file():
+        return f.read_text(encoding="utf-8", errors="replace")
+    return ""
+
+
 def _sync_stack_units(
     conn: sqlite3.Connection,
     did: str,
@@ -209,6 +220,10 @@ def _sync_stack_units(
     version_text: str,
     ha_text: str = "",
     stack_extra: str = "",
+    *,
+    manufacture_text: str = "",
+    default_sw: str = "",
+    default_model: str = "",
 ) -> None:
     conn.execute("DELETE FROM stack_units WHERE device_id = ?", (did,))
     v = normalize_vendor(vendor)
@@ -216,6 +231,12 @@ def _sync_stack_units(
         units = parse_cisco_stack_units(version_text, stack_extra)
     elif v == "fortinet":
         units = parse_fortigate_ha_units(ha_text or version_text)
+    elif v == "huawei":
+        units = parse_huawei_stack_units(
+            manufacture_text,
+            default_sw=default_sw,
+            default_model=default_model,
+        )
     else:
         return
     if len(units) < 2:
@@ -374,7 +395,22 @@ def index_manifest(manifest: dict[str, Any], snapshot_path: Path) -> int:
             )
         ha_text = _read_ha_status(snapshot_path) if normalize_vendor(vendor) == "fortinet" else ""
         stack_extra = _read_stack_info(snapshot_path) if normalize_vendor(vendor) == "cisco" else ""
-        _sync_stack_units(conn, did, vendor, version_text, ha_text, stack_extra)
+        mfg_text = (
+            _read_manufacture_info(snapshot_path)
+            if normalize_vendor(vendor) == "huawei"
+            else ""
+        )
+        _sync_stack_units(
+            conn,
+            did,
+            vendor,
+            version_text,
+            ha_text,
+            stack_extra,
+            manufacture_text=mfg_text,
+            default_sw=vf.sw_version,
+            default_model=vf.models,
+        )
         return int(snap_id)
 
 

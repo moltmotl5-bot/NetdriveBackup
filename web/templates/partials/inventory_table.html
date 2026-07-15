@@ -18,7 +18,7 @@
       <td>{{ r.port }}</td>
       <td>
         {{ r.hostname }}
-        {% if r.is_config_anchor and r.cluster_type == 'stack' %}<span class="muted" title="Cisco Stack 虛擬 IP"> · Stack</span>{% endif %}
+        {% if r.is_config_anchor and r.cluster_type == 'stack' %}<span class="muted" title="Stack 虛擬 IP（Cisco / Huawei）"> · Stack</span>{% endif %}
         {% if r.is_config_anchor and r.cluster_type == 'ha' %}<span class="muted" title="FortiGate HA 虛擬 IP"> · HA</span>{% endif %}
       </td>
       <td>{% if r.stack_switch is not none %}{{ r.stack_switch }}{% else %}—{% endif %}</td>

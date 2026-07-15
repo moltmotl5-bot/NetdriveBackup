@@ -150,21 +150,25 @@ def _huawei_serials_from_text(content: str) -> list[str]:
     return serials_list
 
 
-def _huawei_manufacture_serial_numbers(content: str) -> list[str]:
-    """Parse Serial-number column from display device manufacture-info table."""
+@dataclass(frozen=True)
+class HuaweiManufactureRow:
+    slot: int
+    serial: str
+    model: str = ""
+
+
+def parse_huawei_manufacture_rows(content: str) -> list[HuaweiManufactureRow]:
+    """One row per Slot line in display device manufacture-info."""
     text = _strip_huawei_cli_noise(content)
-    serials: list[str] = []
-    serial_col = 2  # Slot / Sub / Serial-number / Manu-date (fixed switches)
+    rows: list[HuaweiManufactureRow] = []
+    serial_col = 2
     for line in text.splitlines():
         stripped = line.strip()
         low = stripped.lower()
         if not stripped:
             continue
         if "serial-number" in low and "slot" in low:
-            if "type" in low or "card" in low:
-                serial_col = 3  # Slot / Card / Type / Serial-number / …
-            else:
-                serial_col = 2  # Slot / Sub / Serial-number / Manu-date
+            serial_col = 3 if ("type" in low or "card" in low) else 2
             continue
         if len(stripped) >= 3 and set(stripped.replace(" ", "")) <= {"-"}:
             continue
@@ -175,17 +179,25 @@ def _huawei_manufacture_serial_numbers(content: str) -> list[str]:
         if idx < 0:
             continue
         sn = parts[idx].strip()
-        if _is_huawei_manufacture_serial(sn):
-            serials.append(sn)
-    if serials:
-        return serials
-    for m in re.finditer(
-        r"^\s*\d+\s+[-\d]+\s+\S+\s+(21\d{10,22})\s",
-        text,
-        re.MULTILINE,
-    ):
-        serials.append(m.group(1))
-    return serials
+        if not _is_huawei_manufacture_serial(sn):
+            continue
+        slot = int(parts[0])
+        model = ""
+        if serial_col == 3 and len(parts) > 2:
+            model = parts[2].strip()
+        rows.append(HuaweiManufactureRow(slot=slot, serial=sn, model=model))
+    seen: set[str] = set()
+    out: list[HuaweiManufactureRow] = []
+    for r in sorted(rows, key=lambda x: x.slot):
+        if r.serial in seen:
+            continue
+        seen.add(r.serial)
+        out.append(r)
+    return out
+
+
+def _huawei_manufacture_serial_numbers(content: str) -> list[str]:
+    return [r.serial for r in parse_huawei_manufacture_rows(content)]
 
 
 def _strip_huawei_cli_noise(content: str) -> str:
