@@ -152,27 +152,64 @@ def _huawei_serials_from_text(content: str) -> list[str]:
 
 def _huawei_manufacture_serial_numbers(content: str) -> list[str]:
     """Parse Serial-number column from display device manufacture-info table."""
+    text = _strip_huawei_cli_noise(content)
     serials: list[str] = []
-    for line in (content or "").splitlines():
+    serial_col = 2  # Slot / Sub / Serial-number / Manu-date (fixed switches)
+    for line in text.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.lower().startswith("slot"):
+        low = stripped.lower()
+        if not stripped:
             continue
-        if len(stripped) >= 3 and set(stripped) == {"-"}:
+        if "serial-number" in low and "slot" in low:
+            if "type" in low or "card" in low:
+                serial_col = 3  # Slot / Card / Type / Serial-number / …
+            else:
+                serial_col = 2  # Slot / Sub / Serial-number / Manu-date
+            continue
+        if len(stripped) >= 3 and set(stripped.replace(" ", "")) <= {"-"}:
             continue
         parts = re.split(r"\s{2,}", stripped)
-        if len(parts) >= 4 and parts[0].isdigit():
-            sn = parts[3].strip()
-            if sn and "serial" not in sn.lower():
-                serials.append(sn)
+        if not parts or not parts[0].isdigit():
+            continue
+        idx = serial_col if len(parts) > serial_col else -1
+        if idx < 0:
+            continue
+        sn = parts[idx].strip()
+        if _is_huawei_manufacture_serial(sn):
+            serials.append(sn)
     if serials:
         return serials
     for m in re.finditer(
         r"^\s*\d+\s+[-\d]+\s+\S+\s+(21\d{10,22})\s",
-        content,
+        text,
         re.MULTILINE,
     ):
         serials.append(m.group(1))
     return serials
+
+
+def _strip_huawei_cli_noise(content: str) -> str:
+    """Drop NetDriver banners and device prompts from saved CLI captures."""
+    kept: list[str] = []
+    for line in (content or "").splitlines():
+        s = line.strip()
+        if s.startswith("===== "):
+            continue
+        if re.fullmatch(r"<[^>]+>", s):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _is_huawei_manufacture_serial(token: str) -> bool:
+    t = (token or "").strip()
+    if not t or "serial" in t.lower():
+        return False
+    if re.fullmatch(r"[A-Za-z0-9]{12}", t):
+        return True
+    if re.fullmatch(r"21\d{10,22}", t):
+        return True
+    return bool(re.fullmatch(r"[A-Za-z0-9]{8,24}", t))
 
 
 def parse_huawei_manufacture_info(content: str) -> VersionFields:

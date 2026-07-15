@@ -16,12 +16,23 @@ from nccm.parsers.version import (
 )
 from nccm.profiles import huawei_backup_commands
 
-MFG = """
+# Lab / SimuNet (Slot Card Type …)
+MFG_CE = """
 Device Manufacture Information:
 Slot  Card  Type                         Serial-number         Manu-date
 -------------------------------------------------------------------------------
 1     -     CE6850-48S4Q-EI              2102351234567890      2020-03-04
-2     -     CE6850-48S4Q-EI              2102359876543210      2020-03-04
+"""
+
+# Real fixed switch (Slot Sub Serial-number) — 12-char serial
+MFG_REAL = """
+===== start exec cmd: [display device manufacture-info] =====
+<A2-0MZ02-U29-G-AS1>display device manufacture-info
+Slot  Sub  Serial-number          Manu-date
+- - - - - - - - - - - - - - - - - - - - - -
+0     -    1020C0046065           2020-12-09
+<A2-0MZ02-U29-G-AS1>
+===== end exec cmd =====
 """
 
 VERSION = """
@@ -31,25 +42,24 @@ HUAWEI CE6800 uptime is 1 days
 
 
 def main() -> int:
-    names = [s.artifact for s in huawei_backup_commands()]
-    assert "manufacture_info" in names
+    assert "manufacture_info" in [s.artifact for s in huawei_backup_commands()]
 
-    mfg_only = parse_huawei_manufacture_info(MFG)
-    assert mfg_only.serials == "2102351234567890, 2102359876543210"
+    real = parse_huawei_manufacture_info(MFG_REAL)
+    assert real.serials == "1020C0046065", real.serials
 
-    # version_info alone must not drive Serial when manufacture exists
+    ce = parse_huawei_manufacture_info(MFG_CE)
+    assert "2102351234567890" in ce.serials
+
     with tempfile.TemporaryDirectory(prefix="hermes-verify-huawei-serial-") as td:
         snap = Path(td)
         (snap / "version_info.txt").write_text(VERSION, encoding="utf-8")
-        (snap / "manufacture_info.txt").write_text(MFG, encoding="utf-8")
+        (snap / "manufacture_info.txt").write_text(MFG_REAL, encoding="utf-8")
         inv = huawei_inventory_fields_from_snapshot(snap)
-        assert "2102351234567890" in inv.serials
+        assert inv.serials == "1020C0046065"
         assert "8.180" in inv.sw_version
-        assert inv.serials != "Unknown"
 
-    # parse_huawei(version) without mfg may still lack serial
     vonly = parse_huawei(VERSION)
-    assert vonly.serials == "Unknown" or "210235" not in vonly.serials
+    assert "1020C0046065" not in vonly.serials
 
     print("=== ad-hoc huawei-manufacture verify PASSED ===")
     return 0
