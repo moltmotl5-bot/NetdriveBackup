@@ -49,6 +49,14 @@ def profile_from_csv(vendor: str, model: str | None, version: str | None) -> Net
     return NetDriverProfile(v, m, ver)
 
 
+def cisco_running_config_command(model: str | None) -> str:
+    """NX-OS (nexus) uses plain show running-config; Cisco IOS uses view full."""
+    m = (model or "").strip().lower()
+    if m == "nexus":
+        return "show running-config"
+    return "show running-config view full"
+
+
 def version_command(vendor: str) -> str:
     v = normalize_vendor(vendor)
     if v == "cisco":
@@ -64,10 +72,11 @@ def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
     v = normalize_vendor(vendor)
     m = (model or "").strip().lower()
     if v == "cisco":
+        cfg_cmd = cisco_running_config_command(m)
         if m == "nexus":
             return [
                 CommandSpec("version_info", "show version", login="login"),
-                CommandSpec("config", "show running-config view full", login="login", timeout=300),
+                CommandSpec("config", cfg_cmd, login="login", timeout=300),
                 CommandSpec("interfaces", "show interface status", login="login"),
                 CommandSpec("cdp", "show cdp neighbors", login="login"),
                 CommandSpec("lldp", "show lldp neighbors", login="login"),
@@ -75,7 +84,7 @@ def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
         return [
             CommandSpec("version_info", "show version", login="login"),
             CommandSpec("stack_info", "show switch", login="login"),
-            CommandSpec("config", "show running-config view full", login="login", timeout=300),
+            CommandSpec("config", cfg_cmd, login="login", timeout=300),
             CommandSpec("interfaces", "show interface status", login="login"),
             CommandSpec("cdp", "show cdp neighbors", login="login"),
             CommandSpec("lldp", "show lldp neighbors", login="login"),

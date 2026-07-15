@@ -28,9 +28,13 @@ def main() -> int:
 
     assert _enable_password_for_vendor("cisco", "secret") == ""
     assert _enable_password_for_vendor("fortinet", "secret") == "secret"
+    from nccm.profiles import cisco_running_config_command
+
+    assert cisco_running_config_command("nexus") == "show running-config"
+    assert cisco_running_config_command("catalyst") == "show running-config view full"
     nexus_specs = backup_commands("cisco", "nexus")
     nexus_cfg = next(s for s in nexus_specs if s.artifact == "config")
-    assert nexus_cfg.command == "show running-config view full"
+    assert nexus_cfg.command == "show running-config"
 
     captured: dict = {}
 
