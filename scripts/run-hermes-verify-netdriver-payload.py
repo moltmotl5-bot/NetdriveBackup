@@ -16,8 +16,10 @@ from nccm.profiles import (
     backup_commands,
     cisco_running_config_command,
     default_agent_mode,
+    default_probe_profile,
     huawei_backup_commands,
     fortinet_backup_commands,
+    normalize_profile_for_agent,
 )
 
 

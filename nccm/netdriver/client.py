@@ -6,7 +6,7 @@ import httpx
 
 from nccm.config import netdriver_url
 from nccm.models import NetDriverProfile
-from nccm.profiles import normalize_vendor
+from nccm.profiles import normalize_profile_for_agent, normalize_vendor
 
 
 class NetDriverError(RuntimeError):
@@ -52,6 +52,7 @@ class NetDriverClient:
         enable_password: str = "",
         timeout: int = 60,
     ) -> dict[str, Any]:
+        profile = normalize_profile_for_agent(profile)
         body = {
             "protocol": "ssh",
             "ip": ip,
@@ -91,6 +92,7 @@ class NetDriverClient:
         enable_password: str = "",
         timeout: int = 120,
     ) -> str:
+        profile = normalize_profile_for_agent(profile)
         body = {
             "protocol": "ssh",
             "ip": ip,
@@ -145,6 +147,7 @@ class NetDriverClient:
         password: str,
         profile: NetDriverProfile,
     ) -> None:
+        profile = normalize_profile_for_agent(profile)
         body = {
             "protocol": "ssh",
             "ip": ip,

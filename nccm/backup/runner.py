@@ -11,6 +11,7 @@ from nccm.profiles import (
     default_agent_mode,
     default_probe_profile,
     hostname_from_output,
+    normalize_profile_for_agent,
     normalize_vendor,
     profile_from_csv,
     version_command,
@@ -118,6 +119,7 @@ def _resolve_profile(
     if discovery == "auto":
         classified = classify_from_version_output(row.vendor, version_text)
         if classified and (classified.model, classified.version) != (probe.model, probe.version):
+            classified = normalize_profile_for_agent(classified)
             log(
                 f"{row.ip}: auto classified → {classified.model}/{classified.version}, reconnecting"
             )
@@ -138,7 +140,7 @@ def _resolve_profile(
             )
             final = classified
         elif classified:
-            final = classified
+            final = normalize_profile_for_agent(classified)
 
     return final, discovery, version_text
 

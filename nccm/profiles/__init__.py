@@ -40,14 +40,42 @@ def default_probe_profile(vendor: str, port: int | None = None) -> NetDriverProf
         }
         hint = lab_by_port.get(int(port))
         if hint and hint.vendor == v:
-            return hint
+            return normalize_profile_for_agent(hint)
     if v == "cisco":
         return NetDriverProfile("cisco", "catalyst", "17.0")
     if v == "huawei":
-        return NetDriverProfile("huawei", "ce", "8.0")
+        return normalize_profile_for_agent(NetDriverProfile("huawei", "ce", "8.0"))
     if v == "fortinet":
-        return NetDriverProfile("fortinet", "fortigate", "7.2")
+        return normalize_profile_for_agent(NetDriverProfile("fortinet", "fortigate", "7.2"))
     raise ValueError(f"unsupported vendor: {vendor}")
+
+
+def normalize_profile_for_agent(profile: NetDriverProfile) -> NetDriverProfile:
+    """Map NCCM/discovered model strings to NetDriver Agent CommonRequest.model patterns."""
+    v = normalize_vendor(profile.vendor)
+    ver = (str(profile.version).strip() if profile.version else "") or "1.0"
+    raw = (str(profile.model).strip().lower() if profile.model else "") or ""
+
+    if v == "huawei":
+        # Agent allows huawei + ce.*|usg.* only (plugins: huawei.ce in agent.yml).
+        if re.fullmatch(r"usg.*", raw):
+            model = raw
+        elif re.search(r"usg", raw):
+            model = "usg6000"
+        elif raw in ("", "ce", "ar") or re.fullmatch(r"ce.*", raw):
+            # AR routers: no ar.* plugin — use ce profile for SSH/exec.
+            model = "ce" if raw in ("", "ce", "ar") else raw
+        elif re.search(r"ce\d|cloudengine|s\d{4}", raw, re.I):
+            model = "ce6800"
+        else:
+            model = "ce"
+        return NetDriverProfile("huawei", model, ver)
+
+    if v == "fortinet":
+        model = raw if re.fullmatch(r"fortigate.*", raw) else "fortigate"
+        return NetDriverProfile("fortinet", model, ver or "7.2")
+
+    return profile
 
 
 def profile_from_csv(vendor: str, model: str | None, version: str | None) -> NetDriverProfile | None:
@@ -56,7 +84,7 @@ def profile_from_csv(vendor: str, model: str | None, version: str | None) -> Net
     v = normalize_vendor(vendor)
     m = str(model).strip().lower()
     ver = (str(version).strip() if version else "") or "1.0"
-    return NetDriverProfile(v, m, ver)
+    return normalize_profile_for_agent(NetDriverProfile(v, m, ver))
 
 
 def cisco_running_config_command(model: str | None) -> str:
