@@ -66,7 +66,7 @@ def _classify_cable(local_port: str, remote_port: str) -> str:
             return "ethernet"
         if p.startswith("fa"):
             return "fastethernet"
-        if re.match(r"^(ge|xge|10ge|40ge|100ge)\d", p, re.I):
+        if re.match(r"^(ge|xge|10ge|40ge|100ge|multige)\d", p, re.I):
             return "gigabit"
     return "unknown"
 
@@ -217,7 +217,7 @@ def _looks_like_huawei_iface(name: str) -> bool:
     n = (name or "").strip()
     return bool(
         re.match(
-            r"^(GE|XGE|10GE|40GE|100GE|MEth|Eth-Trunk|Vlan-interface|"
+            r"^(MultiGE|GE|XGE|10GE|40GE|100GE|MEth|Eth-Trunk|Vlan-interface|"
             r"GigabitEthernet|Ethernet)\S*",
             n,
             re.I,
@@ -225,52 +225,97 @@ def _looks_like_huawei_iface(name: str) -> bool:
     )
 
 
+def _huawei_lldp_row_columns(parts: list[str], layout: str) -> tuple[str, str, str] | None:
+    """Return (local_port, remote_hostname, remote_port) from split columns."""
+    if len(parts) < 4:
+        return None
+    if layout == "dev_first":
+        if not parts[-1].strip().isdigit():
+            return None
+        local_port = parts[0].strip()
+        remote_host = parts[1].strip()
+        remote_port = parts[2].strip()
+    else:
+        if not parts[1].strip().isdigit():
+            return None
+        local_port = parts[0].strip()
+        remote_port = parts[2].strip()
+        remote_host = " ".join(parts[3:-1] if layout == "exptime_last_dev" else parts[3:]).strip()
+        if layout == "exptime_mid":
+            remote_host = " ".join(parts[3:]).strip()
+            remote_port = parts[2].strip()
+    if not _looks_like_huawei_iface(local_port):
+        return None
+    if not remote_host:
+        return None
+    return local_port, remote_host, remote_port
+
+
+def _detect_huawei_lldp_layout(header_line: str) -> str:
+    h = header_line.lower()
+    if "neighbor dev" in h and "neighbor intf" in h:
+        return "dev_first"
+    if "exptime" in h and "neighbor interface" in h:
+        return "exptime_mid"
+    return "dev_first"
+
+
 def parse_huawei_lldp_neighbor_brief(text: str, local_device: str) -> list[NeighborRecord]:
-    """Parse Huawei `display lldp neighbor brief` (not Cisco `show lldp neighbors`)."""
+    """Parse Huawei `display lldp neighbor brief` (column order varies by VRP version)."""
     body = _strip_huawei_cli_banners(text)
     if not body.strip():
         return []
     if re.search(r"(?i)error:|unrecognized command|% invalid", body[:400]):
         return []
 
+    layout = "dev_first"
     records: list[NeighborRecord] = []
     for line in body.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
         low = stripped.lower()
-        if "local interface" in low and "neighbor" in low:
+        if "display lldp neighbor" in low:
+            continue
+        if ("local intf" in low or "local interface" in low) and "neighbor" in low:
+            layout = _detect_huawei_lldp_layout(stripped)
             continue
         if low.startswith("total number"):
             break
 
-        parts = re.split(r"\s{2,}", stripped)
-        if len(parts) >= 4 and parts[1].isdigit() and _looks_like_huawei_iface(parts[0]):
-            local_port = parts[0].strip()
-            remote_port = parts[2].strip()
-            remote = _clean_remote_device_id(" ".join(parts[3:]).strip())
+        parts = [p for p in re.split(r"\s{2,}", stripped) if p]
+        if len(parts) >= 4 and parts[-1].strip().isdigit() and _looks_like_huawei_iface(parts[0]):
+            if layout == "dev_first":
+                local_port = parts[0]
+                remote_host = parts[1]
+                remote_port = parts[2]
+            elif parts[1].strip().isdigit():
+                local_port = parts[0]
+                remote_port = parts[2]
+                remote_host = " ".join(parts[3:-1]) if len(parts) > 4 else parts[3]
+                remote_host = remote_host.rsplit(None, 1)[0] if len(parts) == 4 else remote_host
+                if len(parts) == 4:
+                    remote_host = parts[3]
+            else:
+                continue
+            remote = _clean_remote_device_id(remote_host.strip())
             records.append(
                 NeighborRecord(
-                    local_interface=local_port,
+                    local_interface=local_port.strip(),
                     remote_hostname=remote,
-                    remote_port=remote_port,
+                    remote_port=remote_port.strip(),
                     cable_type=_classify_cable(local_port, remote_port),
                 )
             )
             continue
 
-        m = re.match(
-            r"^(\S+)\s+(\d+)\s+(\S+)\s+(.+)$",
-            stripped,
-        )
-        if m and _looks_like_huawei_iface(m.group(1)):
-            local_port = m.group(1)
-            remote_port = m.group(3)
-            remote = _clean_remote_device_id(m.group(4).strip())
+        cols = _huawei_lldp_row_columns(parts, layout)
+        if cols:
+            local_port, remote_host, remote_port = cols
             records.append(
                 NeighborRecord(
                     local_interface=local_port,
-                    remote_hostname=remote,
+                    remote_hostname=_clean_remote_device_id(remote_host),
                     remote_port=remote_port,
                     cable_type=_classify_cable(local_port, remote_port),
                 )
@@ -365,28 +410,35 @@ def neighbors_from_backup_snapshot(
     hostname_lookup: dict[str, str],
 ) -> tuple[list[dict[str, Any]], str, str]:
     """Parse CDP/LLDP neighbor rows for one backup snapshot directory."""
+    v_norm = (vendor or "").strip().lower()
     cdp_text = ""
     lldp_text = ""
     cdp_status = "missing"
     lldp_status = "missing"
 
     if backup_path and os.path.isdir(backup_path):
-        cdp_text = _read_neighbor_artifact(backup_path, "cdp_neighbors.txt", "cdp.txt")
-        if cdp_text:
-            cdp_status = "error" if _is_cdp_error(cdp_text) else "ok"
+        if v_norm != "huawei":
+            cdp_text = _read_neighbor_artifact(backup_path, "cdp_neighbors.txt", "cdp.txt")
+            if cdp_text:
+                cdp_status = "error" if _is_cdp_error(cdp_text) else "ok"
+        else:
+            cdp_status = "n/a"
         lldp_text = _read_neighbor_artifact(backup_path, "lldp_neighbors.txt", "lldp.txt")
         if lldp_text:
-            lldp_status = "error" if "% Invalid" in lldp_text[:300] else "ok"
+            if re.search(r"(?i)error:|% invalid", lldp_text[:400]):
+                lldp_status = "error"
+            else:
+                lldp_status = "ok"
 
-    skip_lldp = (vendor or "").lower() == "cisco" and cdp_status == "ok"
+    skip_lldp = v_norm == "cisco" and cdp_status == "ok"
     if skip_lldp:
         lldp_status = "skipped"
 
     neighbor_rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str, str]] = set()
-    protocol_sources: list[tuple[str, Any, str]] = [
-        ("CDP", parse_show_cdp_neighbors, cdp_text),
-    ]
+    protocol_sources: list[tuple[str, Any, str]] = []
+    if v_norm != "huawei":
+        protocol_sources.append(("CDP", parse_show_cdp_neighbors, cdp_text))
     if not skip_lldp:
         protocol_sources.append(
             ("LLDP", lldp_parser_for_vendor(vendor), lldp_text),

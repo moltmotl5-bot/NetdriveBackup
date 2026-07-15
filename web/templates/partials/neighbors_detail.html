@@ -9,25 +9,39 @@
     {% endfor %}
   </select>
 </form>
-<p class="meta">CDP: {{ cdp_status }} · LLDP: {{ lldp_status }}</p>
-{% if cdp_status == 'error' %}
+<p class="meta">
+  {% if device_vendor|lower == 'huawei' %}
+  <strong>Huawei</strong>：僅 <strong>LLDP</strong>（<code>display lldp neighbor brief</code>）· CDP: {{ cdp_status }} · LLDP: {{ lldp_status }}
+  {% if neighbor_rows %} · 共 {{ neighbor_rows|length }} 筆{% endif %}
+  {% else %}
+  CDP: {{ cdp_status }} · LLDP: {{ lldp_status }}
+  {% endif %}
+</p>
+{% if cdp_status == 'error' and device_vendor|lower != 'huawei' %}
 <p class="error">cdp_neighbors.txt 可能為無效指令輸出。</p>
+{% endif %}
+{% if device_vendor|lower == 'huawei' and lldp_status == 'ok' and neighbor_rows %}
+<p class="meta muted">協定欄皆為 LLDP；鄰居設備名稱來自 Neighbor Dev。</p>
 {% endif %}
 <table class="inv-table">
   <thead>
-    <tr><th>本端介面</th><th>協定</th><th>鄰居設備</th><th>鄰居介面</th><th>連線類型</th></tr>
+    <tr>
+      <th>本端介面</th>
+      {% if device_vendor|lower != 'huawei' %}<th>協定</th>{% endif %}
+      <th>鄰居設備</th><th>鄰居介面</th><th>連線類型</th>
+    </tr>
   </thead>
   <tbody>
     {% for n in neighbor_rows %}
     <tr>
       <td>{{ n.local_interface }}</td>
-      <td>{{ n.protocol }}</td>
+      {% if device_vendor|lower != 'huawei' %}<td>{{ n.protocol }}</td>{% endif %}
       <td>{{ n.remote_device }}</td>
       <td>{{ n.remote_port }}</td>
       <td>{{ n.cable_type }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">無鄰居紀錄</td></tr>
+    <tr><td colspan="{% if device_vendor|lower == 'huawei' %}4{% else %}5{% endif %}" class="muted">無鄰居紀錄</td></tr>
     {% endfor %}
   </tbody>
 </table>

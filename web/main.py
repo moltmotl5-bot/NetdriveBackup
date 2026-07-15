@@ -504,6 +504,11 @@ async def neighbors_page(
         )
         display_neighbors = neighbor_display_rows(neighbor_rows, lookup)
 
+    device_vendor = ""
+    if device_key:
+        _dr, _log, *_rest = resolve_neighbor_context(device_key)
+        device_vendor = (_log.vendor if _log else (_dr.vendor if _dr else "")) or ""
+
     return templates.TemplateResponse(
         request,
         "neighbors.html",
@@ -522,6 +527,7 @@ async def neighbors_page(
             cdp_status=cdp_status,
             lldp_status=lldp_status,
             version_label=version_label,
+            device_vendor=device_vendor,
         ),
     )
 
@@ -556,6 +562,7 @@ async def neighbors_detail_partial(
         neighbor_device_rows,
         neighbor_display_rows,
         neighbors_for_device,
+        resolve_neighbor_context,
     )
 
     _, lookup = neighbor_device_rows()
@@ -564,11 +571,12 @@ async def neighbors_detail_partial(
     )
     display_neighbors = neighbor_display_rows(neighbor_rows, lookup)
     from nccm.parsers.cdp_lldp import list_device_backup_versions
-    from nccm.inventory.neighbors import resolve_neighbor_context
 
     versions: list[str] = []
+    device_vendor = ""
     if device_key:
-        _d, _l, store, _ph, _v, _did = resolve_neighbor_context(device_key)
+        dr, log, store, _ph, _v, _did = resolve_neighbor_context(device_key)
+        device_vendor = (log.vendor if log else (dr.vendor if dr else "")) or ""
         versions = list_device_backup_versions(str(store), 10)
 
     return templates.TemplateResponse(
@@ -583,6 +591,7 @@ async def neighbors_detail_partial(
             neighbor_rows=display_neighbors,
             cdp_status=cdp,
             lldp_status=lldp,
+            device_vendor=device_vendor,
         ),
     )
 

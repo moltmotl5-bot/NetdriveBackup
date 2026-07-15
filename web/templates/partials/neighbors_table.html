@@ -22,7 +22,7 @@
       <td>{{ r.vendor }}</td>
       <td>{{ r.sw_version }}</td>
       <td>{{ r.neighbor_count }}</td>
-      <td>{{ r.cdp_status }}</td>
+      <td>{% if r.vendor|lower == 'huawei' %}<span class="muted" title="Huawei 不支援 CDP">n/a</span>{% else %}{{ r.cdp_status }}{% endif %}</td>
       <td>{{ r.lldp_status }}</td>
     </tr>
     {% else %}
