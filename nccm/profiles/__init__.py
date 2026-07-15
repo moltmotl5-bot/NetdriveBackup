@@ -10,7 +10,7 @@ from nccm.models import NetDriverProfile
 class CommandSpec:
     artifact: str
     command: str
-    login: str = "login"
+    agent_mode: str
     timeout: int = 120
 
 
@@ -18,6 +18,16 @@ def normalize_vendor(raw: str) -> str:
     v = str(raw).strip().lower().replace(" ", "_").replace("-", "_")
     aliases = {"fortigate": "fortinet", "forti": "fortinet"}
     return aliases.get(v, v)
+
+
+def default_agent_mode(vendor: str) -> str:
+    """NetDriver execution mode per vendor plugin (_SUPPORTED_MODES)."""
+    v = normalize_vendor(vendor)
+    if v == "cisco":
+        return "login"
+    if v in ("huawei", "fortinet"):
+        return "enable"
+    raise ValueError(f"unsupported vendor: {vendor}")
 
 
 def default_probe_profile(vendor: str, port: int | None = None) -> NetDriverProfile:
@@ -68,41 +78,56 @@ def version_command(vendor: str) -> str:
     raise ValueError(vendor)
 
 
+def cisco_backup_commands(model: str | None) -> list[CommandSpec]:
+    m = (model or "").strip().lower()
+    mode = "login"
+    cfg_cmd = cisco_running_config_command(m)
+    if m == "nexus":
+        return [
+            CommandSpec("version_info", "show version", mode),
+            CommandSpec("config", cfg_cmd, mode, timeout=300),
+            CommandSpec("interfaces", "show interface status", mode),
+            CommandSpec("cdp", "show cdp neighbors", mode),
+            CommandSpec("lldp", "show lldp neighbors", mode),
+        ]
+    return [
+        CommandSpec("version_info", "show version", mode),
+        CommandSpec("stack_info", "show switch", mode),
+        CommandSpec("config", cfg_cmd, mode, timeout=300),
+        CommandSpec("interfaces", "show interface status", mode),
+        CommandSpec("cdp", "show cdp neighbors", mode),
+        CommandSpec("lldp", "show lldp neighbors", mode),
+    ]
+
+
+def huawei_backup_commands() -> list[CommandSpec]:
+    mode = "enable"
+    return [
+        CommandSpec("version_info", "display version", mode),
+        CommandSpec("config", "display current-configuration", mode, timeout=300),
+        CommandSpec("interfaces", "display interface brief", mode),
+        CommandSpec("lldp", "display lldp neighbor brief", mode),
+    ]
+
+
+def fortinet_backup_commands() -> list[CommandSpec]:
+    mode = "enable"
+    return [
+        CommandSpec("version_info", "get system status", mode),
+        CommandSpec("ha_status", "get system ha status", mode),
+        CommandSpec("config", "show full-configuration", mode, timeout=600),
+        CommandSpec("interfaces", "get system interface physical", mode),
+    ]
+
+
 def backup_commands(vendor: str, model: str | None = None) -> list[CommandSpec]:
     v = normalize_vendor(vendor)
-    m = (model or "").strip().lower()
     if v == "cisco":
-        cfg_cmd = cisco_running_config_command(m)
-        if m == "nexus":
-            return [
-                CommandSpec("version_info", "show version", login="login"),
-                CommandSpec("config", cfg_cmd, login="login", timeout=300),
-                CommandSpec("interfaces", "show interface status", login="login"),
-                CommandSpec("cdp", "show cdp neighbors", login="login"),
-                CommandSpec("lldp", "show lldp neighbors", login="login"),
-            ]
-        return [
-            CommandSpec("version_info", "show version", login="login"),
-            CommandSpec("stack_info", "show switch", login="login"),
-            CommandSpec("config", cfg_cmd, login="login", timeout=300),
-            CommandSpec("interfaces", "show interface status", login="login"),
-            CommandSpec("cdp", "show cdp neighbors", login="login"),
-            CommandSpec("lldp", "show lldp neighbors", login="login"),
-        ]
+        return cisco_backup_commands(model)
     if v == "huawei":
-        return [
-            CommandSpec("version_info", "display version"),
-            CommandSpec("config", "display current-configuration", timeout=300),
-            CommandSpec("interfaces", "display interface brief"),
-            CommandSpec("lldp", "display lldp neighbor brief"),
-        ]
+        return huawei_backup_commands()
     if v == "fortinet":
-        return [
-            CommandSpec("version_info", "get system status"),
-            CommandSpec("ha_status", "get system ha status"),
-            CommandSpec("config", "show full-configuration", timeout=600),
-            CommandSpec("interfaces", "get system interface physical"),
-        ]
+        return fortinet_backup_commands()
     raise ValueError(f"unsupported vendor: {vendor}")
 
 
@@ -116,7 +141,6 @@ def hostname_from_output(vendor: str, text: str) -> str:
         if m:
             return m.group(1)
     if v == "fortinet":
-        # Prefer explicit hostname (handle optional quotes)
         for pat in [
             r'set hostname\s+"?([A-Za-z0-9_.-]+)"?',
             r"Hostname:\s*([A-Za-z0-9_.-]+)",
@@ -124,7 +148,6 @@ def hostname_from_output(vendor: str, text: str) -> str:
             m = re.search(pat, text, re.I)
             if m:
                 val = m.group(1)
-                # Avoid picking serial numbers as hostname
                 if not (val.upper().startswith("FGT") and len(val) > 8):
                     return val
         m = re.search(r'set alias "([^"]+)"', text, re.I)

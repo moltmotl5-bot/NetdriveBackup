@@ -6,6 +6,7 @@ import httpx
 
 from nccm.config import netdriver_url
 from nccm.models import NetDriverProfile
+from nccm.profiles import normalize_vendor
 
 
 class NetDriverError(RuntimeError):
@@ -13,6 +14,22 @@ class NetDriverError(RuntimeError):
 
 
 class NetDriverClient:
+    @staticmethod
+    def command_entry(*, vendor: str, agent_mode: str, command: str) -> dict:
+        """Build one /api/v1/cmd command object — field name differs by vendor plugin."""
+        entry: dict = {
+            "type": "raw",
+            "command": command,
+            "template": "",
+            "detail_output": True,
+        }
+        v = normalize_vendor(vendor)
+        if v == "cisco":
+            entry["login"] = agent_mode
+        else:
+            entry["mode"] = agent_mode
+        return entry
+
     def __init__(self, base_url: str | None = None, timeout: float = 120.0):
         self.base_url = (base_url or netdriver_url()).rstrip("/")
         self.timeout = timeout
@@ -70,7 +87,7 @@ class NetDriverClient:
         password: str,
         profile: NetDriverProfile,
         command: str,
-        login: str = "login",
+        agent_mode: str,
         enable_password: str = "",
         timeout: int = 120,
     ) -> str:
@@ -89,13 +106,11 @@ class NetDriverClient:
             "timeout": timeout,
             "continue_on_error": False,
             "commands": [
-                {
-                    "type": "raw",
-                    "login": login,
-                    "command": command,
-                    "template": "",
-                    "detail_output": True,
-                }
+                self.command_entry(
+                    vendor=profile.vendor,
+                    agent_mode=agent_mode,
+                    command=command,
+                )
             ],
         }
         r = httpx.post(

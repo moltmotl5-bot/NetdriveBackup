@@ -8,6 +8,7 @@ from nccm.models import BackupResult, DeviceRow, NetDriverProfile
 from nccm.netdriver.client import NetDriverClient, NetDriverError
 from nccm.profiles import (
     backup_commands,
+    default_agent_mode,
     default_probe_profile,
     hostname_from_output,
     normalize_vendor,
@@ -49,6 +50,7 @@ def _fetch_version_text(
     log: LogFn,
 ) -> str:
     primary = version_command(row.vendor)
+    amode = default_agent_mode(row.vendor)
     try:
         return client.cmd(
             ip=row.ip,
@@ -57,6 +59,7 @@ def _fetch_version_text(
             password=password,
             profile=profile,
             command=primary,
+            agent_mode=amode,
             enable_password=enable_password,
             timeout=120,
         )
@@ -72,6 +75,7 @@ def _fetch_version_text(
             password=password,
             profile=profile,
             command=fb,
+            agent_mode=amode,
             enable_password=enable_password,
             timeout=300,
         )
@@ -184,7 +188,7 @@ def backup_device(
                     password=password,
                     profile=profile,
                     command=spec.command,
-                    login=spec.login,
+                    agent_mode=spec.agent_mode,
                     enable_password=ep,
                     timeout=spec.timeout,
                 )
