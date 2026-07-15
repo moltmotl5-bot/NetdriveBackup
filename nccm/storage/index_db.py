@@ -10,7 +10,7 @@ from typing import Any, Iterator
 from nccm.config import store_dir
 from nccm.profiles import normalize_vendor
 from nccm.parsers.stack import config_anchor_unit, parse_cisco_stack_units, parse_fortigate_ha_units
-from nccm.parsers.version import parse_version_info
+from nccm.parsers.version import huawei_inventory_fields_from_snapshot, parse_version_info
 from nccm.storage.writer import safe_hostname
 
 _SCHEMA = """
@@ -242,14 +242,12 @@ def _sync_stack_units(
 
 
 def _read_version_from_snapshot(snap_dir: Path, vendor: str) -> Any:
+    if normalize_vendor(vendor) == "huawei":
+        return huawei_inventory_fields_from_snapshot(snap_dir)
     vf = snap_dir / "version_info.txt"
-    text = vf.read_text(encoding="utf-8", errors="replace") if vf.is_file() else ""
-    mfg = snap_dir / "manufacture_info.txt"
-    if normalize_vendor(vendor) == "huawei" and mfg.is_file():
-        text = f"{text}\n{mfg.read_text(encoding='utf-8', errors='replace')}"
-    if not text.strip():
+    if not vf.is_file():
         return parse_version_info("", vendor)
-    return parse_version_info(text, vendor)
+    return parse_version_info(vf.read_text(encoding="utf-8", errors="replace"), vendor)
 
 
 def index_manifest(manifest: dict[str, Any], snapshot_path: Path) -> int:

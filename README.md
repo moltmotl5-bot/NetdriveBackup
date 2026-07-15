@@ -144,7 +144,7 @@ Web 支援 **上傳 CSV** 或貼上內容；備份在背景執行，頁面以 **
 | **Huawei** | `enable` | `mode` | `display current-configuration` 等；另備份 **`display device manufacture-info`** → 庫存 **序號** |
 | **Fortinet** | `enable` | `mode` | `show full-configuration` 等 |
 
-Cisco 備份**不傳** `enable_password`；Huawei／Fortinet 仍可使用 Portal 的 enable 密碼（若設備需要）。版本探測指令亦使用各廠 `default_agent_mode()`。
+Cisco 備份**不傳** `enable_password`；Huawei／Fortinet 仍可使用 Portal 的 enable 密碼（若設備需要）。**Huawei 設備總表 Serial** 僅取自快照 **`manufacture_info.txt`**（`display device manufacture-info` 的 **Serial-number** 欄）；備份後請 **重建索引** 更新總表。
 
 ---
 

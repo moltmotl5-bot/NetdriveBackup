@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -129,13 +130,10 @@ def parse_huawei(content: str) -> VersionFields:
 
 
 def _huawei_serials_from_text(content: str) -> list[str]:
-    serials_list: list[str] = []
-    for m in re.finditer(
-        r"^\s*\d+\s+[-\d]+\s+\S+\s+(21\d{10,22})\s",
-        content,
-        re.MULTILINE,
-    ):
-        serials_list.append(m.group(1))
+    serials_list = _huawei_manufacture_serial_numbers(content)
+    if serials_list:
+        return serials_list
+    serials_list = []
     serials_list.extend(
         re.findall(
             r"(?:Serial[- ]?number|BarCode|Device serial number)\s*[:=]\s*(\S+)",
@@ -150,6 +148,72 @@ def _huawei_serials_from_text(content: str) -> list[str]:
             r"Equipment serial number\s*:\s*([A-Za-z0-9]+)", content, re.IGNORECASE
         )
     return serials_list
+
+
+def _huawei_manufacture_serial_numbers(content: str) -> list[str]:
+    """Parse Serial-number column from display device manufacture-info table."""
+    serials: list[str] = []
+    for line in (content or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.lower().startswith("slot"):
+            continue
+        if len(stripped) >= 3 and set(stripped) == {"-"}:
+            continue
+        parts = re.split(r"\s{2,}", stripped)
+        if len(parts) >= 4 and parts[0].isdigit():
+            sn = parts[3].strip()
+            if sn and "serial" not in sn.lower():
+                serials.append(sn)
+    if serials:
+        return serials
+    for m in re.finditer(
+        r"^\s*\d+\s+[-\d]+\s+\S+\s+(21\d{10,22})\s",
+        content,
+        re.MULTILINE,
+    ):
+        serials.append(m.group(1))
+    return serials
+
+
+def parse_huawei_manufacture_info(content: str) -> VersionFields:
+    """Inventory serial_summary for Huawei must come from manufacture-info output."""
+    text = content or ""
+    return VersionFields(
+        vendor_label="Huawei",
+        sw_version="Unknown",
+        models=_join_unique(_huawei_models_from_text(text)),
+        serials=_join_unique(_huawei_manufacture_serial_numbers(text)),
+    )
+
+
+def huawei_inventory_fields_from_snapshot(snap_dir: Path) -> VersionFields:
+    """Device table: Version/SW from version_info; Serial from manufacture_info.txt when present."""
+    vf = snap_dir / "version_info.txt"
+    version_text = (
+        vf.read_text(encoding="utf-8", errors="replace") if vf.is_file() else ""
+    )
+    base = (
+        parse_huawei(version_text)
+        if version_text.strip()
+        else VersionFields("Huawei", "Unknown", "Unknown", "Unknown")
+    )
+    mfg = snap_dir / "manufacture_info.txt"
+    if not mfg.is_file():
+        return base
+    mfg_text = mfg.read_text(encoding="utf-8", errors="replace")
+    if not mfg_text.strip():
+        return base
+    mfg_fields = parse_huawei_manufacture_info(mfg_text)
+    return VersionFields(
+        vendor_label=base.vendor_label,
+        sw_version=base.sw_version,
+        models=(
+            mfg_fields.models
+            if mfg_fields.models != "Unknown"
+            else base.models
+        ),
+        serials=mfg_fields.serials,
+    )
 
 
 def _huawei_models_from_text(content: str) -> list[str]:
