@@ -488,6 +488,7 @@ async def neighbors_page(
         neighbor_device_rows,
         neighbor_display_rows,
         neighbors_for_device,
+        resolve_neighbor_context,
     )
     from nccm.storage.index_db import list_sites, list_vendors
 
