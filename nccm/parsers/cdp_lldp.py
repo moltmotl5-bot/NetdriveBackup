@@ -13,7 +13,8 @@ import pandas as pd
 
 _IFACE_TOKEN = (
     r"(?:GigabitEthernet|TenGigabitEthernet|FastEthernet|Ethernet|"
-    r"Gig|Gi|Ten|Te|Eth|Et|Fa)\s*[\d/]+"
+    r"Gig|Gi|Ten|Te|Eth|Et|Fa|GE|XGE|10GE|40GE|100GE|MEth|Eth-Trunk)\s*[\d/]+|"
+    r"(?:GE|XGE|10GE|40GE|100GE|MEth)\d+[\d/]*"
 )
 
 
@@ -65,6 +66,8 @@ def _classify_cable(local_port: str, remote_port: str) -> str:
             return "ethernet"
         if p.startswith("fa"):
             return "fastethernet"
+        if re.match(r"^(ge|xge|10ge|40ge|100ge)\d", p, re.I):
+            return "gigabit"
     return "unknown"
 
 
@@ -198,6 +201,91 @@ def parse_show_lldp_neighbors(text: str, local_device: str) -> list[NeighborReco
     return records
 
 
+def _strip_huawei_cli_banners(text: str) -> str:
+    kept: list[str] = []
+    for line in (text or "").replace("\r", "").split("\n"):
+        s = line.strip()
+        if s.startswith("===== "):
+            continue
+        if re.fullmatch(r"<[^>]+>", s):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _looks_like_huawei_iface(name: str) -> bool:
+    n = (name or "").strip()
+    return bool(
+        re.match(
+            r"^(GE|XGE|10GE|40GE|100GE|MEth|Eth-Trunk|Vlan-interface|"
+            r"GigabitEthernet|Ethernet)\S*",
+            n,
+            re.I,
+        )
+    )
+
+
+def parse_huawei_lldp_neighbor_brief(text: str, local_device: str) -> list[NeighborRecord]:
+    """Parse Huawei `display lldp neighbor brief` (not Cisco `show lldp neighbors`)."""
+    body = _strip_huawei_cli_banners(text)
+    if not body.strip():
+        return []
+    if re.search(r"(?i)error:|unrecognized command|% invalid", body[:400]):
+        return []
+
+    records: list[NeighborRecord] = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        low = stripped.lower()
+        if "local interface" in low and "neighbor" in low:
+            continue
+        if low.startswith("total number"):
+            break
+
+        parts = re.split(r"\s{2,}", stripped)
+        if len(parts) >= 4 and parts[1].isdigit() and _looks_like_huawei_iface(parts[0]):
+            local_port = parts[0].strip()
+            remote_port = parts[2].strip()
+            remote = _clean_remote_device_id(" ".join(parts[3:]).strip())
+            records.append(
+                NeighborRecord(
+                    local_interface=local_port,
+                    remote_hostname=remote,
+                    remote_port=remote_port,
+                    cable_type=_classify_cable(local_port, remote_port),
+                )
+            )
+            continue
+
+        m = re.match(
+            r"^(\S+)\s+(\d+)\s+(\S+)\s+(.+)$",
+            stripped,
+        )
+        if m and _looks_like_huawei_iface(m.group(1)):
+            local_port = m.group(1)
+            remote_port = m.group(3)
+            remote = _clean_remote_device_id(m.group(4).strip())
+            records.append(
+                NeighborRecord(
+                    local_interface=local_port,
+                    remote_hostname=remote,
+                    remote_port=remote_port,
+                    cable_type=_classify_cable(local_port, remote_port),
+                )
+            )
+
+    return records
+
+
+def lldp_parser_for_vendor(vendor: str):
+    v = (vendor or "").strip().lower()
+    if v == "huawei":
+        return parse_huawei_lldp_neighbor_brief
+    return parse_show_lldp_neighbors
+
+
 def _register_hostname(
     hostname_lookup: dict[str, str],
     device_key: str,
@@ -300,7 +388,9 @@ def neighbors_from_backup_snapshot(
         ("CDP", parse_show_cdp_neighbors, cdp_text),
     ]
     if not skip_lldp:
-        protocol_sources.append(("LLDP", parse_show_lldp_neighbors, lldp_text))
+        protocol_sources.append(
+            ("LLDP", lldp_parser_for_vendor(vendor), lldp_text),
+        )
 
     for protocol, parser, text in protocol_sources:
         if not text.strip():
