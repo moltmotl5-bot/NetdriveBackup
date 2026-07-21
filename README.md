@@ -4,7 +4,8 @@
 取代舊版 Streamlit / Netmiko 單體；**不支援 WLC**；備份資料寫入 **`store/`**，索引為 **`store/index.db`**。
 
 **GitHub：** https://github.com/moltmotl5-bot/NetdriveBackup  
-**完整圖文手冊：** [docs/Handbook.html](docs/Handbook.html)（瀏覽器開啟；含安裝、設定、各頁操作與維運）
+**完整圖文手冊：** [docs/Handbook.html](docs/Handbook.html)（瀏覽器開啟；含安裝、設定、各頁操作與維運）  
+**AAA-addon 增強計畫：** [docs/AAA-addon-enhancement-plan.html](docs/AAA-addon-enhancement-plan.html)（P0–P3、外部資料前置、階段啟動 Prompt）
 
 ---
 
@@ -308,6 +309,7 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 | `web/` | FastAPI + HTMX 前端 |
 | `docs/NCCM-v3-spec.md` | 技術規格摘要 |
 | `docs/Handbook.html` | **使用手冊**（安裝／設定／操作） |
+| `docs/AAA-addon-enhancement-plan.html` | **AAA-addon 增強計畫**（P0–P3、外部資料、啟動 Prompt） |
 | `legacy/` | 封存之 Streamlit 單體與舊文件 |
 
 ---

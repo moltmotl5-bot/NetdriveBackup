@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NCCM v3 · AAA-addon 系統增強計畫</title>
+  <style>
+    :root {
+      --bg: #0c1018;
+      --sidebar: #121a28;
+      --card: #1a2436;
+      --text: #e8edf5;
+      --muted: #8fa3be;
+      --accent: #3d8bfd;
+      --accent2: #2dd4a8;
+      --warn: #e6a700;
+      --danger: #f07178;
+      --border: #2a3850;
+      --code-bg: #0a0f16;
+      --prompt-bg: #0d1520;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "SF Pro Text", "PingFang TC", "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      margin: 0;
+      display: grid;
+      grid-template-columns: minmax(200px, 17rem) 1fr;
+      min-height: 100vh;
+    }
+    nav.toc {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100vh;
+      overflow-y: auto;
+      background: var(--sidebar);
+      border-right: 1px solid var(--border);
+      padding: 1.25rem 1rem 2rem;
+      font-size: 0.82rem;
+    }
+    nav.toc .brand { font-weight: 700; font-size: 0.95rem; color: #fff; margin-bottom: 0.35rem; line-height: 1.35; }
+    nav.toc .ver { color: var(--muted); margin-bottom: 1.25rem; font-size: 0.75rem; }
+    nav.toc a {
+      display: block; color: var(--muted); text-decoration: none;
+      padding: 0.35rem 0.5rem; border-radius: 6px; margin: 0.1rem 0;
+    }
+    nav.toc a:hover { background: rgba(61, 139, 253, 0.12); color: var(--text); }
+    nav.toc .group {
+      color: #6b7f99; font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: 0.06em; margin: 1rem 0 0.35rem 0.5rem;
+    }
+    main { padding: 2rem 2.5rem 4rem; max-width: 54rem; }
+    h1 { font-size: 1.85rem; margin: 0 0 0.35rem; }
+    .lead { color: var(--muted); font-size: 1.05rem; margin-bottom: 1.5rem; }
+    h2 {
+      font-size: 1.3rem; margin-top: 2.75rem; padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border); color: #fff; scroll-margin-top: 1rem;
+    }
+    h3 { font-size: 1.05rem; margin-top: 1.6rem; color: #c5d4e8; scroll-margin-top: 1rem; }
+    h4 { font-size: 0.95rem; margin-top: 1.1rem; color: var(--accent2); }
+    p, li { color: var(--text); }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.9rem;
+      margin: 0.75rem 0 1.25rem; background: var(--card);
+      border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border); padding: 0.55rem 0.75rem;
+      text-align: left; vertical-align: top;
+    }
+    th { background: rgba(0,0,0,0.25); color: #c5d4e8; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    code, kbd {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.84em; background: var(--code-bg); padding: 0.12em 0.4em;
+      border-radius: 4px; border: 1px solid var(--border);
+    }
+    pre {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.9rem 1rem; overflow-x: auto;
+      font-size: 0.82rem; line-height: 1.55;
+    }
+    pre code { border: none; padding: 0; background: transparent; }
+    .block {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1rem 1.15rem; margin: 1rem 0;
+    }
+    .prereq {
+      border-left: 3px solid var(--warn);
+      background: rgba(230, 167, 0, 0.08);
+    }
+    .prereq h4 { color: var(--warn); margin-top: 0; }
+    .success { border-left: 3px solid var(--accent2); }
+    .danger-note { border-left: 3px solid var(--danger); }
+    .badge {
+      display: inline-block; font-size: 0.72rem; font-weight: 700;
+      padding: 0.15rem 0.5rem; border-radius: 999px; letter-spacing: 0.02em;
+      vertical-align: middle; margin-right: 0.35rem;
+    }
+    .b-p0 { background: #3d1f1f; color: #ffb4b4; }
+    .b-p1 { background: #3a2a10; color: #ffd58a; }
+    .b-p2 { background: #12304a; color: #9ec9ff; }
+    .b-p3 { background: #1a2f28; color: #8ef0c8; }
+    .prompt-box {
+      position: relative;
+      background: var(--prompt-bg);
+      border: 1px solid #2c4a6e;
+      border-radius: 10px;
+      margin: 0.75rem 0 1.25rem;
+    }
+    .prompt-box .label {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.45rem 0.85rem; border-bottom: 1px solid var(--border);
+      font-size: 0.75rem; color: var(--accent2); font-weight: 600;
+    }
+    .prompt-box pre {
+      margin: 0; border: none; border-radius: 0 0 10px 10px;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .prompt-box button {
+      font-size: 0.72rem; cursor: pointer; background: rgba(61,139,253,0.2);
+      color: var(--accent); border: 1px solid var(--border); border-radius: 5px;
+      padding: 0.2rem 0.55rem;
+    }
+    .prompt-box button:hover { background: rgba(61,139,253,0.35); }
+    ul.compact li { margin: 0.25rem 0; }
+    .meta-bar {
+      display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem;
+      font-size: 0.88rem; color: var(--muted); margin-bottom: 1.5rem;
+    }
+    .meta-bar strong { color: var(--text); }
+    footer {
+      margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 0.82rem;
+    }
+    @media (max-width: 860px) {
+      body { grid-template-columns: 1fr; }
+      nav.toc { position: relative; max-height: none; }
+      main { padding: 1.25rem 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc">
+    <div class="brand">NCCM v3<br/>AAA-addon 增強計畫</div>
+    <div class="ver">docs/AAA-addon-enhancement-plan.html</div>
+    <div class="group">總覽</div>
+    <a href="#overview">現況與目標</a>
+    <a href="#data-catalog">外部資料目錄</a>
+    <a href="#rules">開發慣例</a>
+    <div class="group">階段</div>
+    <a href="#p0">P0 穩定與可驗證</a>
+    <a href="#p1">P1 廠牌準確度</a>
+    <a href="#p2">P2 平台能力</a>
+    <a href="#p3">P3 產品化</a>
+    <div class="group">跟進</div>
+    <a href="#prompts">階段啟動 Prompt 總表</a>
+    <a href="#top3">CP 最高三件</a>
+  </nav>
+
+  <main>
+    <h1>AAA-addon 系統增強計畫</h1>
+    <p class="lead">
+      分支 <code>AAA-addon</code> 已完成 AAA（使用者／Token）、多廠牌備份與 Huawei 序號／LLDP／stack 基礎。
+      本文件定義後續增強路徑：每個開發部件列出<strong>外部資料／實機備份前置事項</strong>，並附<strong>可直接貼給 Agent 的啟動 Prompt</strong>。
+    </p>
+    <div class="meta-bar">
+      <span><strong>基準分支</strong> AAA-addon</span>
+      <span><strong>對齊 HEAD</strong> 約 56e04fa 起（Huawei LLDP UI）</span>
+      <span><strong>語言</strong> 繁體中文交付</span>
+      <span><strong>更新 repo</strong> = 程式 + README + Handbook + commit + push</span>
+    </div>
+
+    <!-- ========== OVERVIEW ========== -->
+    <h2 id="overview">一、現況與目標</h2>
+    <div class="block">
+      <h3 style="margin-top:0">已具備</h3>
+      <ul class="compact">
+        <li><strong>AAA</strong>：<code>portal_auth.db</code>、admin／viewer、強制改密、API Token、側欄 logout</li>
+        <li><strong>備份</strong>：Cisco／Fortinet／Huawei 分廠牌 mode 與指令；不支援 WLC</li>
+        <li><strong>庫存</strong>：Cisco Stack、Forti HA、Huawei manufacture 序號與 ≥2 slot stack 展開</li>
+        <li><strong>鄰居</strong>：Huawei <code>display lldp neighbor brief</code>（含實機 Neighbor Dev 欄位）</li>
+        <li><strong>驗證</strong>：多支 <code>scripts/run-hermes-verify-*.py</code>（尚無正式 pytest／CI）</li>
+      </ul>
+      <h3>目標方向</h3>
+      <p class="muted" style="margin:0">
+        從「可部署工具」→「可驗證、可排程、廠牌與實機一致、可營運」的 NCCM 平台。
+        <strong>不</strong>做：WLC、大框架重寫、破壞 Cisco／Fortinet 已綠路徑。
+      </p>
+    </div>
+
+    <!-- ========== DATA CATALOG ========== -->
+    <h2 id="data-catalog">二、外部資料目錄（開發用樣本）</h2>
+    <p>
+      下列路徑建議統一放在<strong>倉庫外</strong>或 <code>testdata/private/</code>（gitignore），
+      提交前必須<strong>去敏</strong>（密碼、社群／內網 IP 可改假值；hostname／serial 格式需保留真實形狀）。
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>資料 ID</th>
+          <th>建議來源</th>
+          <th>用途</th>
+          <th>去敏要點</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>HW-LLDP-AS</code></td>
+          <td>Huawei AS 實機 <code>lldp.txt</code><br/>（例：Downloads 已驗證 42 筆 Neighbor Dev 表）</td>
+          <td>LLDP parser／CDP-LLDP 頁</td>
+          <td>可保留介面與鄰居 hostname 形態；刪 banner 帳密</td>
+        </tr>
+        <tr>
+          <td><code>HW-MFG-SINGLE</code></td>
+          <td>單機 <code>manufacture_info.txt</code><br/>Slot/Sub + 12 字元 Serial（例 1020C0046065）</td>
+          <td>序號欄；確認<strong>不</strong>誤展開 stack</td>
+          <td>serial 可改字元但長度／字集相似</td>
+        </tr>
+        <tr>
+          <td><code>HW-MFG-STACK</code></td>
+          <td>iStack／多 member 的 manufacture-info<br/>≥2 個不同 Serial 的 Slot 列</td>
+          <td>設備總表 stack 展開</td>
+          <td>同上</td>
+        </tr>
+        <tr>
+          <td><code>HW-STACK-CLI</code></td>
+          <td><code>display stack</code>／<code>display stack members</code> 全文</td>
+          <td>P1 真 stack 判定（與 manufacture 分離）</td>
+          <td>去掉 enable 密碼提示</td>
+        </tr>
+        <tr>
+          <td><code>HW-VER</code></td>
+          <td><code>display version</code> → version_info.txt</td>
+          <td>auto-classify model、sw_version</td>
+          <td>hostname 可改</td>
+        </tr>
+        <tr>
+          <td><code>HW-CFG</code></td>
+          <td><code>display current-configuration</code> 節錄<br/>（interface + lldp enable 即可）</td>
+          <td>Interface Map、連線類型</td>
+          <td><strong>刪</strong> snmp community、radius secret、user password</td>
+        </tr>
+        <tr>
+          <td><code>HW-IF</code></td>
+          <td><code>display interface brief</code></td>
+          <td>介面狀態表</td>
+          <td>低風險</td>
+        </tr>
+        <tr>
+          <td><code>CS-STACK</code></td>
+          <td>Cisco <code>show version</code> + <code>show switch</code> + CDP</td>
+          <td>回歸：不可破壞 Cisco stack／鄰居</td>
+          <td>同上</td>
+        </tr>
+        <tr>
+          <td><code>FG-HA</code></td>
+          <td>FortiGate <code>get system ha status</code></td>
+          <td>回歸 HA 展開</td>
+          <td>serial 可改形態</td>
+        </tr>
+        <tr>
+          <td><code>SNAP-DIR</code></td>
+          <td>完整 snapshot 目錄結構<br/>manifest + 上述 artifact</td>
+          <td>索引重建、端到端 ad-hoc</td>
+          <td>路徑用假 Site／IP</td>
+        </tr>
+        <tr>
+          <td><code>CSV-LAB</code></td>
+          <td>lab CSV（Site,IP,Vendor,Port,Model）</td>
+          <td>備份 job／SimuNet 或隔離 lab</td>
+          <td>勿提交真實密碼；密碼只在執行時輸入</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="block danger-note">
+      <strong>安全</strong>：實機檔預設<strong>不進 git</strong>。若進 <code>testdata/</code> 必須審查 diff。
+      Agent 工作時可用 <code>@file:/path/to/…</code> 或複製到 <code>/tmp/hermes-verify-*</code>，完成後刪除含密副本。
+    </div>
+
+    <!-- ========== RULES ========== -->
+    <h2 id="rules">三、開發慣例（所有階段共用）</h2>
+    <ul class="compact">
+      <li>回覆／文件預設<strong>繁體中文</strong>；commit message 可用英文 conventional commits。</li>
+      <li><strong>禁止</strong>為修 Huawei 而改壞 Cisco／Fortinet 既有行為；變更後必跑對應 verify。</li>
+      <li>驗證：優先 <code>scripts/run-hermes-verify-*.py</code>；P0 後改 pytest 並保留 ad-hoc 入口。</li>
+      <li>parser／index 變更後：部署 <code>rebuild portal</code> + Web「重建索引」。</li>
+      <li>使用者說「update the repo」= 程式 + README + Handbook + commit + push。</li>
+      <li>大功能可先 PLAN ONLY；確認後再 start building。</li>
+    </ul>
+
+    <!-- ========== P0 ========== -->
+    <h2 id="p0"><span class="badge b-p0">P0</span>穩定與可驗證（約 1–2 週）</h2>
+    <p class="muted">目標：回歸可機器判定；實機表頭進黃金樣本；Compose smoke 可一鍵跑。</p>
+
+    <h3 id="p0-1">P0.1 · pytest 最小套件</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li>可選：現有 ad-hoc 腳本內嵌字串即可開工；不強制實機檔。</li>
+        <li>若有 <code>HW-LLDP-AS</code>／<code>HW-MFG-SINGLE</code> 去敏副本 → 一併納入 <code>tests/fixtures/</code>。</li>
+        <li>確認本機／CI 可用 Python 3.11+ 與專案 venv（或 Compose 內 portal 映像）。</li>
+      </ul>
+    </div>
+    <div class="block">
+      <h4>工作內容</h4>
+      <ul class="compact">
+        <li>建立 <code>tests/</code>：parsers（lldp／manufacture／stack）、auth token scope、API inventory 契約。</li>
+        <li>把 <code>run-hermes-verify-huawei-*.py</code> 等收斂為 pytest 用例，腳本改呼叫或保留薄包裝。</li>
+        <li>GitHub Action 或本地 <code>make test</code>／<code>pytest -q</code>。</li>
+      </ul>
+      <h4>驗收</h4>
+      <ul class="compact">
+        <li><code>pytest</code> 綠；既有 ad-hoc 腳本仍 PASSED。</li>
+        <li>文件註明正式測試入口與 ad-hoc 差異。</li>
+      </ul>
+    </div>
+
+    <h3 id="p0-2">P0.2 · Parser 黃金樣本（含 Huawei 實機）</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）— 必備</h4>
+      <ul class="compact">
+        <li><strong>必備</strong> <code>HW-LLDP-AS</code>：至少含表頭
+          <code>Local Intf / Neighbor Dev / Neighbor Intf / Exptime(s)</code> 與 MultiGE／40GE 列。</li>
+        <li><strong>必備</strong> <code>HW-MFG-SINGLE</code>：Slot/Sub + 12 字元 Serial 表。</li>
+        <li><strong>建議</strong> <code>HW-MFG-STACK</code>：≥2 serial 列。</li>
+        <li><strong>建議</strong> SimuNet <code>huawei_ce.yml</code> 輸出與實機表頭對照表（文件一段即可）。</li>
+        <li><strong>回歸必備</strong> <code>CS-STACK</code> 最小片段、<code>FG-HA</code> 最小片段（可從現有 verify 抽出）。</li>
+      </ul>
+    </div>
+    <div class="block">
+      <h4>工作內容</h4>
+      <ul class="compact">
+        <li><code>testdata/huawei/</code>（或 private）放置去敏 fixture；測試 assert 筆數與欄位映射。</li>
+        <li>SimuNet 若與實機欄位順序不同，parser 必須雙支援（已部分完成，需鎖測）。</li>
+      </ul>
+      <h4>驗收</h4>
+      <p class="muted" style="margin:0">實機 42 筆 LLDP 樣本固定筆數；單機 manufacture 不展開 stack；Cisco／Fortinet fixture 不回退。</p>
+    </div>
+
+    <h3 id="p0-3">P0.3 · 索引／API 契約 + Compose smoke</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li><strong>建議</strong> <code>SNAP-DIR</code>：含 Huawei 完整 snapshot（lldp + manufacture + version + config 節錄）。</li>
+        <li>Postman 或 curl：baseUrl + 有效 API Token（admin 於 Portal 建立；scope 至少 inventory:read）。</li>
+        <li>Docker Compose 可起 portal + agent；lab 可選 SimuNet，不必真實 SSH。</li>
+      </ul>
+    </div>
+    <div class="block">
+      <h4>工作內容</h4>
+      <ul class="compact">
+        <li>文件化 <code>serial_summary</code>、stack 展開、API JSON 欄位。</li>
+        <li><code>scripts/smoke-compose.sh</code>：health、login 或 API inventory、可選重建索引。</li>
+      </ul>
+      <h4>驗收</h4>
+      <p class="muted" style="margin:0">README／Handbook 有契約表；smoke 腳本 exit 0。</p>
+    </div>
+
+    <div class="block success">
+      <strong>P0 階段成功標準</strong>：PR／本機必過 parser+auth 測試；Huawei LLDP／manufacture 黃金樣本綠；Cisco／Fortinet 回歸綠。
+    </div>
+
+    <div class="prompt-box" id="prompt-p0">
+      <div class="label">
+        <span>P0 啟動 Prompt（整包）</span>
+        <button type="button" onclick="copyPrompt('prompt-p0-body')">複製</button>
+      </div>
+      <pre id="prompt-p0-body"><code>你是 NetdriveBackup NCCM v3 的 coding agent。工作目錄：repo 根目錄，分支 AAA-addon。
+回覆用繁體中文。不要破壞 Cisco／Fortinet 既有行為。
+
+【任務】執行增強計畫 **P0 — 穩定與可驗證**（見 docs/AAA-addon-enhancement-plan.html）。
+
+【範圍】
+1) 將 scripts/run-hermes-verify-*.py 核心斷言收斂為 pytest（tests/parsers、tests/auth 等），保留 ad-hoc 腳本可跑。
+2) 建立去敏 fixture：Huawei LLDP（Neighbor Dev 表頭）、manufacture 單機與可選 stack；Cisco stack／Forti HA 最小回歸樣本。
+3) 文件化 inventory／API 欄位契約；可選 scripts/smoke-compose.sh。
+4) 更新 README + docs/Handbook.html 中測試與樣本說明。
+
+【前置資料 — 若缺則列出缺口並用現有腳本字串先綠，再標 TODO】
+- HW-LLDP-AS：實機 display lldp neighbor brief（Local Intf / Neighbor Dev / Neighbor Intf / Exptime）
+- HW-MFG-SINGLE：Slot/Sub + 12-char Serial
+- 可選 HW-MFG-STACK、SNAP-DIR、API Token（inventory:read）
+
+【驗收】
+- pytest 通過；run-hermes-verify-huawei-lldp.py、huawei-manufacture.py、huawei-stack.py、netdriver-payload.py PASSED
+- commit + push AAA-addon；說明非正式「全套件 CI 全綠」若尚未接 CI
+
+開始前先 git status / 讀相關檔，再實作。完成後給簡潔繁中報告。</code></pre>
+    </div>
+
+    <!-- ========== P1 ========== -->
+    <h2 id="p1"><span class="badge b-p1">P1</span>廠牌準確度與營運體驗（約 2–4 週）</h2>
+
+    <h3 id="p1-1">P1.1 · Huawei 真 Stack（display stack）</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）— 必備</h4>
+      <ul class="compact">
+        <li><strong>必備</strong> <code>HW-STACK-CLI</code>：至少一台 iStack 的 <code>display stack</code>（或 members）成功輸出全文。</li>
+        <li><strong>必備</strong> 同設備 <code>HW-MFG-STACK</code> 與 <code>HW-VER</code>（對齊 member／serial）。</li>
+        <li><strong>對照</strong> 一台<strong>非 stack</strong> 固定式交換器：僅 <code>HW-MFG-SINGLE</code> + 空／失敗的 stack 指令（soft-skip）。</li>
+        <li>備份／Agent：確認 lab 或實機 SSH 帳密（不寫入 git）；SimuNet 需新增 stack 指令回應則改 <code>huawei_ce.yml</code> 並 rebuild agent。</li>
+      </ul>
+    </div>
+    <div class="block">
+      <h4>工作內容</h4>
+      <ul class="compact">
+        <li>backup 增加 stack 指令 → artifact（如 <code>stack_info.txt</code>）；失敗 soft-skip。</li>
+        <li>索引：有 stack CLI 才展開；manufacture 只補 serial／model。</li>
+        <li>設備總表 Role／Stack# 與 Cisco 欄位語意對齊。</li>
+      </ul>
+    </div>
+
+    <h3 id="p1-2">P1.2 · 序號／型號／API 一致</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li><code>HW-MFG-SINGLE</code> + <code>HW-VER</code>；可選 stack 組合。</li>
+        <li>Portal 可呼叫 <code>GET /api/v1/inventory</code>（X-API-Key）；Postman baseUrl。</li>
+        <li>重建索引前後各抓一版 API JSON 作對照（可本地 store）。</li>
+      </ul>
+    </div>
+
+    <h3 id="p1-3">P1.3 · CDP/LLDP 頁（Huawei UX）</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li><strong>必備</strong> <code>HW-LLDP-AS</code> 或完整 snapshot 內 <code>lldp.txt</code> 已索引設備。</li>
+        <li>瀏覽器可登入 portal 看／neighbors（admin 或 viewer）。</li>
+        <li>Cisco 鄰居 snapshot 一份做「頁面切換廠牌」回歸（CDP 仍顯示）。</li>
+      </ul>
+    </div>
+    <div class="block">
+      <h4>工作內容</h4>
+      <ul class="compact">
+        <li>搜尋鄰居名、依本端介面排序、匯出 CSV（viewer 可讀）。</li>
+        <li>維持 Huawei：CDP=n/a、僅 LLDP 表頭說明。</li>
+      </ul>
+    </div>
+
+    <h3 id="p1-4">P1.4 · 備份可靠性與 log 摘要</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li><code>CSV-LAB</code>：至少 2 台（可 1 台故意錯密）以驗證單台失敗不拖垮 job。</li>
+        <li>Agent Online；真實或 SimuNet 目標。</li>
+        <li>可選：實機上「不支援的指令」輸出樣本（用於 soft-skip 文案）。</li>
+      </ul>
+    </div>
+
+    <h3 id="p1-5">P1.5 · API Token scope 細分 + 審計</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li>可寫入的 <code>store/portal_auth.db</code>（dev）；admin 登入。</li>
+        <li>不需要實機 CLI；需要 API 手動／Postman 案例表。</li>
+      </ul>
+    </div>
+
+    <div class="block success">
+      <strong>P1 階段成功標準</strong>：實機 Huawei stack／單機／LLDP 與 CLI 一致；Cisco／Fortinet 回歸零失敗；viewer 可完整唯讀鄰居。
+    </div>
+
+    <div class="prompt-box" id="prompt-p1">
+      <div class="label">
+        <span>P1 啟動 Prompt（整包）</span>
+        <button type="button" onclick="copyPrompt('prompt-p1-body')">複製</button>
+      </div>
+      <pre id="prompt-p1-body"><code>你是 NetdriveBackup NCCM v3 coding agent。分支 AAA-addon，繁體中文回覆。
+勿破壞 Cisco／Fortinet。計畫見 docs/AAA-addon-enhancement-plan.html **P1**。
+
+【任務】P1 廠牌準確度與營運體驗（可分子任務提交，先做 P1.1）。
+
+【P1.1 Huawei 真 Stack — 優先】
+- 備份增加 display stack（或 members）→ stack_info.txt；失敗 soft-skip
+- 索引：有 stack CLI 才展開成員；manufacture 只補 serial／model
+- 單機 manufacture 不得被當 stack
+
+【前置資料 — 缺少則 STOP 並列出向使用者索取的檔案清單】
+- HW-STACK-CLI：display stack 全文
+- HW-MFG-STACK + HW-VER（同設備）
+- HW-MFG-SINGLE（非 stack 對照）
+- 可選：更新 SimuNet huawei_ce.yml
+
+【P1.2–P1.5】序號/API 一致、neighbors 搜尋排序匯出、備份 job 韌性、token scope+審計
+各子項前置見 HTML 計畫。
+
+【驗收】
+- 新/更新 run-hermes-verify-huawei-stack（或 pytest）PASSED
+- huawei-lldp、manufacture、Cisco/Forti 回歸 PASSED
+- README + Handbook；rebuild portal + 重建索引說明
+- commit + push
+
+先讀 nccm/backup/runner.py、parsers/stack.py、storage/index_db.py 再改。</code></pre>
+    </div>
+
+    <div class="prompt-box">
+      <div class="label">
+        <span>P1.1 單獨啟動 Prompt</span>
+        <button type="button" onclick="copyPrompt('prompt-p1-1-body')">複製</button>
+      </div>
+      <pre id="prompt-p1-1-body"><code>AAA-addon / NetdriveBackup。只做 **P1.1 Huawei 真 Stack**（docs/AAA-addon-enhancement-plan.html）。
+繁中回覆。禁止改 Cisco/Fortinet 行為。
+
+前置（使用者應提供或 @file）：
+1) HW-STACK-CLI = display stack 全文
+2) 同機 HW-MFG-STACK manufacture_info
+3) 同機 version_info
+4) 非 stack 的 HW-MFG-SINGLE 作對照
+
+實作：backup 指令 + parser + index 展開條件；verify 腳本；README/Handbook；commit push。
+缺前置資料時不要猜 stack 格式，先問使用者。</code></pre>
+    </div>
+
+    <div class="prompt-box">
+      <div class="label">
+        <span>P1.3 鄰居頁 UX 啟動 Prompt</span>
+        <button type="button" onclick="copyPrompt('prompt-p1-3-body')">複製</button>
+      </div>
+      <pre id="prompt-p1-3-body"><code>AAA-addon。只做 **P1.3 CDP/LLDP 頁 Huawei UX**（搜尋、依本端介面排序、CSV 匯出；維持 CDP n/a）。
+前置：HW-LLDP-AS 或 store 內已有 lldp.txt 的 Huawei 設備；Cisco 鄰居樣本做回歸。
+勿改 Cisco CDP 成功時 skip LLDP 邏輯。verify + README + commit push。繁中報告。</code></pre>
+    </div>
+
+    <!-- ========== P2 ========== -->
+    <h2 id="p2"><span class="badge b-p2">P2</span>平台能力（約 1–2 個月）</h2>
+
+    <h3 id="p2-1">P2.1 · 排程備份</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li>固定 <code>CSV-LAB</code> 或站點設備清單來源（檔案路徑／上傳策略需產品決策）。</li>
+        <li>可達 Agent 與設備（或 SimuNet）；SSH 憑證存放策略（env／secret 檔，不進 git）。</li>
+        <li>可選：webhook URL 或 SMTP 測試帳（外部）。</li>
+      </ul>
+    </div>
+
+    <h3 id="p2-2">P2.2 · 組態 diff 與變更標記</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li>同一設備<strong>至少兩個</strong> snapshot 的 <code>config.txt</code>（有可見差異；已去敏）。</li>
+        <li>建議 <code>SNAP-DIR</code> 含連續時間戳目錄。</li>
+      </ul>
+    </div>
+
+    <h3 id="p2-3">P2.3 · 快照保留策略</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li>dev <code>store/</code> 內多版本 snapshot（可合成）。</li>
+        <li>admin 帳號；乾跑模式不需外網。</li>
+      </ul>
+    </div>
+
+    <h3 id="p2-4">P2.4 · 可縮放鄰居拓撲圖</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li><strong>必備</strong> 多設備 LLDP／CDP 可互指的樣本組：至少 1× Huawei <code>HW-LLDP-AS</code> + 鄰居名能對上庫存 hostname 的設備列。</li>
+        <li>可選：站點級多台 snapshot（core + access）。</li>
+        <li>前端：可接受的 JS 地圖庫（實作時選定；需 interactive zoom）。</li>
+      </ul>
+    </div>
+
+    <h3 id="p2-5">P2.5 · 憑證／多角色</h3>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）</h4>
+      <ul class="compact">
+        <li>測試用 SSH private key（lab only）與對應設備／SimuNet 設定。</li>
+        <li>角色矩陣表（admin／operator／viewer／auditor）— 產品確認即可，無實機檔。</li>
+      </ul>
+    </div>
+
+    <div class="prompt-box" id="prompt-p2">
+      <div class="label">
+        <span>P2 啟動 Prompt</span>
+        <button type="button" onclick="copyPrompt('prompt-p2-body')">複製</button>
+      </div>
+      <pre id="prompt-p2-body"><code>NetdriveBackup AAA-addon。執行 docs/AAA-addon-enhancement-plan.html **P2 平台能力**。
+繁中。先 PLAN ONLY 輸出子任務與資料缺口，等我回「start building」再寫碼。
+
+範圍：排程備份、config diff、快照保留、鄰居拓撲（可 zoom）、可選 SSH key 與 operator 角色。
+前置資料見 HTML：CSV-LAB、雙 snapshot config、多設備 LLDP 圖、webhook/SMTP 可選。
+約束：viewer 不可觸發破壞性操作；secret 不進 git；Cisco/Fortinet 回歸保留。
+驗收：README+Handbook、verify/smoke、commit push（得我允許後）。</code></pre>
+    </div>
+
+    <!-- ========== P3 ========== -->
+    <h2 id="p3"><span class="badge b-p3">P3</span>產品化與擴展（視需求）</h2>
+    <div class="block">
+      <ul class="compact">
+        <li>更多廠牌或深化 Nexus／CE／USG 分型</li>
+        <li>CMDB／ITSM 雙向</li>
+        <li>HA 部署（多 portal、共享 store）</li>
+        <li>大量設備：增量索引、鄰居分頁</li>
+        <li>合規：密碼政策、token 過期、審計匯出</li>
+      </ul>
+    </div>
+    <div class="block prereq">
+      <h4>前置事項（外部資料）— 依選題</h4>
+      <ul class="compact">
+        <li>新廠牌：完整 backup 指令集 CLI 樣本（version／config／neighbors）。</li>
+        <li>CMDB：API 文件與沙盒 token（外部系統）。</li>
+        <li>HA：第二節點與共享 volume 設計說明（基礎建設）。</li>
+        <li>效能：≥500 設備匿名化 index 或生成腳本（可合成）。</li>
+      </ul>
+    </div>
+
+    <div class="prompt-box" id="prompt-p3">
+      <div class="label">
+        <span>P3 啟動 Prompt</span>
+        <button type="button" onclick="copyPrompt('prompt-p3-body')">複製</button>
+      </div>
+      <pre id="prompt-p3-body"><code>NetdriveBackup AAA-addon。P3 產品化（docs/AAA-addon-enhancement-plan.html）。
+只做 PLAN ONLY：依我指定的選題（新廠牌 / CMDB / HA / 效能 / 合規）列架構、外部依賴、風險、里程碑。
+未提供外部 API 文件或 CLI 樣本前不要實作。繁中。</code></pre>
+    </div>
+
+    <!-- ========== PROMPT INDEX ========== -->
+    <h2 id="prompts">四、階段啟動 Prompt 總表</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>用途</th><th>錨點</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>P0 整包</td><td>測試＋fixture＋smoke</td><td><a href="#prompt-p0">#prompt-p0</a></td></tr>
+        <tr><td>P1 整包</td><td>廠牌準確度</td><td><a href="#prompt-p1">#prompt-p1</a></td></tr>
+        <tr><td>P1.1</td><td>Huawei 真 stack</td><td>上文 P1.1 框</td></tr>
+        <tr><td>P1.3</td><td>鄰居頁 UX</td><td>上文 P1.3 框</td></tr>
+        <tr><td>P2</td><td>平台（先 PLAN）</td><td><a href="#prompt-p2">#prompt-p2</a></td></tr>
+        <tr><td>P3</td><td>產品化（先 PLAN）</td><td><a href="#prompt-p3">#prompt-p3</a></td></tr>
+      </tbody>
+    </table>
+
+    <div class="prompt-box">
+      <div class="label">
+        <span>通用：資料齊備檢查 Prompt</span>
+        <button type="button" onclick="copyPrompt('prompt-data-check')">複製</button>
+      </div>
+      <pre id="prompt-data-check"><code>依 docs/AAA-addon-enhancement-plan.html「外部資料目錄」，檢查我提供的路徑／@file 是否滿足要做的階段（我指定 P0/P1/P2/…）。
+輸出表格：資料 ID | 狀態（有／缺／不完整）| 缺什麼欄位或指令 | 是否阻擋開工。
+不要開始改程式，除非我說 start building。繁中。</code></pre>
+    </div>
+
+    <div class="prompt-box">
+      <div class="label">
+        <span>通用：update the repo</span>
+        <button type="button" onclick="copyPrompt('prompt-update-repo')">複製</button>
+      </div>
+      <pre id="prompt-update-repo"><code>目前變更已完成功能。請 update the repo：補 README 與 docs/Handbook.html（若行為有變）、跑相關 run-hermes-verify-*.py、commit、push 到 origin AAA-addon。
+繁中簡潔報告。不要 force push（除非我明確要求）。</code></pre>
+    </div>
+
+    <!-- ========== TOP3 ========== -->
+    <h2 id="top3">五、CP 最高三件（若只能做一部分）</h2>
+    <ol>
+      <li><strong>P0</strong> pytest + 實機去敏樣本（整體可信）</li>
+      <li><strong>P1.1</strong> Huawei <code>display stack</code> 真 stack（避免 manufacture 誤判）</li>
+      <li><strong>P2.1 + P2.3</strong> 排程備份 + 快照保留（工具→系統）</li>
+    </ol>
+
+    <div class="prompt-box">
+      <div class="label">
+        <span>只做 CP 三件 · 啟動 Prompt</span>
+        <button type="button" onclick="copyPrompt('prompt-top3')">複製</button>
+      </div>
+      <pre id="prompt-top3"><code>AAA-addon。只依 docs/AAA-addon-enhancement-plan.html 的「CP 最高三件」推進：
+(1) P0 pytest+fixtures (2) P1.1 Huawei display stack (3) 規劃 P2 排程+保留（P2 可先 PLAN）。
+每件檢查 HTML 前置資料；缺 HW-STACK-CLI / HW-LLDP-AS / HW-MFG-* 時先列缺口。
+繁中；Cisco/Fortinet 回歸必跑；完成可測部分就 verify + commit push。</code></pre>
+    </div>
+
+    <footer>
+      NetdriverBackup NCCM v3 · AAA-addon 增強計畫 · 與 <code>README.md</code>／分支實作同步維護<br/>
+      開啟：<code>open docs/AAA-addon-enhancement-plan.html</code>
+    </footer>
+  </main>
+
+  <script>
+    function copyPrompt(id) {
+      const el = document.getElementById(id);
+      const text = el.innerText || el.textContent;
+      navigator.clipboard.writeText(text).then(function () {
+        const btn = el.parentElement.querySelector("button");
+        if (!btn) return;
+        const old = btn.textContent;
+        btn.textContent = "已複製";
+        setTimeout(function () { btn.textContent = old; }, 1500);
+      });
+    }
+  </script>
+</body>
+</html>
