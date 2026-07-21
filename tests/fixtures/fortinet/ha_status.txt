@@ -1,0 +1,13 @@
+===== start exec cmd: [get system ha status] =====
+LAB-FG-PRI $ get system ha status
+HA Health Status: OK
+Model: FortiGate-401F
+Mode: HA A-P
+Group Name: LAB-HA
+Group ID: 10
+Primary     : LAB-FG-PRI, FG4H0LAB00000001, HA cluster index = 0
+Secondary   : LAB-FG-SEC, FG4H0LAB00000002, HA cluster index = 1
+number of vcluster: 1
+Primary: FG4H0LAB00000001, HA operating index = 0
+Secondary: FG4H0LAB00000002, HA operating index = 1
+===== end exec cmd =====

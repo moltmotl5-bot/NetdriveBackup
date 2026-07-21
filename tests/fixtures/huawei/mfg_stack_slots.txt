@@ -1,0 +1,8 @@
+===== start exec cmd: [display device manufacture-info] =====
+<LAB-AS-STACK>
+<LAB-AS-STACK>display device manufacture-info
+Slot  Sub  Serial-number          Manu-date
+- - - - - - - - - - - - - - - - - - - - - -
+0     -    1020LAB000011           2020-12-05
+1     -    1020LAB000012           2020-12-11
+===== end exec cmd =====

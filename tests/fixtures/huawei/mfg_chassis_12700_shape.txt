@@ -1,0 +1,11 @@
+===== start exec cmd: [display device manufacture-info] =====
+<LAB-CORE-12700>
+<LAB-CORE-12700>display device manufacture-info
+Chassis   Slot       Sub   Serial-number            Manu-date
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+1         backplane  -     6T20LAB000001             2020-12-12       
+          3          -     1020LAB000021             2020-12-04       
+          4          -     1020LAB000022             2020-12-14       
+2         backplane  -     6T20LAB000002             2020-12-12       
+          3          -     1020LAB000023             2020-12-04       
+===== end exec cmd =====

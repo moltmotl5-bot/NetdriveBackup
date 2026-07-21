@@ -1,0 +1,4 @@
+# Dev / CI test extras (install: pip install -r requirements-v3.txt -r requirements-dev.txt)
+-r requirements-v3.txt
+pytest>=8.0
+httpx>=0.27

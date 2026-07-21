@@ -1,0 +1,8 @@
+===== start exec cmd: [display version] =====
+<LAB-AS-STACK>
+<LAB-AS-STACK>display version
+Huawei Versatile Routing Platform Software
+VRP (R) software, Version 5.170 (S5732 V200R020C10SPC500)
+Copyright (C) 2000-2020 HUAWEI TECH Co., Ltd.
+HUAWEI S5732-H48UM2CC Routing Switch uptime is 6 weeks, 1 day, 13 hours, 33 minutes
+===== end exec cmd =====

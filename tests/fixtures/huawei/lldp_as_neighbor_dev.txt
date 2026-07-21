@@ -1,0 +1,8 @@
+===== start exec cmd: [display lldp neighbor brief] =====
+<LAB-AS1>
+<LAB-AS1>display lldp neighbor brief
+Local Intf       Neighbor Dev             Neighbor Intf             Exptime(s)
+MultiGE0/0/2     LAB-AP-01                MultiGE0/0/0              117    
+MultiGE0/0/4     LAB-AP-02                MultiGE0/0/0              115    
+40GE0/0/1        LAB-CORE-SW              100GE1/5/0/15             107    
+===== end exec cmd =====

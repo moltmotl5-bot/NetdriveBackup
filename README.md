@@ -297,6 +297,25 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 
 ---
 
+## 測試與契約
+
+```bash
+pip install -r requirements-dev.txt
+pytest                          # 正式回歸（parsers / auth / netdriver）
+NCCM_PRIVATE_TESTDATA=testdata pytest -m private   # 本機實機檔（不上傳）
+python scripts/run-hermes-verify-huawei-lldp.py    # ad-hoc 仍可用
+./scripts/smoke-compose.sh      # 需 docker compose 已 up
+```
+
+- 去敏 fixture：`tests/fixtures/`（可進 git）
+- 私有 CLI 樣本：`testdata/`（**.gitignore**，禁止 commit／上傳）
+- API 欄位契約：[docs/inventory-api-contract.md](docs/inventory-api-contract.md)
+- 增強計畫：[docs/AAA-addon-enhancement-plan.html](docs/AAA-addon-enhancement-plan.html)
+
+> **尚未**接 GitHub Actions 全套 CI；以本機 `pytest` + ad-hoc 為準。
+
+---
+
 ## 目錄導覽
 
 | 路徑 | 說明 |
@@ -307,7 +326,9 @@ python -m nccm backup --csv DEMO-v3.csv --user admin --password '***'
 | `deploy/config/agent/` | 正式環境 Agent YAML |
 | `nccm/` | 備份核心、索引、解析器 |
 | `web/` | FastAPI + HTMX 前端 |
+| `tests/` | pytest 回歸與去敏 fixtures |
 | `docs/NCCM-v3-spec.md` | 技術規格摘要 |
+| `docs/inventory-api-contract.md` | inventory API 欄位契約 |
 | `docs/Handbook.html` | **使用手冊**（安裝／設定／操作） |
 | `docs/AAA-addon-enhancement-plan.html` | **AAA-addon 增強計畫**（P0–P3、外部資料、啟動 Prompt） |
 | `legacy/` | 封存之 Streamlit 單體與舊文件 |

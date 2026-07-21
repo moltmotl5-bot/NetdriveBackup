@@ -3,6 +3,11 @@
 venv/
 output/
 store/*
+
+# Private lab CLI captures — never commit / never upload
+testdata/*
+!testdata/.gitkeep
+tests/fixtures/private/
 !store/.gitkeep
 __pycache__/
 *.py[cod]

@@ -1,0 +1,10 @@
+Stack mode: Service-port
+Stack topology type: Ring
+Stack system MAC: aaaa-bbbb-cccc
+MAC switch delay time: 10 min
+Stack reserved VLAN: 4093
+Slot of the active management port: --
+Slot      Role        MAC Address      Priority   Device Type
+-------------------------------------------------------------
+0         Master      aaaa-bbbb-cccc   200        S5732-H48UM2CC
+1         Standby     dddd-eeee-ffff   150        S5732-H24UM2CC

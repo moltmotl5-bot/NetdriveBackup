@@ -1,0 +1,28 @@
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(2)E7, RELEASE SOFTWARE (fc3)
+LAB-SW1 uptime is 1 year, 1 week, 1 day, 1 hour, 1 minute
+
+Base ethernet MAC Address       : 70:1F:53:C3:A7:80
+Model number                    : WS-C2960X-48FPD-L
+System serial number            : FCWLAB000001
+
+Switch Ports Model                     SW Version            SW Image                 
+------ ----- -----                     ----------            ----------               
+*    1 52    WS-C2960X-48FPD-L         15.2(2)E7             C2960X-UNIVERSALK9-M     
+     2 52    WS-C2960X-48FPD-L         15.2(2)E7             C2960X-UNIVERSALK9-M     
+
+Switch 01
+---------
+System serial number            : FCWLAB000001
+Model number                    : WS-C2960X-48FPD-L
+
+Switch 02
+---------
+System serial number            : FOCLAB000002
+Model number                    : WS-C2960X-48FPD-L
+
+Switch/Stack Mac Address : 701f.53c3.a780
+                                           H/W   Current
+Switch#  Role   Mac Address     Priority Version  State 
+----------------------------------------------------------
+*1       Master 701f.53c3.a780     15     4       Ready               
+ 2       Member 007e.9550.9400     13     4       Ready               

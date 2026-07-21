@@ -144,6 +144,7 @@
   <div class="group">設定</div>
   <a href="#config-env">Portal 環境變數</a>
   <a href="#config-api">REST API（API Token）</a>
+  <a href="#dev-test">開發測試與樣本</a>
   <a href="#config-agent">NetDriver Agent</a>
   <a href="#config-compose">Compose 與網路</a>
   <a href="#config-csv">設備清單 CSV</a>
@@ -292,7 +293,17 @@ curl -s http://localhost:8000/health</code></pre>
     <li><code>GET /api/v1/inventory</code> — 需有效 token（scope <code>inventory:read</code>）；尚無啟用中 token 時回 500（fail-closed）。</li>
   </ul>
   <pre><code>curl -sS -H "X-API-Key: YOUR_TOKEN" "http://localhost:8501/api/v1/inventory?limit=20"</code></pre>
-  <p>完整說明見專案 <code>README.md</code>「API 介面」章節。</p>
+  <p>完整說明見專案 <code>README.md</code>「API 介面」章節與 <a href="inventory-api-contract.md"><code>docs/inventory-api-contract.md</code></a> 欄位契約。</p>
+
+  <h2 id="dev-test">開發 — 測試與樣本</h2>
+  <p><strong>正式回歸</strong>（可進 CI）：</p>
+  <pre><code>pip install -r requirements-dev.txt
+pytest</code></pre>
+  <p>涵蓋 parsers（Huawei LLDP／manufacture／stack、Cisco stack、Forti HA）、NetDriver payload、API Token。去敏 fixture 在 <code>tests/fixtures/</code>（可提交）。</p>
+  <p><strong>本機私有實機檔</strong>（<code>testdata/*.txt</code>，已 gitignore，<strong>禁止上傳／push</strong>）：</p>
+  <pre><code>NCCM_PRIVATE_TESTDATA=testdata pytest -m private</code></pre>
+  <p><strong>Ad-hoc</strong>（仍保留）：<code>scripts/run-hermes-verify-*.py</code>。Compose 輕量 smoke：<code>scripts/smoke-compose.sh</code>（需已 up）。</p>
+  <p>增強路線見 <a href="AAA-addon-enhancement-plan.html">AAA-addon-enhancement-plan.html</a>。</p>
 
   <h2 id="config-agent">設定 — NetDriver Agent</h2>
   <p>正式環境設定檔：<code>deploy/config/agent/agent.yml</code>，Compose 以唯讀方式掛載至容器 <code>/app/config/agent/</code>。</p>
