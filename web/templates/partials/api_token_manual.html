@@ -7,7 +7,9 @@
     <li>路徑前綴：<code>/api/v1</code></li>
     <li>每次請求標頭 <code>X-API-Key</code> = 建立當下顯示的完整 <code>nccm_…</code> token</li>
     <li>權限：<code>inventory:read</code>（庫存列表）</li>
-    <li>尚無<strong>啟用中</strong> token 時，受保護的 API 無法使用</li>
+    <li>尚無<strong>啟用中且未過期</strong> token 時，受保護的 API 無法使用</li>
+    <li>建立時必填有效天數（預設 90、最長 365）；過期回 <code>401 API token expired</code></li>
+    <li>無 <code>expires_at</code> 的舊 token 視為已過期，請停用並重建</li>
   </ul>
 
   <h3>端點</h3>
@@ -51,9 +53,9 @@
   <h3>HTTP 狀態碼</h3>
   <ul>
     <li><strong>200</strong> — 成功</li>
-    <li><strong>401</strong> — 缺少或無效的 <code>X-API-Key</code></li>
+    <li><strong>401</strong> — 缺少、無效或<strong>已過期</strong>的 <code>X-API-Key</code></li>
     <li><strong>403</strong> — 權限不足</li>
-    <li><strong>500</strong> — 尚未建立任何啟用中的 API Token</li>
+    <li><strong>500</strong> — 尚無任何<strong>未過期</strong>且啟用中的 API Token</li>
   </ul>
 
   <h3>curl 範例</h3>
@@ -75,6 +77,7 @@ curl -sS "http://localhost:8501/api/v1/health"</pre>
   <ul>
     <li>Token 僅建立時顯示一次；遺失請<strong>停用舊 token 並建立新 token</strong></li>
     <li>定期輪替；不同整合請使用不同名稱的 token</li>
+    <li>審計寫入 <code>store/audit/audit.db</code>；admin 可於「審計日誌」查看／匯出 CSV</li>
     <li>生產環境請以 HTTPS 存取，避免 token 明文傳輸</li>
   </ul>
 </section>

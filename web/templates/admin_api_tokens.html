@@ -2,7 +2,8 @@
 {% block title %}API Token — NCCM{% endblock %}
 {% block content %}
 <h1>API Token 管理</h1>
-<p class="lead">供外部系統讀取庫存 API。完整 token 僅在建立當下顯示一次；之後僅顯示前綴碼。詳見下方<strong> REST API 使用手冊</strong>。</p>
+<p class="lead">供外部系統讀取庫存 API。完整 token 僅在建立當下顯示一次；之後僅顯示前綴碼。
+<strong>必須設定有效期</strong>（預設 {{ default_ttl }} 天，最長 {{ max_ttl }} 天）；過期後 API 回 401。詳見下方 REST 手冊。</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if message %}<p class="ok">{{ message }}</p>{% endif %}
 
@@ -11,6 +12,9 @@
   <h2>請立即複製新 Token</h2>
   <p class="error">關閉此頁後無法再次顯示。</p>
   <pre class="config-preview">{{ reveal_token }}</pre>
+  {% if reveal_expires %}
+  <p class="meta">到期時間（UTC）：<code>{{ reveal_expires }}</code></p>
+  {% endif %}
   <p class="meta">請求時加上標頭 <code>X-API-Key</code>，值為上方 token 全文。</p>
 </section>
 {% endif %}
@@ -22,6 +26,8 @@
     <input name="name" required maxlength="128" placeholder="postman-uat" />
     <label>權限範圍</label>
     <input name="scopes" value="inventory:read" readonly />
+    <label>有效天數</label>
+    <input type="number" name="expires_days" min="1" max="{{ max_ttl }}" value="{{ default_ttl }}" required />
     <button type="submit">建立</button>
   </form>
 </section>

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}審計日誌 — NCCM{% endblock %}
+{% block content %}
+<h1>審計日誌</h1>
+<p class="lead">寫入 <code>store/audit/audit.db</code>（可覆寫 <code>NCCM_AUDIT_DB</code>）。含登入、API Token、備份啟動、重建索引、config 下載、快照保留等。</p>
+
+<form method="get" action="/admin/audit" class="inv-filter-form">
+  <label>事件
+    <input name="event" value="{{ event_filter }}" placeholder="portal_login / api_request …" />
+  </label>
+  <label>筆數
+    <input type="number" name="limit" value="{{ limit }}" min="1" max="2000" />
+  </label>
+  <button type="submit">篩選</button>
+  <a class="btn-secondary" href="/admin/audit/export.csv?event={{ event_filter }}&limit=5000">匯出 CSV</a>
+</form>
+
+<table class="inv-table">
+  <thead>
+    <tr>
+      <th>時間（UTC）</th>
+      <th>IP</th>
+      <th>主體</th>
+      <th>事件</th>
+      <th>成功</th>
+      <th>明細</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in events %}
+    <tr>
+      <td><code>{{ e.ts }}</code></td>
+      <td>{{ e.ip }}</td>
+      <td>{{ e.actor or "—" }}</td>
+      <td>{{ e.event }}</td>
+      <td>{% if e.success %}✓{% else %}<span class="error">✗</span>{% endif %}</td>
+      <td class="muted">{{ e.detail }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">尚無紀錄</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

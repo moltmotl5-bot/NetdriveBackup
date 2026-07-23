@@ -5,6 +5,7 @@
       <th>前綴碼</th>
       <th>權限</th>
       <th>啟用</th>
+      <th>到期（UTC）</th>
       <th>建立者</th>
       <th>最後使用</th>
       <th>操作</th>
@@ -17,6 +18,14 @@
       <td><code>{{ t.token_prefix }}…</code></td>
       <td>{{ t.scopes }}</td>
       <td>{% if t.is_active %}是{% else %}否{% endif %}</td>
+      <td>
+        {% if t.expires_at %}
+          <code>{{ t.expires_at }}</code>
+          {% if t.is_expired %}<span class="error">（已過期）</span>{% endif %}
+        {% else %}
+          <span class="error">無（不可用）</span>
+        {% endif %}
+      </td>
       <td>{{ t.created_by or "—" }}</td>
       <td>{{ t.last_used_at or "—" }}</td>
       <td>
@@ -28,7 +37,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7">尚無 token — 請於上方建立，並參閱下方 REST API 使用手冊</td></tr>
+    <tr><td colspan="8">尚無 token — 請於上方建立，並參閱下方 REST API 使用手冊</td></tr>
     {% endfor %}
   </tbody>
 </table>

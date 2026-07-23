@@ -23,6 +23,7 @@ from web.auth import authenticate, ensure_portal_can_start
 from web.api import router as api_router
 from web.admin_users import build_admin_users_router
 from web.admin_api_tokens import build_admin_api_tokens_router
+from web.admin_audit import build_admin_audit_router
 from web.account import build_account_router
 from web.deps import (
     current_user,
@@ -32,7 +33,7 @@ from web.deps import (
     session_username,
     set_session_user,
 )
-from nccm.auth.audit import audit_portal_login
+from nccm.auth.audit import audit_portal_login, write_audit
 
 load_dotenv()
 
@@ -58,6 +59,7 @@ NAV = [
 ADMIN_NAV = [
     ("admin_users", "使用者管理", "/admin/users"),
     ("admin_api_tokens", "API Token", "/admin/api-tokens"),
+    ("admin_audit", "審計日誌", "/admin/audit"),
 ]
 
 
@@ -203,6 +205,7 @@ def _ctx(request: Request, page: str, **extra):
 app.include_router(build_account_router(templates, _ctx))
 app.include_router(build_admin_users_router(templates, _ctx))
 app.include_router(build_admin_api_tokens_router(templates, _ctx))
+app.include_router(build_admin_audit_router(templates, _ctx))
 
 
 @app.get("/backup", response_class=HTMLResponse)
@@ -263,6 +266,13 @@ async def backup_start(
             username=ssh_user,
             password=ssh_password,
             agent_url=netdriver_url(),
+        )
+        write_audit(
+            request=request,
+            event="backup_start",
+            success=True,
+            actor=user,
+            detail=f"job_id={job_id};devices={len(devices)}",
         )
         return RedirectResponse(url=f"/backup?run_id={job_id}", status_code=303)
     except Exception as exc:
@@ -409,6 +419,13 @@ async def inventory_rebuild(request: Request, user: str = Depends(require_operat
     from nccm.storage.index_db import rebuild_index
 
     d, s = rebuild_index()
+    write_audit(
+        request=request,
+        event="inventory_rebuild",
+        success=True,
+        actor=user,
+        detail=f"devices={d};snapshots={s}",
+    )
     return RedirectResponse(
         url=f"/inventory?rebuild_ok={d}d{s}s",
         status_code=303,
@@ -491,6 +508,7 @@ async def inventory_detail_partial(
 
 @app.get("/inventory/download/config")
 async def inventory_download_config(
+    request: Request,
     snapshot_id: int,
     device_id: str = "",
     user: str = Depends(require_operator),
@@ -512,6 +530,13 @@ async def inventory_download_config(
     ts = path.parent.name or (snap.created_at or "snapshot")
     safe_host = re.sub(r"[^\w.\-]+", "_", (snap.hostname or host or "unknown"))[:64]
     filename = f"{ip}_{safe_host}_{ts}_config.txt"
+    write_audit(
+        request=request,
+        event="config_download",
+        success=True,
+        actor=user,
+        detail=f"snapshot_id={snapshot_id};device_id={snap.device_id}",
+    )
     return FileResponse(
         path,
         media_type="text/plain; charset=utf-8",
@@ -534,6 +559,13 @@ async def inventory_retention(
     result = apply_retention(plan, dry_run=is_dry)
     q = "dry" if is_dry else "done"
     n = result.get("would_delete") if is_dry else result.get("deleted")
+    write_audit(
+        request=request,
+        event="snapshot_retention",
+        success=True,
+        actor=user,
+        detail=f"dry_run={is_dry};keep_last={plan.keep_last};n={n};device_id={device_id or '*'}",
+    )
     return RedirectResponse(
         url=f"/inventory?retention={q}&n={n}&keep={plan.keep_last}",
         status_code=303,

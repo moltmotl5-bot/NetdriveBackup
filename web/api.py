@@ -28,16 +28,22 @@ def _get_api_auth(
         )
     auth = token_service.authenticate_api_key(x_api_key)
     if auth is None:
+        detail = token_service.last_auth_failure_reason()
         audit_api_token_event(
             request,
             event="api_request",
             token_name="",
             success=False,
-            detail="invalid_or_missing_key",
+            detail=detail,
+        )
+        msg = (
+            "API token expired"
+            if detail == "token_expired"
+            else "Invalid or missing API key"
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key",
+            detail=msg,
         )
     if not token_service.token_has_scope(auth, INVENTORY_SCOPE):
         raise HTTPException(

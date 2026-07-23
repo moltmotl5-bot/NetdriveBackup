@@ -14,6 +14,7 @@ def api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     store.mkdir()
     monkeypatch.setenv("NCCM_STORE_DIR", str(store))
     monkeypatch.setenv("NCCM_AUTH_DB", str(store / "portal_auth.db"))
+    monkeypatch.setenv("NCCM_AUDIT_DB", str(store / "audit" / "audit.db"))
     monkeypatch.setenv("NCCM_ADMIN_USER", "admin")
     monkeypatch.setenv("NCCM_ADMIN_PASS", "password123456")
     monkeypatch.setenv("NCCM_SESSION_SECRET", "testsecret")
@@ -22,9 +23,15 @@ def api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     with mock.patch("dotenv.load_dotenv", lambda *a, **k: None):
         import nccm.auth.api_tokens as token_mod
+        import nccm.auth.audit as audit_mod
+        import nccm.auth.db as adb
+        import nccm.config as cfg
         import web.api
         import web.main
 
+        importlib.reload(cfg)
+        importlib.reload(adb)
+        importlib.reload(audit_mod)
         importlib.reload(token_mod)
         importlib.reload(web.api)
         importlib.reload(web.main)

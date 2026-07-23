@@ -7,13 +7,15 @@
 
 | 項目 | 說明 |
 |------|------|
-| Header | `X-API-Key: <plain-token>` |
-| 來源 | **僅** `store/portal_auth.db` 的 active API token（admin 於 Portal 建立） |
+| Header | HTTP header name X-API-Key; value = full plain token from admin UI |
+| 來源 | **僅** `store/portal_auth.db` 的 active **且未過期** API token（admin 於 Portal 建立） |
+| 有效期 | 建立時必填天數（預設 90、最長 365）；`expires_at` 為 UTC ISO；過期 → `401`（`API token expired`）；**無 expires_at 視同過期** |
 | Scope | 預設 `inventory:read`；缺 scope → 403 |
-| 無任何 active token | `500`（`API token not configured on server`） |
+| 無任何可用 token | `500`（`API token not configured on server`） |
 | 錯誤／缺 key | `401` |
 | `.env` `API_KEY` | **不再生效**（回歸測試鎖定） |
 | Health | `GET /api/v1/health` 無需 key → `{"status":"ok"}` |
+| 審計 | `store/audit/audit.db`（可 `NCCM_AUDIT_DB`）；admin `/admin/audit` 與 CSV 匯出 |
 
 ## Query 參數
 
