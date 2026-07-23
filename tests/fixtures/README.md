@@ -11,6 +11,7 @@
 | `huawei/mfg_chassis_12700_shape.txt` | HW-MFG-STACK_12700 | Chassis 表頭形狀（P0 僅契約／文件；完整解析 P1） |
 | `huawei/version_s5732.txt` | HW-VER | display version 節錄 |
 | `huawei/stack_cli.txt` | HW-STACK-CLI | `display stack` Slot/Role 表（P1.1 展開主來源） |
+| `config/cfg_a.txt` / `cfg_b.txt` | HW-CFG 形狀 | Config Diff 合成樣本（P2） |
 | `cisco/stack_show_switch.txt` | CS-STACK | show version 節錄 + show switch |
 | `fortinet/ha_status.txt` | FG-HA | get system ha status 節錄 |
 

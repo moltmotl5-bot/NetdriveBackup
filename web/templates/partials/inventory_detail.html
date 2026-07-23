@@ -6,7 +6,7 @@
       hx-trigger="change"
       hx-include="this">
   <input type="hidden" name="device_id" value="{{ device_id }}" />
-  <label>備份版本</label>
+  <label>備份版本（檢視）</label>
   <select name="snapshot_id">
     {% for s in snapshots %}
     <option value="{{ s.id }}" {% if snapshot_id == s.id %}selected{% endif %}>
@@ -14,10 +14,25 @@
     </option>
     {% endfor %}
   </select>
+  <label>與舊版本比對（Config Diff）</label>
+  <select name="compare_id">
+    <option value="0">— 不比對 —</option>
+    {% for s in snapshots %}
+    <option value="{{ s.id }}" {% if compare_id == s.id %}selected{% endif %}>
+      {{ s.created_at }} — {{ s.sw_version }}
+    </option>
+    {% endfor %}
+  </select>
 </form>
+{% if diff_text %}
+<div class="diff-block">
+  <h3>Config Diff <span class="muted">{{ diff_meta }}</span></h3>
+  <pre class="config-preview diff-preview">{{ diff_text }}</pre>
+</div>
+{% endif %}
 <div class="config-header">
   <h3>Running-Configuration</h3>
-  {% if snapshot_id and portal_role == 'admin' %}
+  {% if snapshot_id and portal_role in ('admin', 'operator') %}
   <a class="btn-secondary config-download"
      href="/inventory/download/config?snapshot_id={{ snapshot_id }}&device_id={{ device_id | urlencode }}">下載</a>
   <span class="config-restore-warn" title="還原前請自行確認格式與設備相容性">⚠ 下載檔可能無法直接用於還原，請勿未經驗證即套用至生產設備。</span>

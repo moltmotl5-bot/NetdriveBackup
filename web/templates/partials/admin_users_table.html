@@ -23,6 +23,7 @@
         <form method="post" action="/admin/users/{{ u.id }}/role" class="inline-form">
           <select name="role" onchange="this.form.submit()">
             <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>admin</option>
+            <option value="operator" {% if u.role == 'operator' %}selected{% endif %}>operator</option>
             <option value="viewer" {% if u.role == 'viewer' %}selected{% endif %}>viewer</option>
           </select>
         </form>

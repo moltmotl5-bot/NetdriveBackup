@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}鄰居拓撲 — NCCM v3{% endblock %}
+{% block content %}
+<h1>鄰居拓撲</h1>
+<p class="lead">依最新 CDP/LLDP 與設備總表建圖。滾輪縮放、拖曳平移；點節點開設備總表。</p>
+<form method="get" action="/topology" class="filters">
+  <select name="site">
+    <option value="">全部 Site</option>
+    {% for s in sites %}
+    <option value="{{ s }}" {% if site_filter == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  {% include "partials/vendor_select.html" %}
+  <button type="submit" class="btn-secondary">套用</button>
+</form>
+<p class="muted">節點 {{ node_count }} · 連線 {{ edge_count }}</p>
+<div id="topo-wrap" class="topo-wrap">
+  <svg id="topo-svg" class="topo-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+<script id="topo-data" type="application/json">{{ graph_json | safe }}</script>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById("topo-data").textContent || "{}");
+  const svg = document.getElementById("topo-svg");
+  const wrap = document.getElementById("topo-wrap");
+  const W = Math.max(wrap.clientWidth || 800, 640);
+  const H = Math.max(480, Math.min(720, window.innerHeight * 0.65));
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", H);
+
+  const gRoot = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  gRoot.setAttribute("id", "topo-root");
+  svg.appendChild(gRoot);
+
+  const nodes = (data.nodes || []).map((n, i) => {
+    const angle = (2 * Math.PI * i) / Math.max(data.nodes.length, 1);
+    const r = Math.min(W, H) * 0.32;
+    return {
+      ...n,
+      x: W / 2 + r * Math.cos(angle),
+      y: H / 2 + r * Math.sin(angle),
+    };
+  });
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const edges = (data.edges || []).filter((e) => byId[e.source] && byId[e.target]);
+
+  // simple repulsion
+  for (let iter = 0; iter < 40; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        let dx = nodes[j].x - nodes[i].x;
+        let dy = nodes[j].y - nodes[i].y;
+        let d2 = dx * dx + dy * dy || 1;
+        let f = 800 / d2;
+        dx *= f; dy *= f;
+        nodes[i].x -= dx; nodes[i].y -= dy;
+        nodes[j].x += dx; nodes[j].y += dy;
+      }
+    }
+    for (const e of edges) {
+      const a = byId[e.source], b = byId[e.target];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      a.x += dx * 0.02; a.y += dy * 0.02;
+      b.x -= dx * 0.02; b.y -= dy * 0.02;
+    }
+    for (const n of nodes) {
+      n.x = Math.max(40, Math.min(W - 40, n.x));
+      n.y = Math.max(40, Math.min(H - 40, n.y));
+    }
+  }
+
+  for (const e of edges) {
+    const a = byId[e.source], b = byId[e.target];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+    line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+    line.setAttribute("class", "topo-edge");
+    line.setAttribute("title", `${e.local_if} → ${e.remote_if} (${e.proto})`);
+    gRoot.appendChild(line);
+  }
+  for (const n of nodes) {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "topo-node");
+    g.style.cursor = "pointer";
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", n.x); c.setAttribute("cy", n.y);
+    c.setAttribute("r", n.id.startsWith("ext::") ? 10 : 14);
+    c.setAttribute("class", n.id.startsWith("ext::") ? "topo-dot ext" : "topo-dot");
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", n.x); t.setAttribute("y", n.y + 28);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "topo-label");
+    t.textContent = (n.label || n.id).slice(0, 28);
+    g.appendChild(c); g.appendChild(t);
+    g.addEventListener("click", () => {
+      if (!n.id.startsWith("ext::")) {
+        window.location.href = "/inventory?device_id=" + encodeURIComponent(n.id);
+      }
+    });
+    gRoot.appendChild(g);
+  }
+
+  let scale = 1, tx = 0, ty = 0;
+  let dragging = false, lx = 0, ly = 0;
+  function apply() {
+    gRoot.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
+  }
+  wrap.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    const delta = ev.deltaY > 0 ? 0.9 : 1.1;
+    scale = Math.max(0.3, Math.min(4, scale * delta));
+    apply();
+  }, { passive: false });
+  wrap.addEventListener("mousedown", (ev) => {
+    dragging = true; lx = ev.clientX; ly = ev.clientY;
+  });
+  window.addEventListener("mouseup", () => { dragging = false; });
+  window.addEventListener("mousemove", (ev) => {
+    if (!dragging) return;
+    tx += ev.clientX - lx; ty += ev.clientY - ly;
+    lx = ev.clientX; ly = ev.clientY;
+    apply();
+  });
+})();
+</script>
+{% endblock %}

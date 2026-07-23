@@ -51,12 +51,16 @@ def require_admin(request: Request) -> str:
 
 
 def require_operator(request: Request) -> str:
-    """Admin only — blocks viewer from backup/rebuild/download/admin."""
+    """Admin or operator — blocks viewer from backup/rebuild/download/destructive ops."""
     name = require_user(request)
-    if session_role(request) != "admin":
+    if session_role(request) not in ("admin", "operator"):
         raise HTTPException(status_code=403, detail="forbidden")
     return name
 
 
 def current_user(request: Request) -> str:
     return session_username(request)
+
+
+def role_can_operate(role: str) -> bool:
+    return (role or "") in ("admin", "operator")

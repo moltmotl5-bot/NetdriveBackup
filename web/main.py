@@ -51,7 +51,9 @@ NAV = [
     ("backup", "批次備份", "/backup"),
     ("inventory", "設備總表與版控", "/inventory"),
     ("neighbors", "CDP/LLDP 鄰居", "/neighbors"),
+    ("topology", "鄰居拓撲", "/topology"),
     ("interfaces", "Interface Map", "/interfaces"),
+    ("schedules", "排程備份", "/schedules"),
 ]
 ADMIN_NAV = [
     ("admin_users", "使用者管理", "/admin/users"),
@@ -62,7 +64,7 @@ ADMIN_NAV = [
 def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
     items = list(NAV)
     if role == "viewer":
-        items = [x for x in items if x[0] != "backup"]
+        items = [x for x in items if x[0] not in ("backup", "schedules")]
     if role == "admin":
         items = [*items, *ADMIN_NAV]
     return items
@@ -110,6 +112,12 @@ app.add_middleware(SessionMiddleware, secret_key=_secret)
 @app.on_event("startup")
 async def _check_portal_env() -> None:
     ensure_portal_can_start()
+    try:
+        from nccm.backup.schedule import start_schedule_watcher
+
+        start_schedule_watcher()
+    except Exception:
+        pass
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -333,7 +341,9 @@ async def inventory_page(
     vendor: str = "",
     device_id: str = "",
     snapshot_id: int = 0,
+    compare_id: int = 0,
 ):
+    from nccm.storage.config_diff import diff_snapshots
     from nccm.storage.index_db import (
         get_snapshot,
         list_inventory_display,
@@ -349,6 +359,9 @@ async def inventory_page(
     snapshots = []
     config_preview = ""
     selected_snap = None
+    sid = 0
+    diff_text = ""
+    diff_meta = ""
     if device_id:
         snapshots = list_snapshots_for_device(device_id)
         sid = snapshot_id or (snapshots[0].id if snapshots else 0)
@@ -356,6 +369,16 @@ async def inventory_page(
             selected_snap = get_snapshot(sid)
             if selected_snap:
                 config_preview = read_config_text(sid)
+        if sid and compare_id and compare_id != sid:
+            try:
+                dr = diff_snapshots(device_id, compare_id, sid)
+                diff_text = dr.unified
+                diff_meta = f"{dr.a_label} → {dr.b_label}" + (
+                    "（相同）" if dr.identical else "（有差異）"
+                )
+            except ValueError as e:
+                diff_text = str(e)
+                diff_meta = "diff error"
 
     return templates.TemplateResponse(
         request,
@@ -372,7 +395,10 @@ async def inventory_page(
             device_id=device_id,
             snapshots=snapshots,
             snapshot_id=selected_snap.id if selected_snap else 0,
+            compare_id=compare_id,
             config_preview=config_preview,
+            diff_text=diff_text,
+            diff_meta=diff_meta,
             rebuild_msg=None,
         ),
     )
@@ -414,7 +440,9 @@ async def inventory_detail_partial(
     user: str = Depends(current_user),
     device_id: str = "",
     snapshot_id: int = 0,
+    compare_id: int = 0,
 ):
+    from nccm.storage.config_diff import diff_snapshots
     from nccm.storage.index_db import (
         get_snapshot,
         list_snapshots_for_device,
@@ -430,6 +458,20 @@ async def inventory_detail_partial(
         if selected_snap:
             config_preview = read_config_text(sid)
 
+    diff_text = ""
+    diff_meta = ""
+    cid = compare_id
+    if device_id and sid and cid and cid != sid:
+        try:
+            dr = diff_snapshots(device_id, cid, sid)
+            diff_text = dr.unified
+            diff_meta = f"{dr.a_label} → {dr.b_label}" + (
+                "（相同）" if dr.identical else "（有差異）"
+            )
+        except ValueError as e:
+            diff_text = str(e)
+            diff_meta = "diff error"
+
     return templates.TemplateResponse(
         request,
         "partials/inventory_detail.html",
@@ -439,7 +481,10 @@ async def inventory_detail_partial(
             device_id=device_id,
             snapshots=snapshots,
             snapshot_id=sid,
+            compare_id=cid,
             config_preview=config_preview,
+            diff_text=diff_text,
+            diff_meta=diff_meta,
         ),
     )
 
@@ -471,6 +516,193 @@ async def inventory_download_config(
         path,
         media_type="text/plain; charset=utf-8",
         filename=filename,
+    )
+
+
+@app.post("/inventory/retention", response_class=HTMLResponse)
+async def inventory_retention(
+    request: Request,
+    user: str = Depends(require_operator),
+    keep_last: Annotated[int, Form()] = 10,
+    dry_run: Annotated[str, Form()] = "1",
+    device_id: Annotated[str, Form()] = "",
+):
+    from nccm.storage.retention import apply_retention, plan_retention
+
+    plan = plan_retention(keep_last=keep_last, device_id=device_id or None)
+    is_dry = dry_run != "0"
+    result = apply_retention(plan, dry_run=is_dry)
+    q = "dry" if is_dry else "done"
+    n = result.get("would_delete") if is_dry else result.get("deleted")
+    return RedirectResponse(
+        url=f"/inventory?retention={q}&n={n}&keep={plan.keep_last}",
+        status_code=303,
+    )
+
+
+@app.get("/topology", response_class=HTMLResponse)
+async def topology_page(
+    request: Request,
+    user: str = Depends(current_user),
+    site: str = "",
+    vendor: str = "",
+):
+    from nccm.inventory.topology import build_topology
+    from nccm.storage.index_db import list_sites, list_vendors
+
+    graph = build_topology(site=site, vendor=vendor)
+    return templates.TemplateResponse(
+        request,
+        "topology.html",
+        _ctx(
+            request,
+            "topology",
+            graph_json=json.dumps(graph, ensure_ascii=False),
+            sites=list_sites(),
+            vendors=list_vendors(),
+            site_filter=site,
+            vendor_filter=vendor,
+            node_count=graph.get("node_count", 0),
+            edge_count=graph.get("edge_count", 0),
+        ),
+    )
+
+
+@app.get("/topology/data")
+async def topology_data(
+    user: str = Depends(current_user),
+    site: str = "",
+    vendor: str = "",
+):
+    from nccm.inventory.topology import build_topology
+
+    return build_topology(site=site, vendor=vendor)
+
+
+@app.get("/schedules", response_class=HTMLResponse)
+async def schedules_page(
+    request: Request,
+    user: str = Depends(require_operator),
+    message: str = "",
+    error: str = "",
+):
+    from nccm.backup.schedule import list_schedules
+
+    return templates.TemplateResponse(
+        request,
+        "schedules.html",
+        _ctx(
+            request,
+            "schedules",
+            schedules=list_schedules(),
+            message=message or None,
+            error=error or None,
+        ),
+    )
+
+
+@app.post("/schedules", response_class=HTMLResponse)
+async def schedules_create(
+    request: Request,
+    user: str = Depends(require_operator),
+    name: Annotated[str, Form()] = "",
+    csv_text: Annotated[str, Form()] = "",
+    every_minutes: Annotated[int, Form()] = 60,
+):
+    from nccm.backup.schedule import create_schedule, list_schedules
+
+    try:
+        create_schedule(name, csv_text, every_minutes=every_minutes)
+        msg, err = "已建立排程（僅 dry-mock，不連設備）", None
+    except ValueError as e:
+        msg, err = None, str(e)
+    return templates.TemplateResponse(
+        request,
+        "schedules.html",
+        _ctx(
+            request,
+            "schedules",
+            schedules=list_schedules(),
+            message=msg,
+            error=err,
+        ),
+    )
+
+
+@app.post("/schedules/{schedule_id}/run", response_class=HTMLResponse)
+async def schedules_run_now(
+    request: Request,
+    schedule_id: int,
+    user: str = Depends(require_operator),
+):
+    from nccm.backup.schedule import list_schedules, run_schedule
+
+    try:
+        r = run_schedule(schedule_id)
+        msg = f"mock 完成：{r.get('device_count', 0)} 台 — {r.get('message', '')}"
+        err = None
+        if not r.get("ok", True):
+            err = r.get("error") or msg
+            msg = None
+    except ValueError as e:
+        msg, err = None, str(e)
+    return templates.TemplateResponse(
+        request,
+        "schedules.html",
+        _ctx(
+            request,
+            "schedules",
+            schedules=list_schedules(),
+            message=msg,
+            error=err,
+        ),
+    )
+
+
+@app.post("/schedules/{schedule_id}/toggle", response_class=HTMLResponse)
+async def schedules_toggle(
+    request: Request,
+    schedule_id: int,
+    user: str = Depends(require_operator),
+):
+    from nccm.backup.schedule import get_schedule, list_schedules, set_enabled
+
+    sch = get_schedule(schedule_id)
+    if not sch:
+        raise HTTPException(404)
+    set_enabled(schedule_id, not sch.enabled)
+    return templates.TemplateResponse(
+        request,
+        "schedules.html",
+        _ctx(
+            request,
+            "schedules",
+            schedules=list_schedules(),
+            message="已更新啟用狀態",
+            error=None,
+        ),
+    )
+
+
+@app.post("/schedules/{schedule_id}/delete", response_class=HTMLResponse)
+async def schedules_delete(
+    request: Request,
+    schedule_id: int,
+    user: str = Depends(require_operator),
+):
+    from nccm.backup.schedule import delete_schedule, list_schedules
+
+    delete_schedule(schedule_id)
+    return templates.TemplateResponse(
+        request,
+        "schedules.html",
+        _ctx(
+            request,
+            "schedules",
+            schedules=list_schedules(),
+            message="已刪除排程",
+            error=None,
+        ),
     )
 
 

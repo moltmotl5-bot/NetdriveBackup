@@ -1,0 +1,10 @@
+sysname LAB-SW1
+#
+vlan batch 10 20
+#
+interface GigabitEthernet0/0/1
+ description old-ap
+ port link-type access
+ port default vlan 10
+#
+return

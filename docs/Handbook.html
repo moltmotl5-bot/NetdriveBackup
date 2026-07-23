@@ -176,7 +176,7 @@
     <p>NCCM v3（Network Configuration Change Management）以 <strong>FastAPI Web 入口</strong>搭配 <strong>NetDriver Agent</strong>，透過 SSH 對網路設備執行 CLI，擷取組態與狀態並寫入本機 <code>store/</code> 目錄與 SQLite 索引。</p>
     <ul>
       <li><strong>支援廠牌</strong>：Cisco（IOS / NX-OS）、Fortinet FortiGate、Huawei CE（v3 路線圖<strong>不含 WLC</strong>）。</li>
-      <li><strong>四項 Web 功能</strong>：批次備份、設備總表與版控、CDP/LLDP 鄰居、Device Interface Map。</li>
+      <li><strong>Web 功能</strong>：批次備份、設備總表與版控（含 Config Diff／快照保留）、CDP/LLDP 鄰居、<strong>鄰居拓撲（可 zoom）</strong>、Interface Map、<strong>排程備份（dry-mock）</strong>。角色：admin／operator／viewer。</li>
       <li><strong>正式部署</strong>：專案根目錄 <code>docker-compose.yml</code>（Portal + Agent）。舊版 Streamlit 已移至 <code>legacy/</code>。</li>
     </ul>
   </section>

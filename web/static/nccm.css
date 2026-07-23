@@ -138,6 +138,25 @@ th, td { border: 1px solid var(--border); padding: 0.45rem 0.6rem; text-align: l
 .config-header h3 { margin: 0; }
 .config-restore-warn { font-size: 0.85rem; color: #b45309; max-width: 28rem; line-height: 1.35; }
 .config-download { margin: 0; text-decoration: none; color: var(--text); }
+.diff-block { margin: 0.75rem 0; }
+.diff-preview { border-left: 3px solid var(--accent); max-height: 40vh; }
+.retention-form { display: inline-flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-left: 0.5rem; }
+.topo-wrap {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #121a24;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  min-height: 480px;
+}
+.topo-wrap:active { cursor: grabbing; }
+.topo-svg { display: block; width: 100%; }
+.topo-edge { stroke: #4a5d78; stroke-width: 1.5; }
+.topo-dot { fill: var(--accent); stroke: #0f1419; stroke-width: 2; }
+.topo-dot.ext { fill: #6b7280; }
+.topo-label { fill: var(--text); font-size: 11px; pointer-events: none; }
 .btn-secondary { background: #2a3548; width: auto; display: inline-block; padding: 0.4rem 0.8rem; margin-bottom: 0.5rem; }
 .inline-form { display: inline; }
 .ok-banner { color: var(--ok); font-size: 0.9rem; }

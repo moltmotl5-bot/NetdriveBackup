@@ -175,18 +175,29 @@ store/
 
 ---
 
-## Web 功能（四頁）
+## Web 功能
 
 1. **批次備份** — CSV、SSH 帳密、即時 job log；支援廠牌 **Cisco**（IOS/IOS-XE Catalyst、Stack；Nexus）、**Fortinet**、**Huawei**（不支援 WLC）  
-2. **設備總表與版控** — … **Cisco Stack / Huawei iStack / FortiGate HA** 每台實體機一行（Stack#、Role **Primary/Member**（或 Secondary）、各自序號；Cisco／Huawei 成員 hostname 為 `管理名 · SW#`）。…
+2. **設備總表與版控** — … **Cisco Stack / Huawei iStack / FortiGate HA** 每台實體機一行（Stack#、Role **Primary/Member**（或 Secondary）、各自序號；Cisco／Huawei 成員 hostname 為 `管理名 · SW#`）。選兩版可看 **Config Diff**；**admin／operator** 可下載 config、重建索引、**快照保留**（keep_last dry-run／執行）。  
    - **Cisco Stack**：`version_info.txt` + **`show switch` → `stack_info.txt`**
    - **Huawei iStack**：**`display stack` → `stack_info.txt`**（主來源）+ `manufacture_info.txt` 依 Slot 補 serial／model；**僅 manufacture 多 Slot 不展開**
    - **FortiGate HA**：`get system ha status` → `ha_status.txt`（Primary/Secondary 含 hostname、serial）
    展開異常時請重新備份後按 **重建索引**（並 `docker compose up -d --build` portal 若程式已更新）。  
 3. **CDP/LLDP 鄰居** — 設備列表同總表展開 Stack/HA；由快照解析鄰居表  
-4. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
+4. **鄰居拓撲** — 由庫存＋LLDP/CDP 建圖；**滾輪縮放／拖曳平移**  
+5. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
+6. **排程備份** — CSV 清單 + 間隔分鐘；本版僅 **dry-mock**（不 SSH／不打 Agent）；`store/schedules.db`  
 
-側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。Portal 帳號存於 **`store/portal_auth.db`**（密碼雜湊）；**admin** 可進 **使用者管理**、**API Token**；**viewer** 唯讀（無批次備份／重建索引／config 下載）。**首次以 `.env` bootstrap 登入後須立即變更密碼**（`/account/change-password`）。
+側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。Portal 帳號存於 **`store/portal_auth.db`**（密碼雜湊）。
+
+| 能力 | admin | operator | viewer |
+|------|-------|----------|--------|
+| 批次備份／排程 mock／重建索引／retention | ✓ | ✓ | ✗ |
+| config 下載 | ✓ | ✓ | ✗ |
+| 使用者管理／API Token | ✓ | ✗ | ✗ |
+| 總表／diff／鄰居／拓撲／介面 | ✓ | ✓ | ✓ |
+
+**首次以 `.env` bootstrap 登入後須立即變更密碼**（`/account/change-password`）。
 
 ---
 

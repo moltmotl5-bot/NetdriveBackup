@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}排程備份 — NCCM v3{% endblock %}
+{% block content %}
+<h1>排程備份</h1>
+<p class="lead">CSV 清單 + 間隔分鐘。本版僅 <strong>dry-mock</strong>（解析 CSV、不 SSH／不打 Agent）。背景 watcher 會依間隔自動 mock 執行。</p>
+{% if message %}<p class="ok-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<section class="panel">
+  <h2>新增排程</h2>
+  <form method="post" action="/schedules" class="admin-user-form">
+    <label>名稱 <input name="name" required placeholder="lab-nightly" /></label>
+    <label>間隔（分鐘） <input name="every_minutes" type="number" min="1" value="60" /></label>
+    <label class="full">CSV
+      <textarea name="csv_text" rows="6" required placeholder="Site,IP,Vendor,Port">Site,IP,Vendor,Port
+lab,10.0.0.1,huawei,22
+lab,10.0.0.2,cisco,22</textarea>
+    </label>
+    <button type="submit" class="btn-primary">建立</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>排程列表</h2>
+  <div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th><th>名稱</th><th>間隔</th><th>啟用</th>
+        <th>上次執行</th><th>結果</th><th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in schedules %}
+      <tr>
+        <td>{{ s.id }}</td>
+        <td>{{ s.name }}</td>
+        <td>{{ s.every_minutes }}m</td>
+        <td>{% if s.enabled %}<span class="ok">on</span>{% else %}<span class="muted">off</span>{% endif %}</td>
+        <td class="muted">{{ s.last_run_at or '—' }}</td>
+        <td class="muted">{{ s.last_result or '—' }}</td>
+        <td class="admin-actions">
+          <form method="post" action="/schedules/{{ s.id }}/run" class="inline-form">
+            <button type="submit" class="btn-secondary btn-sm">立即 mock</button>
+          </form>
+          <form method="post" action="/schedules/{{ s.id }}/toggle" class="inline-form">
+            <button type="submit" class="btn-secondary btn-sm">{% if s.enabled %}停用{% else %}啟用{% endif %}</button>
+          </form>
+          <form method="post" action="/schedules/{{ s.id }}/delete" class="inline-form"
+                onsubmit="return confirm('刪除此排程？');">
+            <button type="submit" class="btn-secondary btn-sm">刪除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">尚無排程。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

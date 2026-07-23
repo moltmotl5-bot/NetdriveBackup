@@ -11,7 +11,8 @@ from nccm.auth.passwords import (
     verify_password,
 )
 
-Role = Literal["admin", "viewer"]
+Role = Literal["admin", "operator", "viewer"]
+VALID_ROLES: frozenset[str] = frozenset({"admin", "operator", "viewer"})
 
 
 def user_count() -> int:
@@ -58,7 +59,7 @@ def create_user(
     name = (username or "").strip()
     if not name:
         raise ValueError("username required")
-    if role not in ("admin", "viewer"):
+    if role not in VALID_ROLES:
         raise ValueError("invalid role")
     assert_password_policy(name, password)
     now = auth_db._utc_now()
@@ -102,12 +103,12 @@ def set_active(user_id: int, active: bool) -> None:
 
 
 def set_role(user_id: int, role: Role) -> None:
-    if role not in ("admin", "viewer"):
+    if role not in VALID_ROLES:
         raise ValueError("invalid role")
     user = get_user_by_id(user_id)
     if not user:
         raise ValueError("user not found")
-    if user.role == "admin" and role == "viewer":
+    if user.role == "admin" and role != "admin":
         _ensure_not_last_active_admin(user_id)
     now = auth_db._utc_now()
     with auth_db.connect() as conn:

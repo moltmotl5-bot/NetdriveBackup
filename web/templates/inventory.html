@@ -2,13 +2,30 @@
 {% block title %}設備總表與版控 — NCCM v3{% endblock %}
 {% block content %}
 <h1>設備總表與版控</h1>
-<p class="lead">備份成功後自動建立索引；亦可手動重建。</p>
+<p class="lead">備份成功後自動建立索引；亦可手動重建。選設備後可看 Running-Config 與版本 Diff。</p>
 {% if request.query_params.get('rebuild_ok') %}
 <p class="ok-banner">索引已重建：{{ request.query_params.get('rebuild_ok') }}</p>
 {% endif %}
-{% if portal_role == 'admin' %}
+{% if request.query_params.get('retention') %}
+<p class="ok-banner">
+  快照保留：{{ request.query_params.get('retention') }} —
+  keep_last={{ request.query_params.get('keep') }}，
+  筆數={{ request.query_params.get('n') }}
+</p>
+{% endif %}
+{% if portal_role in ('admin', 'operator') %}
 <form method="post" action="/inventory/rebuild" class="inline-form">
   <button type="submit" class="btn-secondary">重建索引</button>
+</form>
+<form method="post" action="/inventory/retention" class="inline-form retention-form">
+  <label class="muted">保留最近
+    <input type="number" name="keep_last" value="10" min="1" max="500" style="width:4rem" />
+    份
+  </label>
+  <input type="hidden" name="device_id" value="{{ device_id }}" />
+  <button type="submit" name="dry_run" value="1" class="btn-secondary">預覽刪除（dry-run）</button>
+  <button type="submit" name="dry_run" value="0" class="btn-secondary"
+          onclick="return confirm('確定刪除超出保留份數的舊快照？');">執行清理</button>
 </form>
 {% endif %}
 <div class="inv-page-stack">
@@ -37,7 +54,7 @@
     {% if device_id %}
       {% include "partials/inventory_detail.html" %}
     {% else %}
-    <p class="muted">點選上方設備列以檢視版本與 Running-Configuration。</p>
+    <p class="muted">點選上方設備列以檢視版本、Config Diff 與 Running-Configuration。</p>
     {% endif %}
   </section>
 </div>

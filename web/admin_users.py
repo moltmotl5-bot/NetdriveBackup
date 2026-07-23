@@ -57,7 +57,7 @@ def build_admin_users_router(templates: Jinja2Templates, ctx: CtxFn) -> APIRoute
         role: Annotated[str, Form()] = "viewer",
     ):
         try:
-            r = role if role in ("admin", "viewer") else "viewer"
+            r = role if role in ("admin", "operator", "viewer") else "viewer"
             auth_service.create_user(username, password, role=r)  # type: ignore[arg-type]
             return _page(request, error=None, message="已新增使用者")
         except ValueError as e:
@@ -99,7 +99,7 @@ def build_admin_users_router(templates: Jinja2Templates, ctx: CtxFn) -> APIRoute
         role: Annotated[str, Form()] = "viewer",
     ):
         try:
-            r = role if role in ("admin", "viewer") else "viewer"
+            r = role if role in ("admin", "operator", "viewer") else "viewer"
             auth_service.set_role(user_id, role=r)  # type: ignore[arg-type]
             return _page(request, error=None, message="已更新角色")
         except ValueError as e:
