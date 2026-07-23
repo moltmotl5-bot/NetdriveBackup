@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NCCM v3 · 排程備份產品化增強計畫</title>
+  <style>
+    :root {
+      --bg: #0c1018;
+      --sidebar: #121a28;
+      --card: #1a2436;
+      --text: #e8edf5;
+      --muted: #8fa3be;
+      --accent: #3d8bfd;
+      --accent2: #2dd4a8;
+      --warn: #e6a700;
+      --danger: #f07178;
+      --border: #2a3850;
+      --code-bg: #0a0f16;
+      --prompt-bg: #0d1520;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "SF Pro Text", "PingFang TC", "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      margin: 0;
+      display: grid;
+      grid-template-columns: minmax(200px, 17rem) 1fr;
+      min-height: 100vh;
+    }
+    nav.toc {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100vh;
+      overflow-y: auto;
+      background: var(--sidebar);
+      border-right: 1px solid var(--border);
+      padding: 1.25rem 1rem 2rem;
+      font-size: 0.82rem;
+    }
+    nav.toc .brand { font-weight: 700; font-size: 0.95rem; color: #fff; margin-bottom: 0.35rem; line-height: 1.35; }
+    nav.toc .ver { color: var(--muted); margin-bottom: 1.25rem; font-size: 0.75rem; }
+    nav.toc a {
+      display: block; color: var(--muted); text-decoration: none;
+      padding: 0.35rem 0.5rem; border-radius: 6px; margin: 0.1rem 0;
+    }
+    nav.toc a:hover { background: rgba(61, 139, 253, 0.12); color: var(--text); }
+    nav.toc .group {
+      color: #6b7f99; font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: 0.06em; margin: 1rem 0 0.35rem 0.5rem;
+    }
+    main { padding: 2rem 2.5rem 4rem; max-width: 54rem; }
+    h1 { font-size: 1.85rem; margin: 0 0 0.35rem; }
+    .lead { color: var(--muted); font-size: 1.05rem; margin-bottom: 1.5rem; }
+    h2 {
+      font-size: 1.3rem; margin-top: 2.75rem; padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border); color: #fff; scroll-margin-top: 1rem;
+    }
+    h3 { font-size: 1.05rem; margin-top: 1.6rem; color: #c5d4e8; scroll-margin-top: 1rem; }
+    h4 { font-size: 0.95rem; margin-top: 1.1rem; color: var(--accent2); }
+    p, li { color: var(--text); }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.9rem;
+      margin: 0.75rem 0 1.25rem; background: var(--card);
+      border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border); padding: 0.55rem 0.75rem;
+      text-align: left; vertical-align: top;
+    }
+    th { background: rgba(0,0,0,0.25); color: #c5d4e8; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    code, kbd {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.84em; background: var(--code-bg); padding: 0.12em 0.4em;
+      border-radius: 4px; border: 1px solid var(--border);
+    }
+    pre {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.9rem 1rem; overflow-x: auto;
+      font-size: 0.82rem; line-height: 1.55;
+    }
+    pre code { border: none; padding: 0; background: transparent; }
+    .block {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1rem 1.15rem; margin: 1rem 0;
+    }
+    .prereq {
+      border-left: 3px solid var(--warn);
+      background: rgba(230, 167, 0, 0.08);
+    }
+    .prereq h4 { color: var(--warn); margin-top: 0; }
+    .success { border-left: 3px solid var(--accent2); }
+    .danger-note { border-left: 3px solid var(--danger); }
+    .badge {
+      display: inline-block; font-size: 0.72rem; font-weight: 700;
+      padding: 0.15rem 0.5rem; border-radius: 999px; letter-spacing: 0.02em;
+      vertical-align: middle; margin-right: 0.35rem;
+    }
+    .b-now { background: #3a2a10; color: #ffd58a; }
+    .b-a { background: #12304a; color: #9ec9ff; }
+    .b-b { background: #1a2f28; color: #8ef0c8; }
+    .b-c { background: #2a2040; color: #d4b8ff; }
+    .b-d { background: #3d1f1f; color: #ffb4b4; }
+    ul.compact li { margin: 0.25rem 0; }
+    .meta-bar {
+      display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem;
+      font-size: 0.88rem; color: var(--muted); margin-bottom: 1.5rem;
+    }
+    .meta-bar strong { color: var(--text); }
+    footer {
+      margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 0.82rem;
+    }
+    @media (max-width: 860px) {
+      body { grid-template-columns: 1fr; }
+      nav.toc { position: relative; max-height: none; }
+      main { padding: 1.25rem 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" aria-label="目錄">
+    <div class="brand">NCCM v3<br/>排程備份增強計畫</div>
+    <div class="ver">docs/schedule-backup-enhancement-plan.html</div>
+    <div class="group">總覽</div>
+    <a href="#overview">範圍與目標</a>
+    <a href="#as-is">現況（dry-mock）</a>
+    <a href="#gap">缺口</a>
+    <a href="#decisions">產品決策</a>
+    <a href="#arch">目標架構</a>
+    <div class="group">分期</div>
+    <a href="#phase-a">Phase A · 資料與加密</a>
+    <a href="#phase-b">Phase B · Live 執行</a>
+    <a href="#phase-c">Phase C · 可觀測／文件</a>
+    <a href="#phase-d">Phase D · 增強</a>
+    <div class="group">交付</div>
+    <a href="#files">檔案清單</a>
+    <a href="#test">測試與 UAT</a>
+    <a href="#accept">驗收標準</a>
+    <a href="#risks">風險</a>
+    <a href="#open">待確認問題</a>
+    <a href="#prompt">啟動 Prompt</a>
+    <a href="#refs">相關文件</a>
+  </nav>
+
+  <main>
+    <h1>排程備份產品化 · 專項增強計畫</h1>
+    <p class="lead">
+      <strong>僅涵蓋「排程備份」</strong>由 dry-mock 升級為可營運真實週期備份。
+      不含拓撲、diff、retention 本體、新廠牌等其他 epic。
+      <strong>本文件為 PLAN</strong>；未獲「start building」前不實作。
+    </p>
+    <div class="meta-bar">
+      <span><strong>基準分支</strong> AAA-addon</span>
+      <span><strong>現況</strong> dry-mock（P2 skeleton）</span>
+      <span><strong>MVP</strong> Phase A + B + C 核心</span>
+      <span><strong>語言</strong> 繁體中文</span>
+      <span><strong>實作計劃稿</strong> <code>.hermes/plans/2026-07-23-scheduled-backup-productization.md</code></span>
+    </div>
+
+    <div class="block danger-note">
+      <strong>警告（現況）：</strong>側欄「排程備份」目前<strong>不會</strong> SSH、不會打 Agent、不會寫快照。
+      僅解析 CSV 並更新 <code>last_run_at</code>／<code>last_result</code>。請勿當成已在自動備份設備。
+    </div>
+
+    <!-- ========== overview ========== -->
+    <h2 id="overview">1. 範圍與目標</h2>
+    <h3>1.1 In scope</h3>
+    <ul class="compact">
+      <li>排程定義持久化（沿用／擴充 <code>store/schedules.db</code>）</li>
+      <li>模式：<code>dry_mock</code>｜<code>live</code></li>
+      <li>SSH 憑證安全存放與綁定（至少每排程一組帳密）</li>
+      <li>Watcher 到期與「立即執行」觸發<strong>真實備份</strong>（走既有 runner）</li>
+      <li>防重入、單 Portal flock、執行歷史、審計</li>
+      <li>UI／Handbook／README 產品化敘述</li>
+    </ul>
+    <h3>1.2 Out of scope（本專項不做）</h3>
+    <ul class="compact">
+      <li>鄰居拓撲（已移除）、Config Diff、快照保留功能本體</li>
+      <li>新廠牌 parser、CMDB 整合、完整通知中心（可列 Phase D）</li>
+      <li>K8s 多副本 leader election（僅單實例 + flock 契約）</li>
+      <li>重寫 NetDriver／批次備份 runner 核心邏輯</li>
+    </ul>
+    <h3>1.3 成功樣貌（MVP）</h3>
+    <div class="block success">
+      營運者建立 live 排程 → 綁定加密憑證 → 啟用 →
+      到期或手動觸發 → 與「批次備份」同等品質寫入 <code>store/</code> 與 <code>index.db</code> →
+      可在排程頁／審計看到 ok/fail 與 job／run id → 誤開風險可控（預設 mock、confirm）。
+    </div>
+
+    <!-- ========== as-is ========== -->
+    <h2 id="as-is">2. 現況（dry-mock）</h2>
+    <table>
+      <thead><tr><th>元件</th><th>路徑</th><th>行為</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>排程核心</td>
+          <td><code>nccm/backup/schedule.py</code></td>
+          <td>CRUD、<code>every_minutes</code>、enable、watcher ~30s、<code>mock_run_csv</code></td>
+        </tr>
+        <tr>
+          <td>Web</td>
+          <td><code>web/main.py</code> <code>/schedules*</code>、<code>schedules.html</code></td>
+          <td>admin／operator；建立、立即 mock、toggle、delete</td>
+        </tr>
+        <tr>
+          <td>真備份（未接）</td>
+          <td><code>runner.py</code>、<code>job_manager.py</code></td>
+          <td>批次備份已用；排程<strong>尚未</strong>呼叫</td>
+        </tr>
+        <tr>
+          <td>資料</td>
+          <td><code>store/schedules.db</code></td>
+          <td>name、csv_text、間隔、last_run、last_result；<strong>無密碼、無 mode</strong></td>
+        </tr>
+        <tr>
+          <td>文件</td>
+          <td>Handbook <code>#use-schedules</code></td>
+          <td>已標註 dry-mock</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ========== gap ========== -->
+    <h2 id="gap">3. 缺口（產品化必須補）</h2>
+    <table>
+      <thead><tr><th>缺口</th><th>風險／影響</th></tr></thead>
+      <tbody>
+        <tr><td>只 mock 不備份</td><td>誤以為已自動備援</td></tr>
+        <tr><td>無 SSH 憑證</td><td>無法 live</td></tr>
+        <tr><td>CSV 一組帳密</td><td>多廠牌需拆排程（與批次相同限制）</td></tr>
+        <tr><td>無 flock／leader</td><td>多 Portal 可能雙跑</td></tr>
+        <tr><td>job 僅記憶體</td><td>重啟丟進度；難關聯歷史</td></tr>
+        <tr><td>無防重入</td><td>長備份與短間隔重疊</td></tr>
+        <tr><td>無 dry／live 開關</td><td>易誤觸全網</td></tr>
+        <tr><td>無結構化 run 歷史</td><td>營運難追溯</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ========== decisions ========== -->
+    <h2 id="decisions">4. 產品決策（建議凍結 MVP）</h2>
+    <table>
+      <thead><tr><th>ID</th><th>議題</th><th>建議</th><th>備選</th></tr></thead>
+      <tbody>
+        <tr><td>D1</td><td>時間表達</td><td><strong>every_minutes</strong>（沿用）</td><td>每日 HH:MM；cron</td></tr>
+        <tr><td>D2</td><td>憑證模型</td><td><strong>每排程一組</strong> user/pass/enable</td><td>具名憑證庫；per-vendor map</td></tr>
+        <tr><td>D3</td><td>密文</td><td><strong>Fernet</strong> + <code>NCCM_SECRETS_KEY</code></td><td>僅 env；外部 vault</td></tr>
+        <tr><td>D4</td><td>CSV</td><td><strong>DB csv_text</strong></td><td>store 檔路徑</td></tr>
+        <tr><td>D5</td><td>重疊</td><td><strong>skip if running</strong></td><td>queue；cancel previous</td></tr>
+        <tr><td>D6</td><td>裝置失敗</td><td>與 runner 同：逐台記錄、不整批中止</td><td>—</td></tr>
+        <tr><td>D7</td><td>自動 retention</td><td><strong>不做</strong>（文件建議手動）</td><td>排程可選 keep_last</td></tr>
+        <tr><td>D8</td><td>Viewer</td><td><strong>可看狀態、不可改</strong></td><td>完全隱藏</td></tr>
+        <tr><td>D9</td><td>立即執行</td><td>保留 dry-mock；live 需 confirm</td><td>—</td></tr>
+        <tr><td>D10</td><td>多副本</td><td><strong>單 Portal + flock</strong></td><td>僅文件警告</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">開 build 前請在文末「待確認問題」拍板；偏離建議時改本表再動手。</p>
+
+    <!-- ========== arch ========== -->
+    <h2 id="arch">5. 目標架構</h2>
+    <pre><code>Portal (single replica)
+  schedule watcher (30s + store/schedule.lock)
+       │ due?
+       ▼
+  schedule_executor
+       ├─ mode=dry_mock → mock_run_csv → schedule_runs
+       └─ mode=live
+            ├─ decrypt credentials (Fernet)
+            ├─ load_devices_csv
+            ├─ start_backup_job_async  ──► job_manager ──► run_backup_job
+            │                                    │              │
+            │                                    │              ▼
+            │                                    │         NetDriver Agent → SSH
+            │                                    │              │
+            └─ on complete: runs + audit + last_*◄┘              ▼
+                                                         store/ + index.db</code></pre>
+    <h3>5.1 原則</h3>
+    <ul class="compact">
+      <li><strong>不重寫備份</strong>：一律 <code>run_backup_job</code>／<code>start_backup_job_async</code></li>
+      <li>Cisco enable 規則維持 runner 既有邏輯</li>
+      <li>Agent URL 與批次備份相同（<code>NCCM_NETDRIVER_URL</code>）</li>
+      <li>密碼不進 git、不進 SSE／job log 明文</li>
+    </ul>
+    <h3>5.2 資料模型（摘要）</h3>
+    <div class="block">
+      <h4>schedules 擴充</h4>
+      <p><code>mode</code>（dry_mock｜live）、<code>username</code>、<code>password_enc</code>、<code>enable_password_enc</code>、
+      <code>running_job_id</code>、<code>last_job_id</code>、<code>last_ok_count</code>、<code>last_fail_count</code>、<code>created_by</code>…</p>
+      <h4>schedule_runs（新表）</h4>
+      <p>schedule_id、started/finished、mode、job_id、run_id、status、ok/fail/device_count、summary、triggered_by</p>
+      <h4>舊資料</h4>
+      <p>既有列 migration 後 <code>mode=dry_mock</code>，行為與今日相容。</p>
+    </div>
+
+    <!-- ========== phases ========== -->
+    <h2 id="phase-a"><span class="badge b-a">A</span>Phase A · 資料與加密（仍可不連設備）</h2>
+    <div class="block prereq">
+      <h4>前置</h4>
+      <ul class="compact">
+        <li>決定 <code>NCCM_SECRETS_KEY</code> 產製與 compose secret 掛載方式</li>
+        <li><code>cryptography</code>（Fernet）納入依賴</li>
+        <li>無需 lab 設備（本階段可不 SSH）</li>
+      </ul>
+    </div>
+    <h4>交付物</h4>
+    <ul class="compact">
+      <li><code>nccm/backup/secrets.py</code> 加解密</li>
+      <li>schema 幂等 ensure（mode、密文字段、<code>schedule_runs</code>）</li>
+      <li>CRUD／UI：模式、憑證欄（空白=保留原密文）</li>
+      <li>無 key 時拒絕建立／切換 live</li>
+      <li>審計：schedule create/update/delete</li>
+      <li>pytest：加解密、migration、預設 dry_mock</li>
+    </ul>
+    <h4>完成定義</h4>
+    <p>不開 live 時與現況 mock 相容；DB 可安全存密文；測試綠。</p>
+
+    <h2 id="phase-b"><span class="badge b-b">B</span>Phase B · Live 執行串 runner</h2>
+    <div class="block prereq">
+      <h4>前置</h4>
+      <ul class="compact">
+        <li>Phase A 完成</li>
+        <li>lab 或 SimuNet：Agent 可達 + 至少 1 台 CSV 設備（手動 UAT）</li>
+        <li>單元測試以 monkeypatch runner，不強迫 CI 連實機</li>
+      </ul>
+    </div>
+    <h4>交付物</h4>
+    <ul class="compact">
+      <li><code>schedule_executor.py</code>：dry／live 分支、<code>triggered_by</code></li>
+      <li>整合 <code>start_backup_job_async</code>；完成輪詢或 on_complete callback</li>
+      <li>D5：同 schedule running → skip + audit</li>
+      <li><code>store/schedule.lock</code> 包住 tick</li>
+      <li>UI：「立即真實備份」+ confirm；「立即 dry-mock」保留</li>
+      <li><code>last_result</code> 含 ok/fail、job_id、run_id</li>
+      <li>審計：run_start／run_finish／skipped</li>
+      <li>pytest：mock runner 全路徑；缺憑證不呼叫 runner</li>
+    </ul>
+    <h4>完成定義</h4>
+    <p>Live 路徑可在 lab 產出新快照；重入與 lock 行為有測試。</p>
+
+    <h2 id="phase-c"><span class="badge b-c">C</span>Phase C · 可觀測、角色、文件</h2>
+    <ul class="compact">
+      <li>排程頁：最近 N 次 <code>schedule_runs</code></li>
+      <li>進行中狀態（polling 可選）</li>
+      <li>Viewer 唯讀列表（若 D8=A）</li>
+      <li>Handbook <code>#use-schedules</code>、README、.env.example 全面改寫</li>
+      <li>升級說明：舊排程預設 dry_mock；啟用 live 步驟</li>
+      <li>明確文件：<strong>官方支援單 Portal 副本</strong></li>
+    </ul>
+
+    <h2 id="phase-d"><span class="badge b-d">D</span>Phase D · 增強（另開／可選）</h2>
+    <table>
+      <thead><tr><th>項目</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td>具名憑證庫</td><td>credentials 表 + 排程引用 id（D2=C）</td></tr>
+        <tr><td>Per-vendor 密碼</td><td>roadmap；多廠牌單 CSV</td></tr>
+        <tr><td>每日 HH:MM／cron</td><td>超越 every_minutes</td></tr>
+        <tr><td>Webhook／SMTP</td><td>失敗告警</td></tr>
+        <tr><td>SSH key</td><td>依賴 NetDriver 能力確認</td></tr>
+        <tr><td>成功後 keep_last</td><td>串 retention</td></tr>
+        <tr><td>Job log 落盤</td><td><code>store/jobs/</code></td></tr>
+        <tr><td>多實例 leader</td><td>真 HA 時再做</td></tr>
+      </tbody>
+    </table>
+
+    <h3>工期粗估</h3>
+    <table>
+      <thead><tr><th>Phase</th><th>約略</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td>0.5–1 日</td></tr>
+        <tr><td>B</td><td>1–1.5 日</td></tr>
+        <tr><td>C</td><td>0.5–1 日</td></tr>
+        <tr><td>MVP 合計</td><td><strong>約 2.5–4 工程日</strong></td></tr>
+      </tbody>
+    </table>
+
+    <!-- ========== files ========== -->
+    <h2 id="files">6. 預計檔案清單</h2>
+    <table>
+      <thead><tr><th>動作</th><th>路徑</th></tr></thead>
+      <tbody>
+        <tr><td>Create</td><td><code>nccm/backup/secrets.py</code></td></tr>
+        <tr><td>Create</td><td><code>nccm/backup/schedule_executor.py</code></td></tr>
+        <tr><td>Modify</td><td><code>nccm/backup/schedule.py</code></td></tr>
+        <tr><td>Modify</td><td><code>nccm/backup/job_manager.py</code>（可選 on_complete）</td></tr>
+        <tr><td>Modify</td><td><code>web/main.py</code>、<code>web/templates/schedules.html</code></td></tr>
+        <tr><td>Create</td><td><code>tests/backup/test_secrets.py</code>、<code>test_schedule_live.py</code></td></tr>
+        <tr><td>Modify</td><td><code>tests/backup/test_schedule.py</code></td></tr>
+        <tr><td>Modify</td><td><code>docs/Handbook.html</code>、<code>README.md</code>、<code>.env.example</code></td></tr>
+        <tr><td>Modify</td><td>依賴清單（pyproject／requirements）</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ========== test ========== -->
+    <h2 id="test">7. 測試與 UAT</h2>
+    <h3>自動化（CI 預設）</h3>
+    <ul class="compact">
+      <li>Fernet roundtrip；無 key 拒 live</li>
+      <li>due／skip running／缺憑證</li>
+      <li>executor + monkeypatch <code>run_backup_job</code>／async</li>
+      <li>flock 第二 tick 不雙跑（tmp lock）</li>
+      <li><code>pytest -m "not private"</code> 全綠</li>
+    </ul>
+    <h3>手動 UAT（lab）</h3>
+    <ol>
+      <li><code>docker compose up</code>；設定 <code>NCCM_SECRETS_KEY</code></li>
+      <li>建 dry_mock 排程 → 立即 mock → 確認不新增快照</li>
+      <li>改 live + 帳密 → 立即真實備份 → inventory 有新版本</li>
+      <li>短間隔 + 長備份 → 第二次 skip</li>
+      <li>admin 審計可見 schedule_run_* </li>
+      <li>viewer（若實作）只讀</li>
+    </ol>
+    <div class="block danger-note">禁止將真實密碼、lab 明文 dump 提交 git。</div>
+
+    <!-- ========== accept ========== -->
+    <h2 id="accept">8. MVP 驗收標準</h2>
+    <ol>
+      <li>dry_mock 行為與產品化前相容（解析 CSV、不 SSH）。</li>
+      <li>設定 secrets key 後可存 live 憑證；UI／API／DB 無密碼明文。</li>
+      <li>手動與 watcher 皆可觸發與批次同等備份；成功可見新快照。</li>
+      <li>同排程不平行雙跑 live。</li>
+      <li>run 結果可區分 ok/fail；審計有對應事件。</li>
+      <li>無 key 無法啟用 live（錯誤清楚）。</li>
+      <li>pytest 公開集全綠；Handbook／README 已更新。</li>
+    </ol>
+
+    <!-- ========== risks ========== -->
+    <h2 id="risks">9. 風險與緩解</h2>
+    <table>
+      <thead><tr><th>風險</th><th>緩解</th></tr></thead>
+      <tbody>
+        <tr><td>誤開 live 打全網</td><td>預設 dry_mock；confirm；可預設 enabled=0</td></tr>
+        <tr><td>密碼進 log</td><td>code review 檢查點 + 測試</td></tr>
+        <tr><td>備份時長 &gt; 間隔</td><td>skip if running</td></tr>
+        <tr><td>Agent 不可達</td><td>runner 錯誤 → runs failed + audit</td></tr>
+        <tr><td>多 Portal 雙跑</td><td>flock + 文件單副本契約</td></tr>
+        <tr><td>與 per-vendor 密碼期待落差</td><td>MVP 文件寫清；Phase D map</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ========== open ========== -->
+    <h2 id="open">10. 待確認問題（回覆後再開 build）</h2>
+    <ol>
+      <li>憑證：每排程一組（建議）還是直接做具名憑證庫？</li>
+      <li>第一版是否就要 <strong>per-vendor 密碼</strong>？</li>
+      <li>只要 every_minutes，還是要每日固定時刻？</li>
+      <li>Viewer 是否可見排程狀態？</li>
+      <li>新建 live 是否預設 <strong>停用</strong> 直至手動開啟？</li>
+      <li>是否需要成功後自動 keep_last？</li>
+    </ol>
+
+    <!-- ========== prompt ========== -->
+    <h2 id="prompt">11. 啟動 Prompt（確認決策後貼給 Agent）</h2>
+    <div class="block">
+      <pre><code>依 docs/schedule-backup-enhancement-plan.html 實作排程備份產品化。
+決策凍結：D1=A every_minutes；D2=A 每排程帳密；D3=Fernet NCCM_SECRETS_KEY；
+D4=csv_text；D5=skip if running；D7=不自動 retention；D8=viewer 唯讀；D10=單 Portal+flock。
+先做 Phase A，完成定義通過後再 Phase B，然後 C。
+TDD；pytest -m "not private" 全綠。不要做拓撲／其他 epic。
+繁中簡報進度。未要求前不要 push。</code></pre>
+    </div>
+    <p class="muted">可改「只做 Phase A」或帶上 §10 的最終答案覆寫建議決策。</p>
+
+    <!-- ========== refs ========== -->
+    <h2 id="refs">12. 相關文件</h2>
+    <ul class="compact">
+      <li>實作向詳細稿：<code>.hermes/plans/2026-07-23-scheduled-backup-productization.md</code></li>
+      <li>總計畫中的 P2.1 前置（歷史）：<code>docs/AAA-addon-enhancement-plan.html</code> §P2.1</li>
+      <li>使用現況：<code>docs/Handbook.html</code> → 排程備份（dry-mock）</li>
+      <li>程式：<code>nccm/backup/schedule.py</code>、<code>runner.py</code>、<code>job_manager.py</code></li>
+    </ul>
+
+    <footer>
+      NCCM v3 · 排程備份專項增強計畫 · 僅 PLAN · 與 AAA-addon 總計畫分離，避免範圍膨脹。<br/>
+      更新本文件不代表已實作；實作完成後應同步 Handbook／README 並勾選驗收。
+    </footer>
+  </main>
+</body>
+</html>

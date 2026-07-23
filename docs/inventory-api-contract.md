@@ -44,7 +44,7 @@
 | `serial_summary` | string | **序號**（Huawei：來自 `manufacture_info`，非 version 內 SW） |
 | `snapshot_count` | int | 快照數 |
 | `stack_switch` | int/null | Stack／HA 成員序號（1-based 顯示用） |
-| `stack_role` | string | Primary / Member / Active … |
+| `stack_role` | string | Stack（Cisco／Huawei）：`Master` / `Standby` / `Member`；HA（Fortinet）：`Primary` / `Secondary` |
 | `is_config_anchor` | bool | 是否為組態錨點成員 |
 | `cluster_type` | string | `stack` / `ha` / 空 |
 

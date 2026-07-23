@@ -178,12 +178,29 @@ def _prefer_serial(candidate: str, fallback: str) -> str:
 
 
 def normalize_stack_display_role(role: str, *, vendor: str = "") -> str:
-    """Align Cisco stack roles with FortiGate HA labels (Primary / Secondary / Member)."""
+    """Normalize cluster roles for inventory / API display.
+
+    * **Stack** (Cisco / Huawei / default): Huawei-style **Master / Standby / Member**
+      (Cisco Active→Master; Cisco Member stays Member; Standby/Secondary→Standby).
+    * **HA** (Fortinet): **Primary / Secondary / Member**.
+    """
     r = (role or "").strip().lower()
+    v = (vendor or "").strip().lower()
+    # Accept "Cisco IOS" / mixed case via substring
+    is_ha = v == "fortinet" or "forti" in v
+    if is_ha:
+        if r in ("active", "master", "primary"):
+            return "Primary"
+        if r in ("standby", "secondary", "slave"):
+            return "Secondary"
+        if r in ("member",):
+            return "Member"
+        return (role or "Member").strip() or "Member"
+    # Cisco stack + Huawei iStack (+ unknown treated as stack labels)
     if r in ("active", "master", "primary"):
-        return "Primary"
+        return "Master"
     if r in ("standby", "secondary", "slave"):
-        return "Secondary"
+        return "Standby"
     if r in ("member",):
         return "Member"
     return (role or "Member").strip() or "Member"

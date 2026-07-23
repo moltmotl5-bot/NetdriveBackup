@@ -178,7 +178,7 @@ store/
 ## Web 功能
 
 1. **批次備份** — CSV、SSH 帳密、即時 job log；支援廠牌 **Cisco**（IOS/IOS-XE Catalyst、Stack；Nexus）、**Fortinet**、**Huawei**（不支援 WLC）  
-2. **設備總表與版控** — … **Cisco Stack / Huawei iStack / FortiGate HA** 每台實體機一行（Stack#、Role **Primary/Member**（或 Secondary）、各自序號；Cisco／Huawei 成員 hostname 為 `管理名 · SW#`）。選兩版可看 **Config Diff**；**admin／operator** 可下載 config、重建索引、**快照保留**（keep_last dry-run／執行）。  
+2. **設備總表與版控** — … **Cisco Stack / Huawei iStack / FortiGate HA** 每台實體機一行（Stack#、Role、各自序號；**Stack 角色與 Huawei 對齊**：Cisco／Huawei 為 **Master／Standby／Member**（Cisco Active→Master）；Forti HA 為 **Primary／Secondary**；Cisco／Huawei 成員 hostname 為 `管理名 · SW#`）。選兩版可看 **Config Diff**；**admin／operator** 可下載 config、重建索引、**快照保留**（keep_last dry-run／執行）。  
    - **Cisco Stack**：`version_info.txt` + **`show switch` → `stack_info.txt`**
    - **Huawei iStack**：**`display stack` → `stack_info.txt`**（主來源）+ `manufacture_info.txt` 依 Slot 補 serial／model；**僅 manufacture 多 Slot 不展開**
    - **FortiGate HA**：`get system ha status` → `ha_status.txt`（Primary/Secondary 含 hostname、serial）

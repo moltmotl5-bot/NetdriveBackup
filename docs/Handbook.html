@@ -397,7 +397,10 @@ dc,10.2.1.5,huawei,22</code></pre>
     <li>設備表約顯示 10 列高度，其餘於表內捲動；點列或「檢視」開啟下方詳情。</li>
     <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config），並以<strong>下載</strong>取得完整檔案（<code>GET /inventory/download/config</code>，需登入）。下載旁有警示：<strong>檔案可能無法直接用於還原</strong>，套用前請自行驗證。</li>
     <li>Hostname 優先從 running-config 擷取；若舊快照顯示 unknown，可按「重建索引」從 config.txt 回填。</li>
-    <li><strong>Cisco Stack / Huawei iStack / FortiGate HA</strong>：總表、鄰居、Interface Map 的設備列表皆<strong>每台實體機一行</strong>（Stack#、Role Primary/Secondary/Member、各自 Model/Serial）。Cisco／Huawei 成員 hostname 為 <code>管理名 · SW#</code>；Forti 為 HA 解析之主機名。錨點列標 <strong>· 組態</strong>；虛擬 IP 只備一份 config。Cisco 備份含 <code>show switch</code>（<code>stack_info.txt</code>，非 Nexus）。Huawei 備份含 <code>display stack</code> → <code>stack_info.txt</code>（失敗 soft-skip）；<strong>僅有</strong> stack CLI 且 ≥2 成員才展開，manufacture 只補序號。異常時<strong>重新備份</strong>後按「<strong>重建索引</strong>」；更新 Portal 映像後請 <code>docker compose up -d --build</code> portal。</li>
+    <li><strong>Cisco Stack / Huawei iStack / FortiGate HA</strong>：總表、鄰居、Interface Map 的設備列表皆<strong>每台實體機一行</strong>（Stack#、Role、各自 Model/Serial）。
+      <strong>Stack 角色與 Huawei 對齊</strong>：Cisco／Huawei 皆顯示 <code>Master</code> / <code>Standby</code> / <code>Member</code>（Cisco CLI 的 Active→Master；勿與 Forti HA 的 Primary/Secondary 混淆）。
+      FortiGate HA 仍為 <code>Primary</code> / <code>Secondary</code>。
+      Cisco／Huawei 成員 hostname 為 <code>管理名 · SW#</code>；Forti 為 HA 解析之主機名。錨點列標 <strong>· 組態</strong>；虛擬 IP 只備一份 config。Cisco 備份含 <code>show switch</code>（<code>stack_info.txt</code>，非 Nexus）。Huawei 備份含 <code>display stack</code> → <code>stack_info.txt</code>（失敗 soft-skip）；<strong>僅有</strong> stack CLI 且 ≥2 成員才展開，manufacture 只補序號。異常時<strong>重新備份</strong>後按「<strong>重建索引</strong>」；更新 Portal 映像後請 <code>docker compose up -d --build</code> portal。</li>
     <li><strong>重建索引</strong>：掃描整個 <code>store/</code> 重建 <code>index.db</code>（手動還原資料或修復索引時使用）。與下方「快照保留」不同：重建<strong>不刪</strong>快照目錄。</li>
     <li><strong>Config Diff</strong>：於詳情選兩個快照版本，比對 <code>config.txt</code> 的 unified diff（僅檢視，不改檔）。</li>
     <li>快照空間管理見下一節「<a href="#use-inventory-retention">快照保留</a>」。</li>
