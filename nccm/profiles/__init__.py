@@ -133,6 +133,8 @@ def huawei_backup_commands() -> list[CommandSpec]:
     return [
         CommandSpec("version_info", "display version", mode),
         CommandSpec("manufacture_info", "display device manufacture-info", mode),
+        # iStack topology; soft-skipped on standalone / chassis without stack CLI
+        CommandSpec("stack_info", "display stack", mode),
         CommandSpec("config", "display current-configuration", mode, timeout=300),
         CommandSpec("interfaces", "display interface brief", mode),
         CommandSpec("lldp", "display lldp neighbor brief", mode),

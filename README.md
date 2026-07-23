@@ -142,10 +142,10 @@ Web 支援 **上傳 CSV** 或貼上內容；備份在背景執行，頁面以 **
 | 廠牌 | Agent 執行模式 | JSON 欄位 | 設定備份指令（摘要） |
 |------|----------------|-----------|----------------------|
 | **Cisco** | `login`（不送 `enable` CLI；Agent `CiscoBase` 略過 enable） | `login` | Nexus：`show running-config`；其餘 IOS：`show running-config view full` |
-| **Huawei** | `enable` | `mode` | `display current-configuration` 等；另備份 **`display device manufacture-info`** → 庫存 **序號** |
+| **Huawei** | `enable` | `mode` | `display current-configuration` 等；**`display device manufacture-info`** → 庫存 **序號**；**`display stack`** → `stack_info.txt`（iStack 展開，失敗 soft-skip） |
 | **Fortinet** | `enable` | `mode` | `show full-configuration` 等 |
 
-Cisco 備份**不傳** `enable_password`；Huawei／Fortinet 仍可使用 Portal 的 enable 密碼（若設備需要）。**Huawei 設備總表 Serial** 僅取自快照 **`manufacture_info.txt`**（`display device manufacture-info` 的 **Serial-number** 欄）；備份後請 **重建索引** 更新總表。
+Cisco 備份**不傳** `enable_password`；Huawei／Fortinet 仍可使用 Portal 的 enable 密碼（若設備需要）。**Huawei 設備總表 Serial** 僅取自快照 **`manufacture_info.txt`**（`display device manufacture-info` 的 **Serial-number** 欄）。**Huawei iStack 展開**僅在有 **`stack_info.txt`**（`display stack`）且 ≥2 成員時；manufacture **只補**各 Slot 序號／型號，**不得**僅因多 Slot 就當 stack。單機／無 stack CLI（含多數 Chassis）維持一列。備份或索引欄位變更後請 **重建索引**。
 
 ---
 
@@ -162,6 +162,8 @@ store/
                 ├── config.txt
                 ├── version_info.txt
                 ├── manufacture_info.txt   # Huawei：序號來源
+                ├── stack_info.txt         # Cisco: show switch / Huawei: display stack
+                ├── ha_status.txt          # Forti HA
                 ├── cdp_neighbors.txt   # Cisco 等
                 ├── lldp_neighbors.txt
                 └── interfaces.txt
@@ -178,9 +180,9 @@ store/
 1. **批次備份** — CSV、SSH 帳密、即時 job log；支援廠牌 **Cisco**（IOS/IOS-XE Catalyst、Stack；Nexus）、**Fortinet**、**Huawei**（不支援 WLC）  
 2. **設備總表與版控** — … **Cisco Stack / Huawei iStack / FortiGate HA** 每台實體機一行（Stack#、Role **Primary/Member**（或 Secondary）、各自序號；Cisco／Huawei 成員 hostname 為 `管理名 · SW#`）。…
    - **Cisco Stack**：`version_info.txt` + **`show switch` → `stack_info.txt`**
-   - **Huawei Stack**：`manufacture_info.txt` 內 **≥2 個 Slot／Serial-number** 列即展開（與 Cisco 相同 Stack#／Role 欄）
-   - **FortiGate HA**：`ha_status.txt`（Primary/Secondary 行含 hostname、serial）  
-   展開異常時請重新備份後按 **重建索引**。  
+   - **Huawei iStack**：**`display stack` → `stack_info.txt`**（主來源）+ `manufacture_info.txt` 依 Slot 補 serial／model；**僅 manufacture 多 Slot 不展開**
+   - **FortiGate HA**：`get system ha status` → `ha_status.txt`（Primary/Secondary 含 hostname、serial）
+   展開異常時請重新備份後按 **重建索引**（並 `docker compose up -d --build` portal 若程式已更新）。  
 3. **CDP/LLDP 鄰居** — 設備列表同總表展開 Stack/HA；由快照解析鄰居表  
 4. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
 

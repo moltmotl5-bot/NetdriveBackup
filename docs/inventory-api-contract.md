@@ -50,10 +50,10 @@
 
 | 廠牌 | serial_summary | 展開條件（現行） |
 |------|----------------|------------------|
-| Cisco | show version / stack serial | stack ≥2 members |
+| Cisco | show version / stack serial | `stack_info.txt`（show switch）≥2 members |
 | Fortinet | HA member serial | HA A-P 雙機 |
-| Huawei | **manufacture-info Serial-number** | manufacture ≥2 distinct slot serials（真 `display stack` → P1） |
-| Huawei S12700 Chassis 表 | 形狀已有 fixture；完整語意 **P1 TODO** | 勿當一般 iStack |
+| Huawei | **manufacture-info Serial-number**（展開列）／彙總列同 | **`display stack` → stack_info.txt** ≥2 members；manufacture 只補 Slot serial／model，**不**單獨展開 |
+| Huawei S12700 Chassis | manufacture 彙總；勿當 iStack | 無 display stack 則一列（soft-skip） |
 
 ## 測試入口
 

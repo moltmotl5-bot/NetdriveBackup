@@ -45,14 +45,26 @@ def test_private_mfg_single(private_testdata: Path):
     text = p.read_text(encoding="utf-8", errors="replace")
     info = parse_huawei_manufacture_info(text)
     assert info.serials and info.serials != "Unknown"
-    assert len(parse_huawei_stack_units(text)) == 0
+    assert len(parse_huawei_stack_units("", text)) == 0
 
 
-def test_private_mfg_stack_slots(private_testdata: Path):
+def test_private_mfg_stack_slots_alone_not_expand(private_testdata: Path):
     p = _need(private_testdata / "HW-MFG-STACK.txt")
     text = p.read_text(encoding="utf-8", errors="replace")
     assert len(parse_huawei_manufacture_rows(text)) >= 2
-    assert len(parse_huawei_stack_units(text)) >= 2
+    assert parse_huawei_stack_units("", text) == []
+
+
+def test_private_hw_stack_cli_with_mfg(private_testdata: Path):
+    stack_p = _need(private_testdata / "HW-STACK-CLI.txt")
+    mfg_p = _need(private_testdata / "HW-MFG-STACK.txt")
+    units = parse_huawei_stack_units(
+        stack_p.read_text(encoding="utf-8", errors="replace"),
+        mfg_p.read_text(encoding="utf-8", errors="replace"),
+    )
+    assert len(units) >= 2
+    assert units[0].role in ("Master", "Primary", "Active")
+    assert any(u.serial and u.serial != "Unknown" for u in units)
 
 
 def test_private_fg_ha(private_testdata: Path):

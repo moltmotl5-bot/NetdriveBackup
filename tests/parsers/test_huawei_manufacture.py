@@ -15,7 +15,9 @@ from conftest import read_fixture
 
 
 def test_backup_includes_manufacture_artifact():
-    assert "manufacture_info" in [s.artifact for s in huawei_backup_commands()]
+    arts = [s.artifact for s in huawei_backup_commands()]
+    assert "manufacture_info" in arts
+    assert "stack_info" in arts
 
 
 def test_mfg_single_serial():

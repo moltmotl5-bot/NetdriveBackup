@@ -195,7 +195,14 @@ def backup_device(
                     timeout=spec.timeout,
                 )
             except NetDriverError as exc:
-                if spec.artifact in ("interfaces", "cdp", "lldp", "manufacture_info"):
+                if spec.artifact in (
+                    "interfaces",
+                    "cdp",
+                    "lldp",
+                    "manufacture_info",
+                    "stack_info",
+                    "ha_status",
+                ):
                     _log(f"{row.ip}: skip {spec.artifact} ({exc})")
                     artifacts[spec.artifact] = ""
                     continue

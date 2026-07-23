@@ -232,7 +232,9 @@ def _sync_stack_units(
     elif v == "fortinet":
         units = parse_fortigate_ha_units(ha_text or version_text)
     elif v == "huawei":
+        # Expand only when display stack CLI is present; manufacture fills serials.
         units = parse_huawei_stack_units(
+            stack_extra or "",
             manufacture_text,
             default_sw=default_sw,
             default_model=default_model,
@@ -394,7 +396,11 @@ def index_manifest(manifest: dict[str, Any], snapshot_path: Path) -> int:
                 ),
             )
         ha_text = _read_ha_status(snapshot_path) if normalize_vendor(vendor) == "fortinet" else ""
-        stack_extra = _read_stack_info(snapshot_path) if normalize_vendor(vendor) == "cisco" else ""
+        stack_extra = (
+            _read_stack_info(snapshot_path)
+            if normalize_vendor(vendor) in ("cisco", "huawei")
+            else ""
+        )
         mfg_text = (
             _read_manufacture_info(snapshot_path)
             if normalize_vendor(vendor) == "huawei"

@@ -206,33 +206,146 @@ def member_display_hostname(
     return f"{base} · SW{unit.switch_num}"
 
 
-def parse_huawei_stack_units(
-    manufacture_text: str,
+def parse_huawei_display_stack(
+    stack_text: str,
     *,
     default_sw: str = "",
     default_model: str = "",
 ) -> list[StackUnit]:
-    """iStack / multi-member from manufacture-info Slot rows (≥2 distinct serials)."""
-    from nccm.parsers.version import parse_huawei_manufacture_rows
+    """Parse Huawei ``display stack`` (or members) table into StackUnit list.
 
-    rows = parse_huawei_manufacture_rows(manufacture_text)
-    if len(rows) < 2:
+    Recognizes Slot / Role / MAC / Priority / Device Type rows (Master/Standby/…).
+    Returns [] when fewer than 2 members or output is not a stack table.
+    """
+    text = stack_text or ""
+    if not text.strip():
         return []
-    primary_slot = min(r.slot for r in rows)
+    # Drop NetDriver banners / prompts lightly
+    cleaned_lines: list[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("===== "):
+            continue
+        if re.fullmatch(r"<[^>]+>", s):
+            continue
+        cleaned_lines.append(line)
+    body = "\n".join(cleaned_lines)
+
+    row_re = re.compile(
+        r"^\s*(\d+)\s+"
+        r"(Master|Standby|Slave|Member|Active|Primary|Secondary)\s+"
+        r"(\S+)\s+"
+        r"(\d+)\s+"
+        r"(\S+)\s*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    raw: list[tuple[int, str, str, str]] = []
+    for m in row_re.finditer(body):
+        slot = int(m.group(1))
+        role_raw = m.group(2).strip()
+        # Keep Huawei terms; normalize Active→Master style only lightly
+        role_map = {
+            "active": "Master",
+            "primary": "Master",
+            "secondary": "Standby",
+            "slave": "Standby",
+            "member": "Member",
+            "master": "Master",
+            "standby": "Standby",
+        }
+        role = role_map.get(role_raw.lower(), role_raw.capitalize())
+        model = m.group(5).strip()
+        raw.append((slot, role, model, m.group(3).strip()))  # slot, role, model, mac
+
+    if len(raw) < 2:
+        return []
+
+    min_slot = min(s for s, *_ in raw)
+    offset = 0 if min_slot >= 1 else 1
     units: list[StackUnit] = []
-    for i, r in enumerate(sorted(rows, key=lambda x: x.slot), start=1):
-        role = "Primary" if r.slot == primary_slot else "Member"
+    for slot, role, model, _mac in sorted(raw, key=lambda x: x[0]):
         units.append(
             StackUnit(
-                switch_num=i,
+                switch_num=slot + offset,
                 role=role,
-                model=(r.model or default_model or "Unknown").strip(),
-                serial=r.serial,
+                model=(model or default_model or "Unknown").strip() or "Unknown",
+                serial="Unknown",
                 sw_version=default_sw or "",
                 hostname="",
             )
         )
     return sorted(units, key=lambda u: u.switch_num)
+
+
+def _huawei_slot_from_switch_num(switch_num: int, slots: list[int]) -> int | None:
+    """Map 1-based display switch_num back to physical slot when slots are 0-based."""
+    if not slots:
+        return None
+    min_slot = min(slots)
+    offset = 0 if min_slot >= 1 else 1
+    slot = switch_num - offset
+    return slot if slot in slots else None
+
+
+def enrich_huawei_stack_with_manufacture(
+    units: list[StackUnit],
+    manufacture_text: str,
+) -> list[StackUnit]:
+    """Fill serial (and model if Unknown) from manufacture-info by physical Slot."""
+    if not units or not (manufacture_text or "").strip():
+        return units
+    from nccm.parsers.version import parse_huawei_manufacture_rows
+
+    rows = parse_huawei_manufacture_rows(manufacture_text)
+    if not rows:
+        return units
+    by_slot = {r.slot: r for r in rows}
+    slots = list(by_slot.keys())
+    out: list[StackUnit] = []
+    for u in units:
+        slot = _huawei_slot_from_switch_num(u.switch_num, slots)
+        if slot is None and u.switch_num in by_slot:
+            slot = u.switch_num
+        row = by_slot.get(slot) if slot is not None else None
+        if not row:
+            out.append(u)
+            continue
+        model = u.model
+        if not model or model == "Unknown":
+            model = (row.model or model or "Unknown").strip() or "Unknown"
+        out.append(
+            StackUnit(
+                switch_num=u.switch_num,
+                role=u.role,
+                model=model,
+                serial=row.serial or u.serial,
+                sw_version=u.sw_version,
+                hostname=u.hostname,
+            )
+        )
+    return out
+
+
+def parse_huawei_stack_units(
+    stack_text: str = "",
+    manufacture_text: str = "",
+    *,
+    default_sw: str = "",
+    default_model: str = "",
+) -> list[StackUnit]:
+    """Huawei iStack members from **display stack** CLI only.
+
+    ``manufacture_text`` only enriches serial/model by Slot — never expands stack alone.
+    Multi-slot manufacture without stack CLI → [].
+    """
+    units = parse_huawei_display_stack(
+        stack_text or "",
+        default_sw=default_sw,
+        default_model=default_model,
+    )
+    if len(units) < 2:
+        return []
+    return enrich_huawei_stack_with_manufacture(units, manufacture_text or "")
 
 
 def is_cisco_stack_version(text: str) -> bool:
