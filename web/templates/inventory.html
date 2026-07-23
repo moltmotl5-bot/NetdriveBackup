@@ -18,14 +18,16 @@
   <button type="submit" class="btn-secondary">重建索引</button>
 </form>
 <form method="post" action="/inventory/retention" class="inline-form retention-form">
-  <label class="muted">保留最近
+  <label class="muted" title="每台設備保留最新 N 份成功快照；超出者可預覽或刪除">保留最近
     <input type="number" name="keep_last" value="10" min="1" max="500" style="width:4rem" />
-    份
+    份快照
   </label>
   <input type="hidden" name="device_id" value="{{ device_id }}" />
-  <button type="submit" name="dry_run" value="1" class="btn-secondary">預覽刪除（dry-run）</button>
+  <button type="submit" name="dry_run" value="1" class="btn-secondary"
+          title="只計算將刪除筆數，不刪檔、不改索引">預覽刪除（dry-run）</button>
   <button type="submit" name="dry_run" value="0" class="btn-secondary"
-          onclick="return confirm('確定刪除超出保留份數的舊快照？');">執行清理</button>
+          title="真的刪除超出保留份數的舊快照目錄與索引列"
+          onclick="return confirm('確定刪除超出保留份數的舊快照？此操作無法復原。');">執行清理</button>
 </form>
 {% endif %}
 <div class="inv-page-stack">

@@ -52,7 +52,6 @@ NAV = [
     ("backup", "批次備份", "/backup"),
     ("inventory", "設備總表與版控", "/inventory"),
     ("neighbors", "CDP/LLDP 鄰居", "/neighbors"),
-    ("topology", "鄰居拓撲", "/topology"),
     ("interfaces", "Interface Map", "/interfaces"),
     ("schedules", "排程備份", "/schedules"),
 ]
@@ -570,45 +569,6 @@ async def inventory_retention(
         url=f"/inventory?retention={q}&n={n}&keep={plan.keep_last}",
         status_code=303,
     )
-
-
-@app.get("/topology", response_class=HTMLResponse)
-async def topology_page(
-    request: Request,
-    user: str = Depends(current_user),
-    site: str = "",
-    vendor: str = "",
-):
-    from nccm.inventory.topology import build_topology
-    from nccm.storage.index_db import list_sites, list_vendors
-
-    graph = build_topology(site=site, vendor=vendor)
-    return templates.TemplateResponse(
-        request,
-        "topology.html",
-        _ctx(
-            request,
-            "topology",
-            graph_json=json.dumps(graph, ensure_ascii=False),
-            sites=list_sites(),
-            vendors=list_vendors(),
-            site_filter=site,
-            vendor_filter=vendor,
-            node_count=graph.get("node_count", 0),
-            edge_count=graph.get("edge_count", 0),
-        ),
-    )
-
-
-@app.get("/topology/data")
-async def topology_data(
-    user: str = Depends(current_user),
-    site: str = "",
-    vendor: str = "",
-):
-    from nccm.inventory.topology import build_topology
-
-    return build_topology(site=site, vendor=vendor)
 
 
 @app.get("/schedules", response_class=HTMLResponse)

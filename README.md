@@ -184,9 +184,8 @@ store/
    - **FortiGate HA**：`get system ha status` → `ha_status.txt`（Primary/Secondary 含 hostname、serial）
    展開異常時請重新備份後按 **重建索引**（並 `docker compose up -d --build` portal 若程式已更新）。  
 3. **CDP/LLDP 鄰居** — 設備列表同總表展開 Stack/HA；由快照解析鄰居表  
-4. **鄰居拓撲** — 由庫存＋LLDP/CDP 建圖；**滾輪縮放／拖曳平移**  
-5. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
-6. **排程備份** — CSV 清單 + 間隔分鐘；本版僅 **dry-mock**（不 SSH／不打 Agent）；`store/schedules.db`  
+4. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
+5. **排程備份** — CSV 清單 + 間隔分鐘；本版僅 **dry-mock**（不 SSH／不打 Agent）；`store/schedules.db`  
 
 側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。Portal 帳號存於 **`store/portal_auth.db`**（密碼雜湊）。API Token **必填有效期**（預設 90 天、最長 365）；過期 401。審計寫入 **`store/audit/audit.db`**，admin「審計日誌」可查／匯出 CSV。
 
@@ -195,7 +194,7 @@ store/
 | 批次備份／排程 mock／重建索引／retention | ✓ | ✓ | ✗ |
 | config 下載 | ✓ | ✓ | ✗ |
 | 使用者管理／API Token／審計日誌 | ✓ | ✗ | ✗ |
-| 總表／diff／鄰居／拓撲／介面 | ✓ | ✓ | ✓ |
+| 總表／diff／鄰居／介面 | ✓ | ✓ | ✓ |
 
 **首次以 `.env` bootstrap 登入後須立即變更密碼**（`/account/change-password`）。
 
