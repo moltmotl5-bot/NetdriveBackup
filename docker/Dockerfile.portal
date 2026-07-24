@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements-v3.txt
 
 COPY nccm/ ./nccm/
 COPY web/ ./web/
+COPY docs/Handbook.html ./docs/Handbook.html
 
 ENV PYTHONPATH=/app
 ENV NCCM_APP_ROOT=/app

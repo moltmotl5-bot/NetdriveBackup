@@ -74,9 +74,20 @@ def test_viewer_cannot_mutate_schedules(web_client):
     )
 
 
+def test_viewer_can_open_help(web_client):
+    _login(web_client, "viewer1")
+    r = web_client.get("/help")
+    assert r.status_code == 200
+    assert "NCCM v3 使用手冊" in r.text
+
+
 def test_operator_sees_schedule_form(web_client):
     _login(web_client, "ops1")
     r = web_client.get("/schedules")
     assert r.status_code == 200
     assert "新增排程" in r.text
     assert "立即備份" not in r.text  # no schedules yet
+
+
+def test_help_requires_login(web_client):
+    assert web_client.get("/help", follow_redirects=False).status_code == 303

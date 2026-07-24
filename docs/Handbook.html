@@ -3,704 +3,127 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NetdriverBackup NCCM v3 — 使用手冊</title>
+  <title>NCCM v3 使用手冊</title>
   <style>
     :root {
-      --bg: #0c1018;
-      --sidebar: #121a28;
-      --card: #1a2436;
-      --text: #e8edf5;
-      --muted: #8fa3be;
-      --accent: #3d8bfd;
-      --accent2: #2dd4a8;
-      --warn: #e6a700;
-      --border: #2a3850;
-      --code-bg: #0a0f16;
+      --bg: #0c1018; --panel: #1a2436; --text: #e8edf5; --muted: #8fa3be;
+      --accent: #3d8bfd; --border: #2a3850; --code: #0a0f16;
     }
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
     body {
-      font-family: "SF Pro Text", "PingFang TC", "Segoe UI", system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.7;
-      margin: 0;
-      display: grid;
-      grid-template-columns: minmax(200px, 16rem) 1fr;
-      min-height: 100vh;
+      font-family: "PingFang TC", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+      line-height: 1.65; margin: 0; padding: 1.5rem;
+      max-width: 42rem; margin-inline: auto;
     }
-    nav.toc {
-      position: sticky;
-      top: 0;
-      align-self: start;
-      max-height: 100vh;
-      overflow-y: auto;
-      background: var(--sidebar);
-      border-right: 1px solid var(--border);
-      padding: 1.25rem 1rem 2rem;
-      font-size: 0.82rem;
-    }
-    nav.toc .brand {
-      font-weight: 700;
-      font-size: 0.95rem;
-      color: #fff;
-      margin-bottom: 0.5rem;
-      line-height: 1.35;
-    }
-    nav.toc .ver { color: var(--muted); margin-bottom: 1.25rem; font-size: 0.75rem; }
-    nav.toc a {
-      display: block;
-      color: var(--muted);
-      text-decoration: none;
-      padding: 0.35rem 0.5rem;
-      border-radius: 6px;
-      margin: 0.1rem 0;
-    }
-    nav.toc a:hover { background: rgba(61, 139, 253, 0.12); color: var(--text); }
-    nav.toc .group { color: #6b7f99; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; margin: 1rem 0 0.35rem 0.5rem; }
-    main {
-      padding: 2rem 2.5rem 4rem;
-      max-width: 48rem;
-    }
-    h1 { font-size: 1.85rem; margin: 0 0 0.35rem; }
-    .lead { color: var(--muted); font-size: 1.05rem; margin-bottom: 2rem; }
-    h2 {
-      font-size: 1.25rem;
-      margin-top: 2.75rem;
-      padding-bottom: 0.4rem;
-      border-bottom: 1px solid var(--border);
-      color: #fff;
-      scroll-margin-top: 1rem;
-    }
-    h3 { font-size: 1.02rem; margin-top: 1.5rem; color: #c5d4e8; }
-    h4 { font-size: 0.92rem; margin-top: 1rem; color: var(--muted); }
-    section.block {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1.15rem 1.35rem;
-      margin: 1rem 0;
-    }
-    pre {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem 1.1rem;
-      overflow-x: auto;
-      font-size: 0.8rem;
-      line-height: 1.55;
-      margin: 0.85rem 0;
-    }
-    code { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; }
-    p code, li code, td code {
-      background: var(--code-bg);
-      padding: 0.12em 0.38em;
-      border-radius: 4px;
-      font-size: 0.86em;
-    }
-    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 1rem 0; }
-    th, td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; vertical-align: top; }
-    th { background: var(--code-bg); color: #c5d4e8; }
-    ul, ol { padding-left: 1.35rem; }
-    li { margin: 0.35rem 0; }
-    .note, .warn, .tip {
-      border-left: 4px solid var(--accent2);
-      background: rgba(45, 212, 168, 0.07);
-      padding: 0.8rem 1rem;
-      margin: 1rem 0;
-      border-radius: 0 8px 8px 0;
-      font-size: 0.92rem;
-    }
-    .warn { border-left-color: var(--warn); background: rgba(230, 167, 0, 0.09); }
-    .tip { border-left-color: var(--accent); background: rgba(61, 139, 253, 0.08); }
-    .diagram {
-      font-family: ui-monospace, monospace;
-      font-size: 0.72rem;
-      line-height: 1.45;
-      white-space: pre;
-      overflow-x: auto;
-    }
-    footer { margin-top: 3rem; color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
-    @media (max-width: 860px) {
-      body { grid-template-columns: 1fr; }
-      nav.toc { position: relative; max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
-      main { padding: 1.5rem 1.25rem 3rem; }
-    }
+    h1 { font-size: 1.6rem; margin-top: 0; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    p, li { font-size: 0.95rem; }
+    .lead { color: var(--muted); }
+    section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0; }
+    pre, code { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+    pre { background: var(--code); border: 1px solid var(--border); padding: 0.75rem; overflow-x: auto; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.75rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.45rem 0.6rem; text-align: left; }
+    th { background: var(--code); }
+    a { color: var(--accent); }
+    .back { display: inline-block; margin-bottom: 1rem; font-size: 0.9rem; }
   </style>
 </head>
 <body>
+  <a class="back" href="/inventory">← 返回 Portal</a>
+  <h1>NCCM v3 使用手冊</h1>
+  <p class="lead">NetdriverBackup — 網路設備組態備份、庫存與排程。本頁可由 Portal 側欄「使用手冊」或 <code>/help</code> 開啟。</p>
 
-<nav class="toc" aria-label="目錄">
-  <div class="brand">NetdriverBackup<br/>NCCM v3</div>
-  <div class="ver">使用手冊 · Handbook</div>
-  <div class="group">概覽</div>
-  <a href="#intro">產品簡介</a>
-  <a href="#architecture">系統架構</a>
-  <a href="#requirements">環境需求</a>
-  <div class="group">安裝</div>
-  <a href="#install-docker">Docker Compose（建議）</a>
-  <a href="#install-dev">本機開發安裝</a>
-  <a href="#install-verify">安裝後檢查</a>
-  <div class="group">設定</div>
-  <a href="#config-env">Portal 環境變數</a>
-  <a href="#config-api">REST API（API Token）</a>
-  <a href="#dev-test">開發測試與樣本</a>
-  <a href="#config-agent">NetDriver Agent</a>
-  <a href="#config-compose">Compose 與網路</a>
-  <a href="#config-csv">設備清單 CSV</a>
-  <div class="group">使用</div>
-  <a href="#use-login">登入與側欄</a>
-  <a href="#use-backup">批次備份</a>
-  <a href="#use-inventory">設備總表與版控</a>
-  <a href="#use-inventory-retention">快照保留（預覽刪除／執行清理）</a>
-  <a href="#use-neighbors">CDP/LLDP 鄰居</a>
-  <a href="#use-interfaces">Interface Map</a>
-  <a href="#use-schedules">排程備份</a>
-  <a href="#use-cli">命令列 CLI</a>
-  <div class="group">資料</div>
-  <a href="#data-store">備份儲存結構</a>
-  <a href="#data-index">索引與重建</a>
-  <div class="group">維運</div>
-  <a href="#ops-upgrade">升級與備份</a>
-  <a href="#ops-logs">日誌</a>
-  <a href="#security">資安</a>
-  <a href="#troubleshoot">疑難排解</a>
-  <a href="#appendix">附錄</a>
-</nav>
-
-<main>
-  <h1>NetdriverBackup NCCM v3 使用手冊</h1>
-  <p class="lead">企業網路設備組態備份、庫存與埠位檢視 — 安裝、設定與日常操作完整說明。<br/>
-  原始碼：<a href="https://github.com/moltmotl5-bot/NetdriveBackup" style="color:var(--accent)">github.com/moltmotl5-bot/NetdriveBackup</a></p>
-
-  <h2 id="intro">產品簡介</h2>
-  <section class="block">
-    <p>NCCM v3（Network Configuration Change Management）以 <strong>FastAPI Web 入口</strong>搭配 <strong>NetDriver Agent</strong>，透過 SSH 對網路設備執行 CLI，擷取組態與狀態並寫入本機 <code>store/</code> 目錄與 SQLite 索引。</p>
-    <ul>
-      <li><strong>支援廠牌</strong>：Cisco（IOS / NX-OS）、Fortinet FortiGate、Huawei CE（v3 路線圖<strong>不含 WLC</strong>）。</li>
-      <li><strong>Web 功能</strong>：批次備份、設備總表與版控（含 Config Diff／快照保留）、CDP/LLDP 鄰居、Interface Map、<strong>排程備份</strong>（CSV 上傳、Agent 探測、週期真實備份）。角色：admin／operator／viewer（viewer 對排程為唯讀）。</li>
-      <li><strong>正式部署</strong>：專案根目錄 <code>docker-compose.yml</code>（Portal + Agent）。舊版 Streamlit 已移至 <code>legacy/</code>。</li>
-    </ul>
-  </section>
-
-  <h2 id="architecture">系統架構</h2>
-  <pre class="diagram">┌─────────────────┐     HTTP      ┌──────────────────────┐     SSH      ┌─────────────┐
-│  瀏覽器 :8501    │ ────────────► │  nccm-portal         │            │  交換機 /    │
-│  登入 + 四頁 UI  │               │  (FastAPI + HTMX)    │            │  防火牆 /    │
-└─────────────────┘               └──────────┬───────────┘            │  路由器      │
-                                             │ NCCM_NETDRIVER_URL      └──────▲──────┘
-                                             ▼                            │
-                                  ┌──────────────────────┐                │
-                                  │  netdriver-agent     │ ───────────────┘
-                                  │  REST API :8000      │
-                                  └──────────────────────┘</pre>
-  <table>
-    <thead><tr><th>元件</th><th>容器名稱（預設）</th><th>職責</th></tr></thead>
-    <tbody>
-      <tr><td>Portal</td><td><code>nccm-portal</code></td><td>登入、CSV 備份工作、SSE 即時 log、庫存／鄰居／埠位 UI</td></tr>
-      <tr><td>NetDriver Agent</td><td><code>nccm-netdriver-agent</code></td><td>SSH 連線、指令佇列、廠牌 plugin、session 管理</td></tr>
-      <tr><td>資料卷</td><td>host <code>./store</code></td><td>快照檔案 + <code>index.db</code>（務必持久化備份）</td></tr>
-    </tbody>
-  </table>
-
-  <h2 id="requirements">環境需求</h2>
-  <table>
-    <thead><tr><th>項目</th><th>建議</th></tr></thead>
-    <tbody>
-      <tr><td>Docker</td><td>24 或以上，內建 Compose v2（<code>docker compose</code>）</td></tr>
-      <tr><td>作業系統</td><td>Linux 或 macOS 部署主機</td></tr>
-      <tr><td>網路</td><td><strong>Agent 容器</strong>必須能 SSH 至 CSV 所列管理 IP／Port</td></tr>
-      <tr><td>瀏覽器</td><td>Chromium、Safari、Firefox 等現代瀏覽器</td></tr>
-      <tr><td>磁碟</td><td>依設備數與保留快照數成長；<code>store/</code> 建議獨立掛載</td></tr>
-    </tbody>
-  </table>
-  <div class="warn"><strong>網路注意</strong>：預設 Compose 使用 bridge 網路。若管理網僅能從<strong>主機</strong>直連、容器無法路由，請改 Agent（必要時 Portal）為 <code>network_mode: host</code>（見 <a href="#config-compose">Compose 與網路</a>）。</div>
-
-  <h2 id="install-docker">安裝 — Docker Compose（建議）</h2>
-  <ol>
-    <li>取得專案原始碼並進入目錄：
-      <pre><code>git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
-cd NetdriveBackup</code></pre>
-    </li>
-    <li>建立 Portal 登入設定：
-      <pre><code>cp .env.example .env
-# 編輯 .env：設定 NCCM_ADMIN_USER、NCCM_ADMIN_PASS（至少 12 字元，不可為範例弱密碼）
-chmod 600 .env</code></pre>
-    </li>
-    <li>建立備份目錄並啟動服務：
-      <pre><code>mkdir -p store
+  <h2 id="install">安裝與啟動</h2>
+  <section>
+    <pre><code>git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
+cd NetdriveBackup
+cp .env.example .env
+# 編輯 NCCM_ADMIN_PASS（至少 12 字元）
+chmod 600 .env
+mkdir -p store
 docker compose up -d --build</code></pre>
-      首次建置會編譯 <code>netdrive-agent/</code> 與 Portal 映像，需能存取基礎映像 registry（含 <code>ghcr.io</code>）。
-    </li>
-    <li>若 Agent 狀態為 <strong>unhealthy</strong>（常見於舊版 <code>agent-logs</code> volume）：<code>docker compose down -v</code> 後再 <code>docker compose up -d --build</code>。</li>
-    <li>開啟 Web：<a href="http://localhost:8501/login">http://localhost:8501/login</a>（埠可經 <code>NCCM_PORT</code> 調整）。</li>
-  </ol>
-  <table>
-    <thead><tr><th>URL</th><th>用途</th></tr></thead>
-    <tbody>
-      <tr><td><code>http://&lt;host&gt;:8501/login</code></td><td>NCCM Web（需登入）</td></tr>
-      <tr><td><code>http://&lt;host&gt;:8501/health</code></td><td>Portal 健康檢查（JSON，含 Agent 是否可連）</td></tr>
-      <tr><td><code>http://&lt;host&gt;:8000/docs</code></td><td>NetDriver OpenAPI（除錯；生產環境建議限制存取）</td></tr>
-      <tr><td><code>http://&lt;host&gt;:8000/health</code></td><td>Agent 健康檢查</td></tr>
-    </tbody>
-  </table>
-  <div class="tip">停止服務：<code>docker compose down</code>。僅重啟 Portal：<code>docker compose restart portal</code>。</div>
-
-  <h2 id="install-dev">安裝 — 本機開發（非 Docker）</h2>
-  <section class="block">
-    <p>適用於修改 <code>nccm/</code> 或 <code>web/</code> 程式。Agent 仍需另行啟動（Docker 或本機 uv）。</p>
-    <pre><code>python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements-v3.txt
-cp .env.example .env        # 設定帳密；本機時可設 NCCM_NETDRIVER_URL=http://127.0.0.1:8000
-export PYTHONPATH=.
-
-# 終端 A：啟動 Agent（見 netdrive-agent 文件或 docker compose up netdriver-agent）
-# 終端 B：
-python -m uvicorn web.main:app --reload --host 0.0.0.0 --port 8501</code></pre>
-    <p>進階步驟見 README「本機開發（不用 Docker）」。</p>
+    <p>瀏覽器開啟 <strong>http://localhost:8501/login</strong>，以 <code>.env</code> 帳密登入。首次登入須變更密碼。</p>
+    <p>側欄 Agent 狀態為 <strong>Online</strong> 表示 Portal 可連 Agent。請定期備份主機 <code>./store</code> 目錄。</p>
   </section>
 
-  <h2 id="install-verify">安裝後檢查</h2>
-  <pre><code>docker compose ps
-docker compose logs -f portal --tail 50
-docker compose logs -f netdriver-agent --tail 50
-curl -s http://localhost:8501/health | python3 -m json.tool
-curl -s http://localhost:8000/health</code></pre>
-  <p>登入 Web 後，左側 Agent 應為 <strong>Online</strong>（綠色）。若為 <strong>Offline</strong>（紅色），見 <a href="#troubleshoot">疑難排解</a>。</p>
+  <h2 id="roles">角色</h2>
+  <section>
+    <table>
+      <tr><th>角色</th><th>能做什麼</th></tr>
+      <tr><td><strong>admin</strong></td><td>全部功能 + 使用者、API Token、審計</td></tr>
+      <tr><td><strong>operator</strong></td><td>備份、排程、索引、retention；無使用者管理</td></tr>
+      <tr><td><strong>viewer</strong></td><td>唯讀：總表、鄰居、介面、排程檢視；無批次備份</td></tr>
+    </table>
+  </section>
 
-  <h2 id="config-env">設定 — Portal 環境變數</h2>
-  <p>主要透過專案根目錄 <code>.env</code> 提供（Compose 使用 <code>env_file</code>）。</p>
-  <table>
-    <thead><tr><th>變數</th><th>必填</th><th>說明</th><th>Docker Compose 預設</th></tr></thead>
-    <tbody>
-      <tr><td><code>NCCM_ADMIN_USER</code></td><td>是</td><td>Web 登入帳號</td><td>來自 <code>.env</code></td></tr>
-      <tr><td><code>NCCM_ADMIN_PASS</code></td><td>是</td><td>Web 登入密碼，≥12 字元；不可等於帳號或內建弱密碼清單</td><td>來自 <code>.env</code></td></tr>
-      <tr><td><code>NCCM_NETDRIVER_URL</code></td><td>建議</td><td>Portal 呼叫 Agent 的 base URL</td><td><code>http://netdriver-agent:8000</code></td></tr>
-      <tr><td><code>NCCM_STORE_DIR</code></td><td>否</td><td>備份根目錄（容器內路徑）</td><td><code>/data/store</code>，掛載 <code>./store</code></td></tr>
-      <tr><td><code>NCCM_APP_ROOT</code></td><td>否</td><td>應用根目錄</td><td><code>/app</code></td></tr>
-      <tr><td><code>NCCM_SESSION_SECRET</code></td><td>否</td><td>Session cookie 簽章；多副本／重啟後要固定請設定</td><td>未設則每次啟動隨機</td></tr>
-      <tr><td colspan="4" class="meta">REST <code>/api/v1</code>：不在 <code>.env</code> 設定金鑰；admin 於 Portal「<strong>API Token</strong>」建立 token，見該頁 HTML 手冊（token 雜湊存 <code>portal_auth.db</code>）。</td></tr>
-      <tr><td><code>NCCM_PORT</code></td><td>否</td><td>對外映射 Web 埠</td><td><code>8501</code></td></tr>
-      <tr><td><code>NETDRIVER_AGENT_PORT</code></td><td>否</td><td>對外映射 Agent API 埠</td><td><code>8000</code></td></tr>
-      <tr><td><code>NCCM_AUDIT_LOG</code></td><td>否</td><td>登入稽核 log 檔路徑</td><td>預設 <code>nccm_auth.log</code></td></tr>
-    </tbody>
-  </table>
-  <div class="note"><strong>設備 SSH 帳密</strong>僅在 Web「批次備份」頁輸入，<strong>不</strong>寫入 <code>.env</code>、映像或 <code>store/</code>。</div>
+  <h2 id="backup">批次備份</h2>
+  <section>
+    <ol>
+      <li>側欄「批次備份」→ 上傳或貼上 CSV。</li>
+      <li>輸入 SSH 帳密（Enable 密碼視廠牌需要）。</li>
+      <li>按開始；頁面以 SSE 顯示每台設備 log。</li>
+    </ol>
+    <p>成功後快照寫入 <code>store/&lt;Site&gt;/&lt;IP&gt;__&lt;Hostname&gt;/snapshots/</code>，並更新 <code>index.db</code>。</p>
+  </section>
 
-  <h2 id="config-api">設定 — REST API（API Token）</h2>
-  <p>路徑前綴 <code>/api/v1</code>。與 Web Session 登入<strong>分開</strong>：admin 於 Portal「<strong>API Token</strong>」建立 token（存於 <code>portal_auth.db</code>，僅雜湊）；建立時<strong>必填有效天數</strong>（預設 90、最長 365）；過期回 401。請求帶 <code>X-API-Key</code>。審計寫入 <code>store/audit/audit.db</code>，admin「審計日誌」可篩選／匯出 CSV。完整端點見 API Token 頁 REST 手冊與 <code>docs/inventory-api-contract.md</code>。</p>
-  <ul>
-    <li><code>GET /api/v1/health</code> — 無需金鑰。</li>
-    <li><code>GET /api/v1/inventory</code> — 需<strong>未過期</strong> token（scope <code>inventory:read</code>）；尚無可用 token 時回 500（fail-closed）。</li>
-  </ul>
-  <pre><code>curl -sS -H "X-API-Key: YOUR_TOKEN" "http://localhost:8501/api/v1/inventory?limit=20"</code></pre>
-  <p>完整說明見專案 <code>README.md</code>「API 介面」章節與 <a href="inventory-api-contract.md"><code>docs/inventory-api-contract.md</code></a> 欄位契約。</p>
+  <h2 id="inventory">設備總表與版控</h2>
+  <section>
+    <p>列出已索引設備；Stack／HA 會展開為多列。可選兩版比對 <strong>Config Diff</strong>。</p>
+    <p>admin／operator 可下載 config、<strong>重建索引</strong>（掃描 store）、<strong>快照保留</strong>（dry-run 後執行刪除）。</p>
+  </section>
 
-  <h2 id="dev-test">開發 — 測試與樣本</h2>
-  <p><strong>正式回歸</strong>（可進 CI）：</p>
-  <pre><code>pip install -r requirements-dev.txt
-pytest</code></pre>
-  <p>涵蓋 parsers（Huawei LLDP／manufacture／stack、Cisco stack、Forti HA）、NetDriver payload、API Token。去敏 fixture 在 <code>tests/fixtures/</code>（可提交）。</p>
-  <p><strong>本機私有實機檔</strong>（<code>testdata/*.txt</code>，已 gitignore，<strong>禁止上傳／push</strong>）：</p>
-  <pre><code>NCCM_PRIVATE_TESTDATA=testdata pytest -m private</code></pre>
-  <p><strong>Ad-hoc</strong>（仍保留）：<code>scripts/run-hermes-verify-*.py</code>。Compose 輕量 smoke：<code>scripts/smoke-compose.sh</code>（需已 up）。</p>
-  <p>增強路線見 <a href="AAA-addon-enhancement-plan.html">AAA-addon-enhancement-plan.html</a>。</p>
+  <h2 id="schedules">排程備份</h2>
+  <section>
+    <ol>
+      <li>填名稱、間隔（日）、SSH 帳密，上傳 CSV 檔案。</li>
+      <li>Agent 對每台做 TCP 探測；預覽頁確認後，僅 <strong>OK</strong> 設備納入排程。</li>
+      <li>可「立即備份」或啟用後由背景 watcher 依日週期執行。</li>
+    </ol>
+    <p>憑證加密存於 <code>store/schedules.db</code>；執行記錄在排程頁「執行歷史」。viewer 僅能檢視，不能建立或觸發。</p>
+  </section>
 
-  <h2 id="config-agent">設定 — NetDriver Agent</h2>
-  <p>正式環境設定檔：<code>deploy/config/agent/agent.yml</code>，Compose 以唯讀方式掛載至容器 <code>/app/config/agent/</code>。</p>
-  <h3>主要區段</h3>
-  <table>
-    <thead><tr><th>區段</th><th>用途</th></tr></thead>
-    <tbody>
-      <tr><td><code>api.request_log_level</code></td><td><code>INFO</code> 或 <code>DEBUG</code>（HTTP 請求記錄詳細度）</td></tr>
-      <tr><td><code>logging.level</code></td><td>Agent log 層級：<code>INFO</code> / <code>DEBUG</code> / <code>TRACE</code></td></tr>
-      <tr><td><code>logging.log_file</code></td><td>容器內路徑，預設 <code>logs/agent.log</code>；日誌請以 <code>docker compose logs netdriver-agent</code> 為主（勿掛載 root-owned volume 至 <code>/app/logs</code>）</td></tr>
-      <tr><td><code>session.ssh</code></td><td>登入／連線逾時、keepalive、終端機寬高（大設定檔建議寬 1000、高 100）</td></tr>
-      <tr><td><code>session.profiles</code></td><td>依 global → vendor/model → IP 覆寫 <code>read_timeout</code>、session 過期時間</td></tr>
-    </tbody>
-  </table>
-  <h3>廠牌 read_timeout（範例，已內建於 deploy 設定）</h3>
-  <table>
-    <thead><tr><th>廠牌</th><th>路徑（YAML）</th><th>建議 read_timeout（秒）</th></tr></thead>
-    <tbody>
-      <tr><td>Cisco Nexus</td><td><code>vendor.cisco.nexus.base</code></td><td>120</td></tr>
-      <tr><td>Fortinet FortiGate</td><td><code>vendor.fortinet.fortigate.base</code></td><td>180（大型 <code>show full-configuration</code>）</td></tr>
-      <tr><td>Huawei CE</td><td><code>vendor.huawei.ce.base</code></td><td>120</td></tr>
-      <tr><td>其他</td><td><code>profiles.global</code></td><td>30</td></tr>
-    </tbody>
-  </table>
-  <p>修改 YAML 後：<code>docker compose restart netdriver-agent</code>。</p>
-  <p>環境變數 <code>NETDRIVER_AGENT_CONFIG</code>（Compose 已設）指向 <code>/app/config/agent/agent.yml</code>。</p>
-
-  <h2 id="config-compose">設定 — Compose 與網路</h2>
-  <h3>自訂對外埠</h3>
-  <pre><code># .env
-NCCM_PORT=9443
-NETDRIVER_AGENT_PORT=18000</code></pre>
-  <h3>Agent 使用 host 網路</h3>
-  <p>當設備管理網僅主機可達時，編輯 <code>docker-compose.yml</code> 的 <code>netdriver-agent</code>：</p>
-  <pre><code>netdriver-agent:
-  network_mode: host
-  # 移除 ports: 與 networks: 設定</code></pre>
-  <p>並將 <code>portal</code> 的 <code>NCCM_NETDRIVER_URL</code> 改為 <code>http://127.0.0.1:8000</code>（若 Portal 仍在 bridge，需確保能連到 host 上的 8000；常見做法是 Portal 也改 host 網路）。</p>
-  <h3>僅對外暴露 Portal</h3>
-  <p>生產環境可移除 <code>netdriver-agent</code> 的 <code>ports</code> 映射，僅讓 Portal 在內部網路呼叫 Agent。</p>
-
-  <h2 id="config-csv">設定 — 設備清單 CSV</h2>
-  <table>
-    <thead><tr><th>欄位</th><th>必填</th><th>說明</th></tr></thead>
-    <tbody>
-      <tr><td><code>Site</code></td><td>是</td><td>站點代碼，對應 <code>store/&lt;Site&gt;/</code></td></tr>
-      <tr><td><code>IP</code></td><td>是</td><td>設備管理 IP</td></tr>
-      <tr><td><code>Vendor</code></td><td>是</td><td><code>cisco</code>、<code>fortinet</code>、<code>huawei</code>（小寫建議）；<strong>不接受 WLC</strong></td></tr>
-      <tr><td><code>Port</code></td><td>是</td><td>SSH 埠，一般為 <code>22</code>；同 IP 多設備必須不同 Port</td></tr>
-      <tr><td><code>Model</code></td><td>否</td><td>留空則備份時自動辨識</td></tr>
-      <tr><td><code>Version</code></td><td>否</td><td>留空則備份時自動辨識</td></tr>
-    </tbody>
-  </table>
-  <pre><code>Site,IP,Vendor,Port
+  <h2 id="csv">CSV 格式</h2>
+  <section>
+    <p>必填欄位：<code>Site,IP,Vendor,Port</code></p>
+    <pre><code>Site,IP,Vendor,Port
 hq,10.1.1.10,cisco,22
-hq,10.1.1.20,fortinet,22
-dc,10.2.1.5,huawei,22</code></pre>
-  <p>範例檔：<code>DEMO-v3.csv</code>。索引主鍵為 <code>site::ip::port::hostname</code>（hostname 自備份正規化）。</p>
-
-  <h2 id="use-login">使用 — 登入與側欄</h2>
-  <ol>
-    <li>開啟 <code>/login</code>，輸入 <code>.env</code> 的 <code>NCCM_ADMIN_USER</code> / <code>NCCM_ADMIN_PASS</code>。</li>
-    <li>登入成功後導向「批次備份」；左側導覽四頁：批次備份、設備總表與版控、CDP/LLDP 鄰居、Interface Map。</li>
-    <li>側欄顯示 <strong>Agent</strong> 狀態為 <strong>Online</strong> 或 <strong>Offline</strong>（不顯示 URL／埠）。</li>
-    <li><code>/logout</code> 可登出。</li>
-  </ol>
-
-  <h2 id="use-backup">使用 — 批次備份</h2>
-  <section class="block">
-    <ol>
-      <li>準備 CSV（上傳檔案或貼上文字）。</li>
-      <li>輸入設備 <strong>SSH 使用者名稱</strong>、<strong>密碼</strong>。</li>
-      <li>支援廠牌（CSV <code>Vendor</code> 小寫）：<strong>Cisco</strong>（IOS / IOS-XE Catalyst、Stack；Nexus）、<strong>Fortinet</strong>（FortiGate HA）、<strong>Huawei</strong>（VRP）。不支援 WLC。多廠牌帳密不同時請分次備份。</li>
-      <li>按開始備份；工作於背景執行，頁面以 <strong>SSE</strong> 串流顯示每台設備進度與錯誤。</li>
-      <li>成功後快照寫入 <code>store/</code> 並更新 <code>index.db</code>。</li>
-    </ol>
-    <h4>每台設備大致流程</h4>
-    <ul>
-      <li>依 Vendor 連線 NetDriver（必要時先以 version 指令<strong>自動辨識</strong> Model/Version 後重連）。</li>
-      <li>擷取 running config、version、CDP/LLDP（依廠牌）、interfaces 等。</li>
-      <li>FortiGate 使用 <code>show full-configuration</code>；Huawei 使用 <code>display current-configuration</code> 等。</li>
-    </ul>
-    <div class="warn">同一表單一組 SSH 帳密套用到 CSV 全部列。若各廠牌帳密不同，請分次備份或拆成多份 CSV。</div>
+hq,10.1.1.20,fortinet,22</code></pre>
+    <p>Vendor：<code>cisco</code>、<code>huawei</code>、<code>fortinet</code>（不支援 WLC）。可選 <code>Model</code>、<code>Version</code> 省略則自動辨識。</p>
   </section>
 
-  <h2 id="use-inventory">使用 — 設備總表與版控</h2>
-  <ul>
-    <li>列表來自 <code>index.db</code>，可依 Site、<strong>Vendor（下拉，選項為已備份設備之廠牌）</strong>、關鍵字（IP / Hostname / Model / SN）篩選；鄰居與 Interface Map 頁同樣使用 Vendor 下拉。</li>
-    <li>設備表約顯示 10 列高度，其餘於表內捲動；點列或「檢視」開啟下方詳情。</li>
-    <li>詳情含型號、OS 版本、序號、快照時間列表；可預覽該次 <code>config.txt</code>（Running-Config），並以<strong>下載</strong>取得完整檔案（<code>GET /inventory/download/config</code>，需登入）。下載旁有警示：<strong>檔案可能無法直接用於還原</strong>，套用前請自行驗證。</li>
-    <li>Hostname 優先從 running-config 擷取；若舊快照顯示 unknown，可按「重建索引」從 config.txt 回填。</li>
-    <li><strong>Cisco Stack / Huawei iStack / FortiGate HA</strong>：總表、鄰居、Interface Map 的設備列表皆<strong>每台實體機一行</strong>（Stack#、Role、各自 Model/Serial）。
-      <strong>Stack 角色與 Huawei 對齊</strong>：Cisco／Huawei 皆顯示 <code>Master</code> / <code>Standby</code> / <code>Member</code>（Cisco CLI 的 Active→Master；勿與 Forti HA 的 Primary/Secondary 混淆）。
-      FortiGate HA 仍為 <code>Primary</code> / <code>Secondary</code>。
-      Cisco／Huawei 成員 hostname 為 <code>管理名 · SW#</code>；Forti 為 HA 解析之主機名。錨點列標 <strong>· 組態</strong>；虛擬 IP 只備一份 config。Cisco 備份含 <code>show switch</code>（<code>stack_info.txt</code>，非 Nexus）。Huawei 備份含 <code>display stack</code> → <code>stack_info.txt</code>（失敗 soft-skip）；<strong>僅有</strong> stack CLI 且 ≥2 成員才展開，manufacture 只補序號。異常時<strong>重新備份</strong>後按「<strong>重建索引</strong>」；更新 Portal 映像後請 <code>docker compose up -d --build</code> portal。</li>
-    <li><strong>重建索引</strong>：掃描整個 <code>store/</code> 重建 <code>index.db</code>（手動還原資料或修復索引時使用）。與下方「快照保留」不同：重建<strong>不刪</strong>快照目錄。</li>
-    <li><strong>Config Diff</strong>：於詳情選兩個快照版本，比對 <code>config.txt</code> 的 unified diff（僅檢視，不改檔）。</li>
-    <li>快照空間管理見下一節「<a href="#use-inventory-retention">快照保留</a>」。</li>
-  </ul>
-
-  <h2 id="use-inventory-retention">使用 — 快照保留（預覽刪除／執行清理）</h2>
-  <section class="block">
-    <p>設備每次成功備份會在 <code>store/&lt;site&gt;/&lt;ip&gt;_&lt;port&gt;/snapshots/&lt;UTC時間&gt;/</code> 新增一層快照，並寫入 <code>index.db</code>。長期累積會佔磁碟；<strong>快照保留（retention）</strong>用來<strong>按設備</strong>只留下最近 N 份成功快照，刪除更舊者。</p>
-    <p>權限：僅 <strong>admin</strong>／<strong>operator</strong> 可見按鈕（viewer 無）。操作會寫入審計 <code>store/audit/audit.db</code>（事件 <code>snapshot_retention</code>）。</p>
-
-    <h4>保留最近 N 份</h4>
-    <ul>
-      <li>數字框 <strong>保留最近 N 份</strong>（預設 10，範圍 1–500）。</li>
-      <li>演算法：依 <code>device_id</code> 分組，只看 <code>status = ok</code> 的快照，按 <code>created_at</code> <strong>由新到舊</strong>排序；保留前 N 筆，第 N+1 筆起列為待刪。</li>
-      <li>某設備總快照數 ≤ N 時，該設備<strong>不會</strong>刪任何東西。</li>
-      <li>N 下限為 1（實作會 <code>max(1, keep_last)</code>），避免一次清光。</li>
-    </ul>
-
-    <h4>作用範圍（是否選中設備）</h4>
-    <ul>
-      <li>若總表<strong>已選中某一設備</strong>（詳情開啟，表單隱藏欄 <code>device_id</code> 有值）：只對<strong>該台</strong>算保留／刪除。</li>
-      <li>若<strong>未選設備</strong>（<code>device_id</code> 空）：對<strong>全部設備</strong>各自套用「保留最近 N 份」。</li>
-    </ul>
-
-    <h4>「預覽刪除（dry-run）」</h4>
-    <ul>
-      <li><strong>只計算、不刪除</strong>：不 <code>rmtree</code>、不改 <code>index.db</code>。</li>
-      <li>送出後頁面上方橫幅類似：<code>快照保留：dry — keep_last=10，筆數=K</code>，其中 <strong>K = 將會刪除的快照筆數</strong>。</li>
-      <li>用途：先確認「若現在清理會動到幾份」再決定是否執行。建議每次<strong>先預覽、後清理</strong>。</li>
-    </ul>
-
-    <h4>「執行清理」</h4>
-    <ul>
-      <li>瀏覽器會先 <code>confirm</code> 確認。</li>
-      <li><strong>真的刪除</strong> dry-run 同一套候選清單：
-        <ol>
-          <li>刪除對應快照目錄（<code>shutil.rmtree</code>）。</li>
-          <li>自 <code>index.db</code> 的 <code>snapshots</code> 表刪除該列。</li>
-          <li>重算該設備的 <code>snapshot_count</code>、最新快照欄位；若已無成功快照則移除 <code>devices</code>／相關 <code>stack_units</code> 列。</li>
-        </ol>
-      </li>
-      <li>完成後橫幅：<code>快照保留：done — keep_last=…，筆數=實際刪除目錄數</code>。</li>
-      <li>目錄不存在或刪除失敗會列入 skipped（不中斷整批）；仍會盡量清 DB 候選 id。</li>
-    </ul>
-
-    <h4>與「重建索引」的差異</h4>
-    <table class="inv-table">
-      <thead>
-        <tr><th>操作</th><th>磁碟快照目錄</th><th>index.db</th><th>用途</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>重建索引</td>
-          <td>不動</td>
-          <td>依 <code>store/</code> 全掃重建</td>
-          <td>修索引／回填 hostname 等</td>
-        </tr>
-        <tr>
-          <td>預覽刪除</td>
-          <td>不動</td>
-          <td>不動</td>
-          <td>看會刪幾份</td>
-        </tr>
-        <tr>
-          <td>執行清理</td>
-          <td>刪舊快照目錄</td>
-          <td>刪 snapshots 列並更新 devices</td>
-          <td>釋放磁碟、只留最近 N 版</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="warn">
-      <strong>執行清理不可還原</strong>（本產品不提供回收桶）。刪掉的舊版 config 無法再 Diff／下載。
-      生產環境請先 dry-run，並確認 N 符合合規保留要求。清理不會動到「每設備最新 N 份」以外的邏輯；也不會刪除非 snapshot 結構的其他 store 檔案。
-    </div>
+  <h2 id="store">資料目錄 store/</h2>
+  <section>
+    <pre><code>store/
+├── index.db           # 設備索引
+├── schedules.db       # 排程與執行歷史
+├── portal_auth.db     # Portal 帳號
+├── audit/audit.db     # 審計
+└── &lt;Site&gt;/&lt;IP&gt;__&lt;Hostname&gt;/snapshots/&lt;時間&gt;/
+    ├── config.txt
+    ├── manifest.json
+    └── …</code></pre>
   </section>
 
-  <h2 id="use-neighbors">使用 — CDP/LLDP 鄰居</h2>
-  <ul>
-    <li>選擇設備後，自最新快照讀取 <code>cdp_neighbors.txt</code> / <code>lldp_neighbors.txt</code> 解析鄰居表。</li>
-    <li>Cisco 且 CDP 有資料時，介面預設不與 LLDP 重複合併（依解析邏輯）。</li>
-    <li>版面：設備表在上、鄰居結果在下（與 Interface Map 相同互動模式）。</li>
-  </ul>
-
-  <h2 id="use-interfaces">使用 — Device Interface Map</h2>
-  <ul>
-    <li>合併 <code>config.txt</code> 介面區段與 <code>interfaces.txt</code> 狀態欄位。</li>
-    <li>支援 Cisco / Huawei / Fortinet 等已實作廠牌；表內容依設備而異。</li>
-    <li>選設備後於下方顯示埠位表；設備列表同樣為固定高度捲動。</li>
-  </ul>
-
-  <h2 id="use-schedules">使用 — 排程備份</h2>
-  <section class="block">
-    <p>側欄「<strong>排程備份</strong>」路徑 <code>/schedules</code>。以<strong>日</strong>為週期對已納入清單的設備執行<strong>真實備份</strong>（與批次備份共用 runner／NetDriver Agent），結果寫入 <code>store/</code> 快照與 <code>index.db</code>。</p>
-
-    <h4>權限</h4>
-    <table class="inv-table">
-      <thead><tr><th>角色</th><th>排程頁</th></tr></thead>
-      <tbody>
-        <tr><td><strong>admin</strong>／<strong>operator</strong></td><td>建立、編輯、啟停、立即備份、刪除；可檢視執行歷史</td></tr>
-        <tr><td><strong>viewer</strong></td><td>側欄可進入排程頁（<strong>唯讀</strong>）：檢視排程列表、設備清單、執行歷史；無法上傳 CSV 或觸發備份</td></tr>
-      </tbody>
-    </table>
-    <p>viewer 側欄<strong>不顯示</strong>「批次備份」，其餘頁面（總表、鄰居、介面、排程）可讀。</p>
-
-    <h4>資料存放</h4>
-    <ul>
-      <li>SQLite：<code>store/schedules.db</code>（排程定義、加密 SSH 憑證、<code>schedule_runs</code> 執行記錄）。</li>
-      <li>加密主金鑰：首次儲存 live 憑證時自動建立 <code>store/.secrets/fernet.key</code>；亦可由環境變數 <code>NCCM_SECRETS_KEY</code> 覆寫。</li>
-      <li>排程欄位：名稱、CSV 全文（僅含探測成功設備）、間隔（<strong>日</strong>）、SSH 帳密（加密）、啟用狀態、上次執行／結果、進行中 job_id。</li>
-      <li>CSV 格式與批次備份相同：至少 <code>Site,IP,Vendor,Port</code> 等（見「設備清單 CSV」）。</li>
-    </ul>
-
-    <h4>建立排程（admin／operator）</h4>
-    <ol>
-      <li>填<strong>名稱</strong>、<strong>間隔（日）</strong>（最小 1）、SSH 帳密（Enable 可選）。</li>
-      <li>選擇 CSV 檔案後按「<strong>上傳並連線測試</strong>」（僅檔案上傳，不支援貼上文字）。</li>
-      <li>Portal 呼叫 NetDriver Agent <code>POST /api/v1/probe</code> 對每台設備做 TCP 連線測試。</li>
-      <li>預覽頁顯示每台 OK／FAIL；按「<strong>確認建立排程</strong>」後，<strong>僅 OK 設備</strong>寫入排程。</li>
-    </ol>
-
-    <h4>列表操作（admin／operator）</h4>
-    <table class="inv-table">
-      <thead><tr><th>按鈕</th><th>行為</th></tr></thead>
-      <tbody>
-        <tr><td><strong>設備 (N)</strong></td><td>彈出視窗顯示該排程納入的設備清單（viewer 亦可檢視）</td></tr>
-        <tr><td><strong>立即備份</strong></td><td>立刻啟動非同步備份 job，更新執行歷史</td></tr>
-        <tr><td><strong>編輯</strong></td><td>修改名稱、間隔、帳密；或重新上傳 CSV（需再次探測與確認）</td></tr>
-        <tr><td><strong>啟用／停用</strong></td><td>停用後背景 watcher 不再自動觸發；手動「立即備份」仍可用</td></tr>
-        <tr><td><strong>刪除</strong></td><td>自 <code>schedules.db</code> 移除排程及其 <code>schedule_runs</code>（需確認）</td></tr>
-      </tbody>
-    </table>
-
-    <h4>執行歷史</h4>
-    <p>排程頁下方「<strong>執行歷史</strong>」列出最近執行記錄（預設 30 筆），含排程名稱、開始／結束時間、狀態（<code>running</code>／<code>done</code>／<code>failed</code>／<code>skipped</code>）、觸發來源（<code>manual</code>／<code>watcher</code>）、成功台數與 job 摘要。所有角色皆可檢視。</p>
-
-    <h4>背景自動觸發（watcher）</h4>
-    <ul>
-      <li>Portal 啟動時開 daemon 執行緒 <code>nccm-schedule-watcher</code>，約每 <strong>60 秒</strong>掃描一次。</li>
-      <li>以 <code>store/schedule.lock</code> flock 避免多實例同時執行（single-instance 契約）。</li>
-      <li>對每筆<strong>已啟用</strong>排程：若從未跑過，或距 <code>last_run_at</code> 已滿「間隔日」，則 <code>execute_schedule</code> 啟動真實備份 job。</li>
-      <li>進行中 job 由 <code>poll_running_jobs</code> 輪詢完成後寫入 <code>schedule_runs</code> 與排程摘要。</li>
-    </ul>
-
-    <h4>與「批次備份」對照</h4>
-    <table class="inv-table">
-      <thead><tr><th></th><th>批次備份</th><th>排程備份</th></tr></thead>
-      <tbody>
-        <tr><td>觸發</td><td>手動、單次</td><td>手動或週期（日）</td></tr>
-        <tr><td>SSH／Agent</td><td>會</td><td>會（共用 runner）</td></tr>
-        <tr><td>帳密</td><td>表單當場輸入</td><td>加密存於 schedules.db</td></tr>
-        <tr><td>CSV</td><td>單次工作</td><td>持久化；匯入前 Agent TCP 探測</td></tr>
-        <tr><td>執行記錄</td><td>job log（SSE）</td><td><code>schedule_runs</code> + 排程頁歷史表</td></tr>
-      </tbody>
-    </table>
-
-    <div class="warn">
-      <strong>憑證與 store 備份：</strong>
-      排程 SSH 密碼經 Fernet 加密；遺失 <code>store/.secrets/fernet.key</code>（且無 env 覆寫）將無法解密或啟用排程。請將整個 <code>store/</code> 納入備份策略。
-    </div>
+  <h2 id="api">REST API</h2>
+  <section>
+    <p>admin 於「API Token」建立 token，請求加標頭 <code>X-API-Key</code>。例：</p>
+    <pre><code>curl -H "X-API-Key: nccm_…" http://localhost:8501/api/v1/inventory</code></pre>
+    <p>詳細欄位見 Portal「API Token」頁內說明。</p>
   </section>
-
-  <h2 id="use-cli">使用 — 命令列 CLI</h2>
-  <p>無 Web 時可從專案根目錄執行（需 Agent 可連、<code>PYTHONPATH=.</code>）：</p>
-  <h3>備份</h3>
-  <pre><code>export PYTHONPATH=.
-export NCCM_NETDRIVER_URL=http://127.0.0.1:8000
-python -m nccm backup \
-  --csv DEMO-v3.csv \
-  --user admin \
-  --password '***' \
-  --enable-password ''</code></pre>
-  <h3>重建索引</h3>
-  <pre><code>python -m nccm index rebuild</code></pre>
-  <p>結束碼：備份若任一台失敗回傳 <code>2</code>。</p>
-
-  <h2 id="data-store">資料 — 備份儲存結構</h2>
-  <pre><code>store/
-├── index.db
-└── &lt;Site&gt;/
-    └── &lt;IP&gt;__&lt;Hostname&gt;/
-        └── snapshots/
-            └── &lt;UTC-timestamp&gt;/
-                ├── manifest.json
-                ├── config.txt
-                ├── version_info.txt
-                ├── cdp_neighbors.txt
-                ├── lldp_neighbors.txt
-                └── interfaces.txt</code></pre>
-  <p><code>manifest.json</code> 含 site、ip、port、hostname、vendor、model、run_id 等中繼資料。</p>
-
-  <h2 id="data-index">資料 — 索引與重建</h2>
-  <ul>
-    <li>設備主鍵：<code>site::ip::port::hostname</code>。</li>
-    <li>每次成功備份會 upsert 設備與快照記錄。</li>
-    <li>若曾手動刪除 <code>index.db</code> 或從他處還原 <code>store/</code>，請在 Web 按「重建索引」或執行 <code>python -m nccm index rebuild</code>。</li>
-  </ul>
-
-  <h2 id="ops-upgrade">維運 — Docker 更新方式</h2>
-
-  <h3>推薦標準更新（日常改動後）</h3>
-  <pre><code>git pull
-docker compose build --no-cache
-docker compose up -d</code></pre>
-
-  <h3>安全完整更新（升級版本或行為異常時建議）</h3>
-  <pre><code>docker compose down
-git pull
-docker compose build --no-cache
-docker compose up -d --build</code></pre>
-
-  <h3>強制清除舊 Volume（Agent unhealthy、權限問題等）</h3>
-  <pre><code>docker compose down -v
-git pull
-docker compose build --no-cache
-docker compose up -d --build</code></pre>
-
-  <h3>僅更新 Agent</h3>
-  <pre><code>docker compose build --no-cache netdriver-agent
-docker compose up -d netdriver-agent</code></pre>
-
-  <h3>僅更新 Portal</h3>
-  <pre><code>docker compose build portal
-docker compose up -d portal</code></pre>
-
-  <h3>更新後建議檢查</h3>
-  <pre><code>docker compose ps
-docker compose logs -f netdriver-agent</code></pre>
-
-  <p><strong>重要提醒</strong>：</p>
-  <ul>
-    <li>重大更新前建議先備份 <code>./store</code> 目錄。</li>
-    <li>若本次更新涉及索引結構或 hostname 解析，更新後請在 Web 按「<strong>重建索引</strong>」。</li>
-    <li><code>--no-cache</code> 可避免快取導致舊程式碼持續使用。</li>
-  </ul>
-
-  <h2 id="ops-logs">維運 — 日誌</h2>
-  <table>
-    <thead><tr><th>來源</th><th>查看方式</th></tr></thead>
-    <tbody>
-      <tr><td>Portal 容器 stdout</td><td><code>docker compose logs -f portal</code></td></tr>
-      <tr><td>Agent 容器 stdout</td><td><code>docker compose logs -f netdriver-agent</code>（建議）</td></tr>
-      <tr><td>Agent 容器內檔案 log</td><td>可選 <code>docker compose exec netdriver-agent tail -f /app/logs/agent.log</code>（未掛載 logs volume 時）</td></tr>
-      <tr><td>Web 登入稽核</td><td><code>NCCM_AUDIT_LOG</code>（預設 <code>nccm_auth.log</code>）</td></tr>
-    </tbody>
-  </table>
-
-  <h2 id="security">資安</h2>
-  <ul>
-    <li>勿將 <code>.env</code> 提交版本庫；建議 <code>chmod 600 .env</code>。</li>
-    <li>Docker 使用 <code>env_file</code>，避免在 shell 歷史或 <code>docker inspect</code> 中留下明文密碼參數。</li>
-    <li>Web 密碼政策：長度 ≥12、不可為已知弱密碼、不可與帳號相同。</li>
-    <li>設備 SSH 密碼僅存在於備份請求記憶體，不持久化。</li>
-    <li>限制 <code>:8000</code> 對外暴露；僅維運網段可存取 OpenAPI。</li>
-    <li>CSV 含 WLC vendor 會被載入階段拒絕。</li>
-  </ul>
 
   <h2 id="troubleshoot">疑難排解</h2>
-  <table>
-    <thead><tr><th>現象</th><th>可能原因與處理</th></tr></thead>
-    <tbody>
-      <tr><td>Portal 無法啟動</td><td>檢查 <code>.env</code> 帳密是否符合政策；<code>docker compose logs portal</code></td></tr>
-      <tr><td>側欄 Agent 紅燈</td><td>Agent 未啟動、URL 錯誤、防火牆；<code>curl http://localhost:8000/health</code></td></tr>
-      <tr><td>Agent <code>unhealthy</code></td><td>多為舊 <code>agent-logs</code> volume 導致無法寫 log：<code>docker compose down -v</code> 後重建；查 <code>docker compose logs netdriver-agent</code></td></tr>
-      <tr><td>備份全部失敗</td><td>Agent 容器無法 SSH 至設備；檢查路由／Port／帳密；必要時 host 網路</td></tr>
-      <tr><td>Forti 設定不完整</td><td>提高 <code>deploy/config/agent/agent.yml</code> 中 Fortinet <code>read_timeout</code></td></tr>
-      <tr><td>Huawei 備份 <code>Unsupported mode: login</code></td><td>舊版 Portal 對所有廠牌送 <code>login</code>；Huawei Agent 僅支援 <code>enable</code>。請使用目前 <code>AAA-addon</code>：payload 為 <code>mode: enable</code>（<code>rebuild portal</code> 若映像未更新）。</td></tr>
-      <tr><td>Cisco Nexus 備份失敗（auto classify 後）</td><td>若 Detail 為 <code>[config] …: ^</code> 但 <strong>CLI tail</strong> 已有設定與 <code>hostname#</code>，為 Agent 誤判 lone <code>^</code>（請 <strong>rebuild netdriver-agent</strong>）。否則查權限／timeout；<strong>Nexus</strong> 用 <code>show running-config</code>，<strong>IOS</strong> 用 <code>show running-config view full</code>（<code>login</code> 模式、不用 <code>enable</code>）。</td></tr>
-      <tr><td>備份失敗但 docker log 無錯誤</td><td>單台錯誤在 Portal SSE（含 <code>[config]</code> 與 <code>CLI tail</code>）與結果 Detail；若 <code>FAILED —</code> 後為空請 rebuild portal。Agent 可設 <code>api.request_log_level: DEBUG</code> 後查 <code>docker compose logs netdriver-agent</code></td></tr>
-      <tr><td>庫存只有一台設備</td><td>多設備同 Site+IP 須不同 <code>Port</code> 或 hostname；執行重建索引</td></tr>
-      <tr><td>設備列表 Hostname 為空白／unknown</td><td>舊快照可能只從 version 抓到；新備份已優先從 running-config 解析。按「重建索引」可從現有 config.txt 回填。</td></tr>
-      <tr><td>鄰居／埠位空白</td><td>該次備份未擷取到 CDP/LLDP 或 interfaces；重新備份並確認權限</td></tr>
-      <tr><td>建置 Agent 失敗</td><td>確認可拉取 <code>ghcr.io</code> 基礎映像；代理或鏡像設定</td></tr>
-    </tbody>
-  </table>
+  <section>
+    <table>
+      <tr><th>現象</th><th>建議</th></tr>
+      <tr><td>Agent Offline</td><td><code>docker compose ps</code>、查 Agent log</td></tr>
+      <tr><td>備份全失敗</td><td>Agent 容器能否 SSH 至設備 IP:Port</td></tr>
+      <tr><td>排程卡在 running</td><td>等 job 完成；更新至最新 main；必要時查 <code>schedules.db</code></td></tr>
+      <tr><td>Agent unhealthy</td><td><code>docker compose down -v</code> 後重建</td></tr>
+    </table>
+  </section>
 
-  <h2 id="appendix">附錄</h2>
-  <h3>專案目錄（精簡）</h3>
-  <table>
-    <thead><tr><th>路徑</th><th>說明</th></tr></thead>
-    <tbody>
-      <tr><td><code>docker-compose.yml</code></td><td>正式部署</td></tr>
-      <tr><td><code>docker/Dockerfile.portal</code></td><td>Web 映像</td></tr>
-      <tr><td><code>netdrive-agent/</code></td><td>Agent 原始碼與建置</td></tr>
-      <tr><td><code>deploy/config/agent/</code></td><td>Agent YAML</td></tr>
-      <tr><td><code>nccm/</code>、<code>web/</code></td><td>核心與 UI</td></tr>
-      <tr><td><code>docs/NCCM-v3-spec.md</code></td><td>技術規格</td></tr>
-      <tr><td><code>legacy/</code></td><td>舊 Streamlit 封存</td></tr>
-    </tbody>
-  </table>
-  <h3>開啟本手冊</h3>
-  <pre><code>open docs/Handbook.html    # macOS
-xdg-open docs/Handbook.html  # Linux</code></pre>
-
-  <footer>
-    NetdriverBackup NCCM v3 Handbook · MIT License · 與 <code>README.md</code> 同步維護<br/>
-    技術規格詳見 <code>docs/NCCM-v3-spec.md</code>
-  </footer>
-</main>
-
+  <p class="lead" style="margin-top:2rem">技術規格：<code>docs/NCCM-v3-spec.md</code> · 專案 <code>README.md</code></p>
 </body>
 </html>

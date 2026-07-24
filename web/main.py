@@ -41,6 +41,8 @@ from nccm.auth.audit import audit_portal_login, write_audit
 load_dotenv()
 
 _WEB_DIR = Path(__file__).resolve().parent
+_ROOT = _WEB_DIR.parent
+_HANDBOOK = _ROOT / "docs" / "Handbook.html"
 
 app = FastAPI(title="NetdriverBackup NCCM v3")
 _secret = os.environ.get("NCCM_SESSION_SECRET") or secrets.token_hex(32)
@@ -63,6 +65,7 @@ ADMIN_NAV = [
     ("admin_api_tokens", "API Token", "/admin/api-tokens"),
     ("admin_audit", "審計日誌", "/admin/audit"),
 ]
+HELP_NAV = ("help", "使用手冊", "/help")
 
 
 def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
@@ -71,6 +74,7 @@ def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
         items = [x for x in items if x[0] != "backup"]
     if role == "admin":
         items = [*items, *ADMIN_NAV]
+    items.append(HELP_NAV)
     return items
 
 
@@ -182,6 +186,16 @@ async def health():
         "netdriver_agent": agent_ok,
         "store_dir": str(store_dir()),
     }
+
+
+@app.get("/help")
+async def help_page(
+    request: Request,
+    user: str = Depends(require_user),
+):
+    if not _HANDBOOK.is_file():
+        raise HTTPException(status_code=404, detail="handbook not found")
+    return FileResponse(_HANDBOOK, media_type="text/html; charset=utf-8")
 
 
 def _ctx(request: Request, page: str, **extra):

@@ -76,6 +76,8 @@ Agent model field `login` still accepts legacy JSON key `mode` (Pydantic alias);
 | `/inventory` | 設備總表與版控 |
 | `/neighbors` | CDP/LLDP |
 | `/interfaces` | Interface Map |
+| `/schedules` | 排程備份 |
+| `/help` | 使用手冊（`docs/Handbook.html`） |
 
 Auth: `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS` (min 12 chars), session cookie.
 
