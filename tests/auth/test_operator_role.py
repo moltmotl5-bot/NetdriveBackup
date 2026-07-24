@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from web.deps import role_can_operate
+from web.deps import role_can_operate, role_can_view_schedules
 
 
 def test_role_can_operate_matrix():
@@ -12,6 +12,13 @@ def test_role_can_operate_matrix():
     assert role_can_operate("admin")
     assert not role_can_operate("viewer")
     assert not role_can_operate("")
+
+
+def test_role_can_view_schedules_matrix():
+    assert role_can_view_schedules("admin")
+    assert role_can_view_schedules("operator")
+    assert role_can_view_schedules("viewer")
+    assert not role_can_view_schedules("")
 
 
 def test_operator_role_create(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

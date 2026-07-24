@@ -51,8 +51,11 @@ def _prune_jobs() -> None:
     with _jobs_lock:
         if len(_jobs) <= _MAX_JOBS:
             return
-        oldest = sorted(_jobs.values(), key=lambda j: j.created_at)[: len(_jobs) - _MAX_JOBS]
-        for j in oldest:
+        finished = [j for j in _jobs.values() if j.status in ("done", "failed")]
+        if not finished:
+            return
+        finished.sort(key=lambda j: j.created_at)
+        for j in finished[: max(0, len(_jobs) - _MAX_JOBS)]:
             _jobs.pop(j.job_id, None)
 
 

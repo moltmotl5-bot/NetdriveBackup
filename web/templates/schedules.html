@@ -6,12 +6,16 @@
   以<strong>日</strong>為週期，對已通過 Agent 連線測試的設備執行真實備份。
   CSV 僅支援<strong>檔案上傳</strong>；匯入後探測 reachable 設備，確認後才納入排程。
 </p>
-{% if secrets_configured and secrets_key_source == 'store' %}
+{% if not can_operate %}
+<p class="info-banner">您以 <strong>viewer</strong> 身分檢視此頁：可查看排程與執行歷史，無法建立、編輯或觸發備份。</p>
+{% endif %}
+{% if secrets_configured and secrets_key_source == 'store' and can_operate %}
 <p class="info-banner">加密主金鑰已就緒（store 自動初始化）。請定期備份 <code>store/</code> 目錄。</p>
 {% endif %}
 {% if message %}<p class="ok-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
+{% if can_operate %}
 <section class="panel">
   <h2>新增排程</h2>
   <form method="post" action="/schedules/upload" enctype="multipart/form-data" class="admin-user-form schedule-form">
@@ -26,6 +30,7 @@
     <button type="submit" class="btn-primary">上傳並連線測試</button>
   </form>
 </section>
+{% endif %}
 
 <section class="panel">
   <h2>排程列表</h2>
@@ -34,7 +39,7 @@
     <thead>
       <tr>
         <th>ID</th><th>名稱</th><th>設備</th><th>間隔</th><th>啟用</th>
-        <th>上次執行</th><th>結果</th><th>操作</th>
+        <th>上次執行</th><th>結果</th>{% if can_operate %}<th>操作</th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -55,6 +60,7 @@
           {% if s.running_job_id %}<span class="mode-badge mode-live">執行中</span>{% endif %}
           {{ s.last_result or '—' }}
         </td>
+        {% if can_operate %}
         <td class="admin-actions">
           <form method="post" action="/schedules/{{ s.id }}/run" class="inline-form"
                 onsubmit="return confirm('立即對 {{ s.device_count }} 台設備執行備份？');">
@@ -90,9 +96,50 @@
             <button type="submit" class="btn-secondary btn-sm">刪除</button>
           </form>
         </td>
+        {% endif %}
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted">尚無排程。</td></tr>
+      <tr><td colspan="{% if can_operate %}8{% else %}7{% endif %}" class="muted">尚無排程。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>執行歷史</h2>
+  <p class="muted">最近 {{ schedule_runs|length }} 筆排程執行記錄（含手動與背景 watcher）。</p>
+  <div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th><th>排程</th><th>開始</th><th>結束</th><th>狀態</th>
+        <th>觸發</th><th>結果</th><th>Job</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in schedule_runs %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.schedule_name }} <span class="muted">#{{ r.schedule_id }}</span></td>
+        <td class="muted">{{ r.started_at or '—' }}</td>
+        <td class="muted">{{ r.finished_at or '—' }}</td>
+        <td>
+          {% if r.status == 'running' %}<span class="run-badge run-running">running</span>
+          {% elif r.status == 'done' %}<span class="run-badge run-done">done</span>
+          {% elif r.status == 'failed' %}<span class="run-badge run-failed">failed</span>
+          {% elif r.status == 'skipped' %}<span class="run-badge run-skipped">skipped</span>
+          {% else %}<span class="run-badge">{{ r.status or '—' }}</span>{% endif %}
+        </td>
+        <td class="muted">{{ r.triggered_by or '—' }}</td>
+        <td class="muted">
+          {% if r.device_count %}<span class="ok">{{ r.ok_count }}/{{ r.device_count }}</span>{% endif %}
+          {{ r.summary or '—' }}
+        </td>
+        <td class="muted">{% if r.job_id %}<code>{{ r.job_id[:12] }}</code>{% else %}—{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">尚無執行記錄。</td></tr>
       {% endfor %}
     </tbody>
   </table>
