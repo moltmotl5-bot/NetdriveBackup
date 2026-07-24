@@ -7,9 +7,11 @@ from fastapi.routing import APIRouter
 from netdriver_agent.containers import Container
 from netdriver_agent.handlers.cmd_req_handler import CommandRequestHandler
 from netdriver_agent.handlers.conn_req_handler import ConnectRequestHandler
+from netdriver_agent.handlers.probe_req_handler import ProbeRequestHandler
 from netdriver_agent.models.cmd import CommandRequest, CommandResponse
 from netdriver_agent.models.common import CommonResponse
 from netdriver_agent.models.conn import ConnectRequest
+from netdriver_agent.models.probe import ProbeRequest, ProbeResponse
 from netdriver_agent.models.header import CommonHeaders
 from netdriver_agent.route import LoggingApiRoute
 
@@ -36,4 +38,15 @@ async def connect(
     handler: ConnectRequestHandler = Depends(Provide[Container.conn_req_handler])
 ) -> CommonResponse:
     """ Check the connection to the device. """
+    return await handler.handle(request)
+
+
+@router.post("/probe", summary="TCP reachability probe from agent to device")
+@inject
+async def probe(
+    request: ProbeRequest,
+    headers: Annotated[CommonHeaders, Header()],
+    handler: ProbeRequestHandler = Depends(Provide[Container.probe_req_handler]),
+) -> ProbeResponse:
+    """Open a TCP connection to ip:port without SSH credentials."""
     return await handler.handle(request)

@@ -185,7 +185,7 @@ store/
    展開異常時請重新備份後按 **重建索引**（並 `docker compose up -d --build` portal 若程式已更新）。  
 3. **CDP/LLDP 鄰居** — 設備列表同總表展開 Stack/HA；由快照解析鄰居表  
 4. **Device Interface Map** — 設備列表含 Stack#/Role；`config` + `interfaces` 合併埠位表  
-5. **排程備份** — CSV 清單 + 間隔分鐘；本版僅 **dry-mock**（不 SSH／不打 Agent）；`store/schedules.db`  
+5. **排程備份** — CSV 檔案上傳 → Agent TCP 探測 → 確認後以**日**為週期真實備份；`store/schedules.db`  
 
 側欄顯示 Agent **Online**／**Offline**（綠／紅），不顯示 URL 或 store 路徑。Portal 帳號存於 **`store/portal_auth.db`**（密碼雜湊）。API Token **必填有效期**（預設 90 天、最長 365）；過期 401。審計寫入 **`store/audit/audit.db`**，admin「審計日誌」可查／匯出 CSV。
 

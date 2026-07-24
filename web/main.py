@@ -596,39 +596,97 @@ async def schedules_page(
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _schedules_ctx(
-            request,
-            message=message or None,
-            error=error or None,
-        ),
+        _schedules_ctx(request, message=message or None, error=error or None),
     )
 
 
-@app.post("/schedules", response_class=HTMLResponse)
-async def schedules_create(
+@app.post("/schedules/upload", response_class=HTMLResponse)
+async def schedules_upload(
     request: Request,
     user: str = Depends(require_operator),
     name: Annotated[str, Form()] = "",
-    csv_text: Annotated[str, Form()] = "",
-    every_minutes: Annotated[int, Form()] = 60,
-    mode: Annotated[str, Form()] = "dry_mock",
+    interval_days: Annotated[int, Form()] = 1,
     username: Annotated[str, Form()] = "",
     password: Annotated[str, Form()] = "",
     enable_password: Annotated[str, Form()] = "",
+    csv_file: UploadFile = File(...),
+    edit_schedule_id: Annotated[int, Form()] = 0,
 ):
-    from nccm.backup.schedule import MODE_LIVE, create_schedule
+    from nccm.backup.schedule_draft import create_draft_from_upload
 
+    if not csv_file.filename:
+        return templates.TemplateResponse(
+            request,
+            "schedules.html",
+            _schedules_ctx(request, error="請選擇 CSV 檔案"),
+            status_code=400,
+        )
+    raw = await csv_file.read()
     try:
-        result = create_schedule(
-            name,
-            csv_text,
-            every_minutes=every_minutes,
-            mode=mode,
+        draft = create_draft_from_upload(
+            name=name,
+            csv_bytes=raw,
+            csv_filename=csv_file.filename or "upload.csv",
+            interval_days=interval_days,
             username=username,
             password=password,
             enable_password=enable_password,
             created_by=user,
+            edit_schedule_id=edit_schedule_id or None,
         )
+        write_audit(
+            request=request,
+            event="schedule_csv_probe",
+            success=True,
+            actor=user,
+            detail=f"draft={draft.id};ok={draft.ok_count};fail={draft.fail_count}",
+        )
+    except ValueError as exc:
+        write_audit(
+            request=request,
+            event="schedule_csv_probe",
+            success=False,
+            actor=user,
+            detail=str(exc)[:200],
+        )
+        return templates.TemplateResponse(
+            request,
+            "schedules.html",
+            _schedules_ctx(request, error=str(exc)),
+            status_code=400,
+        )
+    return RedirectResponse(url=f"/schedules/preview/{draft.id}", status_code=303)
+
+
+@app.get("/schedules/preview/{draft_id}", response_class=HTMLResponse)
+async def schedules_preview(
+    request: Request,
+    draft_id: str,
+    user: str = Depends(require_operator),
+):
+    from nccm.backup.schedule_draft import get_draft
+
+    try:
+        draft = get_draft(draft_id)
+    except ValueError:
+        raise HTTPException(404)
+    return templates.TemplateResponse(
+        request,
+        "schedule_preview.html",
+        _schedules_ctx(request, draft=draft),
+    )
+
+
+@app.post("/schedules/preview/{draft_id}/confirm", response_class=HTMLResponse)
+async def schedules_confirm(
+    request: Request,
+    draft_id: str,
+    user: str = Depends(require_operator),
+):
+    from nccm.backup.schedule_draft import confirm_draft
+
+    try:
+        result = confirm_draft(draft_id)
         sch = result.schedule
         if result.key_created:
             write_audit(
@@ -640,47 +698,66 @@ async def schedules_create(
             )
         write_audit(
             request=request,
-            event="schedule_create",
+            event="schedule_csv_confirm",
             success=True,
             actor=user,
-            detail=f"id={sch.id};mode={sch.mode};name={sch.name}",
+            detail=f"id={sch.id};devices={sch.device_count}",
         )
-        if sch.mode == MODE_LIVE:
-            if result.key_created:
-                msg = (
-                    "已建立 live 排程；加密主金鑰已自動初始化（請備份 store 目錄）。"
-                    "真實備份 Phase B 啟用。"
-                )
-            else:
-                msg = "已建立 live 排程（憑證已加密存放；真實備份 Phase B 啟用）"
-        else:
-            msg = "已建立 dry-mock 排程（解析 CSV、不連設備）"
-        err = None
-    except ValueError as e:
-        msg, err = None, str(e)
+        msg = f"排程「{sch.name}」已建立（{sch.device_count} 台設備）"
+        if result.key_created:
+            msg += "；加密主金鑰已初始化，請備份 store 目錄"
+        return templates.TemplateResponse(
+            request,
+            "schedules.html",
+            _schedules_ctx(request, message=msg),
+        )
+    except ValueError as exc:
+        from nccm.backup.schedule_draft import get_draft
+
         write_audit(
             request=request,
-            event="schedule_create",
+            event="schedule_csv_confirm",
             success=False,
             actor=user,
-            detail=str(e)[:200],
+            detail=str(exc)[:200],
         )
+        try:
+            draft = get_draft(draft_id)
+        except ValueError:
+            raise HTTPException(404) from exc
+        return templates.TemplateResponse(
+            request,
+            "schedule_preview.html",
+            _schedules_ctx(request, error=str(exc), draft=draft),
+            status_code=400,
+        )
+
+
+@app.get("/schedules/{schedule_id}/devices", response_class=HTMLResponse)
+async def schedules_devices_partial(
+    request: Request,
+    schedule_id: int,
+    user: str = Depends(require_operator),
+):
+    from nccm.backup.schedule import get_schedule, load_schedule_devices
+
+    sch = get_schedule(schedule_id)
+    if not sch:
+        raise HTTPException(404)
     return templates.TemplateResponse(
         request,
-        "schedules.html",
-        _schedules_ctx(request, message=msg, error=err),
+        "partials/schedule_devices.html",
+        {"request": request, "schedule": sch, "devices": load_schedule_devices(sch)},
     )
 
 
 @app.post("/schedules/{schedule_id}/update", response_class=HTMLResponse)
-async def schedules_update(
+async def schedules_update_meta(
     request: Request,
     schedule_id: int,
     user: str = Depends(require_operator),
     name: Annotated[str, Form()] = "",
-    csv_text: Annotated[str, Form()] = "",
-    every_minutes: Annotated[int, Form()] = 60,
-    mode: Annotated[str, Form()] = "dry_mock",
+    interval_days: Annotated[int, Form()] = 1,
     username: Annotated[str, Form()] = "",
     password: Annotated[str, Form()] = "",
     enable_password: Annotated[str, Form()] = "",
@@ -691,47 +768,38 @@ async def schedules_update(
         result = update_schedule(
             schedule_id,
             name=name,
-            csv_text=csv_text,
-            every_minutes=every_minutes,
-            mode=mode,
+            interval_days=interval_days,
             username=username,
             password=password if password else None,
             enable_password=enable_password if enable_password else None,
         )
         sch = result.schedule
-        if result.key_created:
-            write_audit(
-                request=request,
-                event="secrets_key_init",
-                success=True,
-                actor=user,
-                detail=f"source={result.key_source or 'store'}",
-            )
         write_audit(
             request=request,
             event="schedule_update",
             success=True,
             actor=user,
-            detail=f"id={sch.id};mode={sch.mode};name={sch.name}",
+            detail=f"id={sch.id};name={sch.name}",
         )
-        if result.key_created:
-            msg = "已更新排程；加密主金鑰已自動初始化（請備份 store 目錄）。"
-        else:
-            msg = "已更新排程"
-        err = None
-    except ValueError as e:
-        msg, err = None, str(e)
+        msg = "已更新排程"
+    except ValueError as exc:
+        msg = None
         write_audit(
             request=request,
             event="schedule_update",
             success=False,
             actor=user,
-            detail=f"id={schedule_id};{str(e)[:180]}",
+            detail=f"id={schedule_id};{str(exc)[:180]}",
+        )
+        return templates.TemplateResponse(
+            request,
+            "schedules.html",
+            _schedules_ctx(request, error=str(exc)),
         )
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _schedules_ctx(request, message=msg, error=err),
+        _schedules_ctx(request, message=msg),
     )
 
 
@@ -741,35 +809,38 @@ async def schedules_run_now(
     schedule_id: int,
     user: str = Depends(require_operator),
 ):
-    from nccm.backup.schedule import get_schedule, list_schedules, run_schedule
+    from nccm.backup.schedule import get_schedule, run_schedule
 
     sch = get_schedule(schedule_id)
     if not sch:
         raise HTTPException(404)
     try:
-        r = run_schedule(schedule_id)
-        ok = r.get("ok", True)
+        r = run_schedule(schedule_id, triggered_by=f"manual:{user}")
+        ok = bool(r.get("ok"))
         write_audit(
             request=request,
-            event="schedule_run_manual",
+            event="schedule_run_start" if ok else "schedule_run_skipped",
             success=ok,
             actor=user,
-            detail=f"id={schedule_id};mode={sch.mode};ok={ok}",
+            detail=f"id={schedule_id};job={r.get('job_id', '')};skipped={r.get('skipped', False)}",
         )
-        if ok:
-            msg = f"mock 完成：{r.get('device_count', 0)} 台 — {r.get('message', '')}"
+        if r.get("skipped"):
+            err = r.get("error") or "已跳過"
+            msg = None
+        elif ok:
+            msg = r.get("message") or f"備份已啟動（{r.get('device_count', 0)} 台）"
             err = None
         else:
             err = r.get("error") or "執行失敗"
             msg = None
-    except ValueError as e:
-        msg, err = None, str(e)
+    except ValueError as exc:
+        msg, err = None, str(exc)
         write_audit(
             request=request,
-            event="schedule_run_manual",
+            event="schedule_run_start",
             success=False,
             actor=user,
-            detail=f"id={schedule_id};{str(e)[:180]}",
+            detail=f"id={schedule_id};{str(exc)[:180]}",
         )
     return templates.TemplateResponse(
         request,
@@ -797,17 +868,17 @@ async def schedules_toggle(
             event="schedule_toggle",
             success=True,
             actor=user,
-            detail=f"id={schedule_id};enabled={1 if new_enabled else 0};mode={sch.mode}",
+            detail=f"id={schedule_id};enabled={1 if new_enabled else 0}",
         )
         msg, err = "已更新啟用狀態", None
-    except ValueError as e:
-        msg, err = None, str(e)
+    except ValueError as exc:
+        msg, err = None, str(exc)
         write_audit(
             request=request,
             event="schedule_toggle",
             success=False,
             actor=user,
-            detail=f"id={schedule_id};{str(e)[:180]}",
+            detail=f"id={schedule_id};{str(exc)[:180]}",
         )
     return templates.TemplateResponse(
         request,
@@ -833,7 +904,7 @@ async def schedules_delete(
         event="schedule_delete",
         success=True,
         actor=user,
-        detail=f"id={schedule_id};name={sch.name};mode={sch.mode}",
+        detail=f"id={schedule_id};name={sch.name}",
     )
     return templates.TemplateResponse(
         request,

@@ -6,6 +6,7 @@ from dependency_injector.containers import DeclarativeContainer
 from dependency_injector.providers import Factory, Configuration
 from netdriver_agent.handlers.cmd_req_handler import CommandRequestHandler
 from netdriver_agent.handlers.conn_req_handler import ConnectRequestHandler
+from netdriver_agent.handlers.probe_req_handler import ProbeRequestHandler
 
 
 class Container(DeclarativeContainer):
@@ -13,6 +14,7 @@ class Container(DeclarativeContainer):
     config = Configuration()
     cmd_req_handler = Factory(CommandRequestHandler)
     conn_req_handler = Factory(ConnectRequestHandler)
+    probe_req_handler = Factory(ProbeRequestHandler)
 
 
 def get_config_file() -> str:

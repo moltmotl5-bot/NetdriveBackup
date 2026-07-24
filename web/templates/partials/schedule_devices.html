@@ -1,0 +1,19 @@
+<table class="data-table">
+  <thead>
+    <tr><th>Site</th><th>IP</th><th>Vendor</th><th>Port</th><th>Hostname</th></tr>
+  </thead>
+  <tbody>
+    {% for d in devices %}
+    <tr>
+      <td>{{ d.site }}</td>
+      <td>{{ d.ip }}</td>
+      <td>{{ d.vendor }}</td>
+      <td>{{ d.port }}</td>
+      <td>{{ d.hostname or '—' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">無設備。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted">共 {{ devices|length }} 台 · 驗證時間 {{ schedule.devices_verified_at or '—' }}</p>

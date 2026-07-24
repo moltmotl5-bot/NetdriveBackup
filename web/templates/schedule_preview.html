@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}排程預覽 — NCCM v3{% endblock %}
+{% block content %}
+<h1>連線測試預覽</h1>
+<p class="lead">
+  排程「<strong>{{ draft.name }}</strong>」— 檔案 {{ draft.csv_filename }}。
+  僅 <strong>{{ draft.ok_count }}</strong> 台通過 Agent TCP 探測的設備會納入排程（共 {{ draft.rows|length }} 台）。
+</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<section class="panel">
+  <div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr><th>Site</th><th>IP</th><th>Vendor</th><th>Port</th><th>狀態</th><th>延遲</th><th>說明</th></tr>
+    </thead>
+    <tbody>
+      {% for row in draft.rows %}
+      <tr>
+        <td>{{ row.site }}</td>
+        <td>{{ row.ip }}</td>
+        <td>{{ row.vendor }}</td>
+        <td>{{ row.port }}</td>
+        <td>{% if row.ok %}<span class="ok">OK</span>{% else %}<span class="error-inline">FAIL</span>{% endif %}</td>
+        <td>{% if row.ok %}{{ row.latency_ms }} ms{% else %}—{% endif %}</td>
+        <td class="muted">{{ row.error or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  {% if draft.ok_count == 0 %}
+  <p class="error">無設備通過連線測試，無法建立排程。請修正 CSV 或網路後重新上傳。</p>
+  <p><a href="/schedules" class="btn-secondary">返回</a></p>
+  {% else %}
+  <form method="post" action="/schedules/preview/{{ draft.id }}/confirm" class="inline-form"
+        onsubmit="return confirm('確認建立排程？將納入 {{ draft.ok_count }} 台設備（排除 {{ draft.fail_count }} 台失敗）。');">
+    <button type="submit" class="btn-primary">確認建立排程</button>
+  </form>
+  <a href="/schedules" class="btn-secondary">取消</a>
+  {% endif %}
+</section>
+{% endblock %}

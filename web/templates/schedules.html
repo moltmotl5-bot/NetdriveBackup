@@ -3,45 +3,27 @@
 {% block content %}
 <h1>排程備份</h1>
 <p class="lead">
-  CSV 清單 + 間隔分鐘。<strong>dry-mock</strong> 僅解析 CSV；<strong>live</strong> 儲存加密 SSH 憑證。
-  首次建立 live 排程並輸入 SSH 密碼時，系統會在 <code>store/.secrets/</code> 自動產生加密主金鑰（真實備份 Phase B 啟用）。
+  以<strong>日</strong>為週期，對已通過 Agent 連線測試的設備執行真實備份。
+  CSV 僅支援<strong>檔案上傳</strong>；匯入後探測 reachable 設備，確認後才納入排程。
 </p>
 {% if secrets_configured and secrets_key_source == 'store' %}
-<p class="info-banner">加密主金鑰已就緒（store 自動初始化）。請定期備份 <code>store/</code> 目錄；遺失金鑰將無法還原已存 SSH 密碼。</p>
-{% elif secrets_configured and secrets_key_source == 'env' %}
-<p class="info-banner">加密主金鑰來自環境變數 <code>NCCM_SECRETS_KEY</code>（覆寫 store 自動初始化）。</p>
-{% elif secrets_configured and secrets_key_source == 'file' %}
-<p class="info-banner">加密主金鑰來自 secret 檔（覆寫 store 自動初始化）。</p>
+<p class="info-banner">加密主金鑰已就緒（store 自動初始化）。請定期備份 <code>store/</code> 目錄。</p>
 {% endif %}
 {% if message %}<p class="ok-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
 <section class="panel">
   <h2>新增排程</h2>
-  <form method="post" action="/schedules" class="admin-user-form schedule-form">
-    <label>名稱 <input name="name" required placeholder="lab-nightly" /></label>
-    <label>間隔（分鐘） <input name="every_minutes" type="number" min="1" value="60" /></label>
-    <label>模式
-      <select name="mode">
-        <option value="dry_mock" selected>dry-mock（僅解析 CSV）</option>
-        <option value="live">live（加密存 SSH 憑證）</option>
-      </select>
+  <form method="post" action="/schedules/upload" enctype="multipart/form-data" class="admin-user-form schedule-form">
+    <label>名稱 <input name="name" required placeholder="lab-daily" /></label>
+    <label>間隔（日） <input name="interval_days" type="number" min="1" value="1" /></label>
+    <label class="schedule-cred">SSH 帳號 <input name="username" required autocomplete="off" /></label>
+    <label class="schedule-cred">SSH 密碼 <input name="password" type="password" required autocomplete="new-password" /></label>
+    <label class="schedule-cred">Enable 密碼（可選） <input name="enable_password" type="password" autocomplete="new-password" /></label>
+    <label class="full">CSV 檔案（必填）
+      <input type="file" name="csv_file" accept=".csv,text/csv" required />
     </label>
-    <label class="schedule-cred">SSH 帳號
-      <input name="username" autocomplete="off" placeholder="live 必填" />
-    </label>
-    <label class="schedule-cred">SSH 密碼
-      <input name="password" type="password" autocomplete="new-password" placeholder="live 必填；首次輸入時自動初始化加密金鑰" />
-    </label>
-    <label class="schedule-cred">Enable 密碼（可選）
-      <input name="enable_password" type="password" autocomplete="new-password" placeholder="Huawei/Fortinet 等" />
-    </label>
-    <label class="full">CSV
-      <textarea name="csv_text" rows="6" required placeholder="Site,IP,Vendor,Port">Site,IP,Vendor,Port
-lab,10.0.0.1,huawei,22
-lab,10.0.0.2,cisco,22</textarea>
-    </label>
-    <button type="submit" class="btn-primary">建立</button>
+    <button type="submit" class="btn-primary">上傳並連線測試</button>
   </form>
 </section>
 
@@ -51,7 +33,7 @@ lab,10.0.0.2,cisco,22</textarea>
   <table class="data-table">
     <thead>
       <tr>
-        <th>ID</th><th>名稱</th><th>模式</th><th>憑證</th><th>間隔</th><th>啟用</th>
+        <th>ID</th><th>名稱</th><th>設備</th><th>間隔</th><th>啟用</th>
         <th>上次執行</th><th>結果</th><th>操作</th>
       </tr>
     </thead>
@@ -61,50 +43,45 @@ lab,10.0.0.2,cisco,22</textarea>
         <td>{{ s.id }}</td>
         <td>{{ s.name }}</td>
         <td>
-          {% if s.mode == 'live' %}
-          <span class="mode-badge mode-live">live</span>
-          {% else %}
-          <span class="mode-badge mode-mock">mock</span>
-          {% endif %}
+          <button type="button" class="btn-secondary btn-sm schedule-devices-btn"
+                  data-schedule-id="{{ s.id }}" data-schedule-name="{{ s.name }}">
+            設備 ({{ s.device_count }})
+          </button>
         </td>
-        <td class="muted">
-          {% if s.mode == 'live' %}
-            {% if s.password_set %}已設定{% else %}<span class="error-inline">缺密碼</span>{% endif %}
-            {% if s.enable_password_set %} · enable✓{% endif %}
-          {% else %}—{% endif %}
-        </td>
-        <td>{{ s.every_minutes }}m</td>
+        <td>{{ s.interval_days }} 日</td>
         <td>{% if s.enabled %}<span class="ok">on</span>{% else %}<span class="muted">off</span>{% endif %}</td>
         <td class="muted">{{ s.last_run_at or '—' }}</td>
-        <td class="muted">{{ s.last_result or '—' }}</td>
+        <td class="muted">
+          {% if s.running_job_id %}<span class="mode-badge mode-live">執行中</span>{% endif %}
+          {{ s.last_result or '—' }}
+        </td>
         <td class="admin-actions">
+          <form method="post" action="/schedules/{{ s.id }}/run" class="inline-form"
+                onsubmit="return confirm('立即對 {{ s.device_count }} 台設備執行備份？');">
+            <button type="submit" class="btn-primary btn-sm">立即備份</button>
+          </form>
           <details class="schedule-edit">
             <summary class="btn-secondary btn-sm">編輯</summary>
             <form method="post" action="/schedules/{{ s.id }}/update" class="schedule-edit-form">
               <label>名稱 <input name="name" value="{{ s.name }}" required /></label>
-              <label>間隔 <input name="every_minutes" type="number" min="1" value="{{ s.every_minutes }}" /></label>
-              <label>模式
-                <select name="mode">
-                  <option value="dry_mock" {% if s.mode != 'live' %}selected{% endif %}>dry-mock</option>
-                  <option value="live" {% if s.mode == 'live' %}selected{% endif %}>live</option>
-                </select>
-              </label>
+              <label>間隔（日） <input name="interval_days" type="number" min="1" value="{{ s.interval_days }}" /></label>
               <label>SSH 帳號 <input name="username" value="{{ s.username }}" autocomplete="off" /></label>
-              <label>SSH 密碼
-                <input name="password" type="password" autocomplete="new-password"
-                       placeholder="{% if s.password_set %}留空=保留{% else %}live 必填{% endif %}" />
-              </label>
-              <label>Enable
-                <input name="enable_password" type="password" autocomplete="new-password"
-                       placeholder="{% if s.enable_password_set %}留空=保留{% else %}可選{% endif %}" />
-              </label>
-              <label class="full">CSV<textarea name="csv_text" rows="5" required>{{ s.csv_text }}</textarea></label>
+              <label>SSH 密碼 <input name="password" type="password" placeholder="留空=保留" autocomplete="new-password" /></label>
+              <label>Enable <input name="enable_password" type="password" placeholder="留空=保留" autocomplete="new-password" /></label>
               <button type="submit" class="btn-primary btn-sm">儲存</button>
             </form>
+            <form method="post" action="/schedules/upload" enctype="multipart/form-data" class="schedule-edit-form">
+              <input type="hidden" name="edit_schedule_id" value="{{ s.id }}" />
+              <input type="hidden" name="name" value="{{ s.name }}" />
+              <input type="hidden" name="interval_days" value="{{ s.interval_days }}" />
+              <input type="hidden" name="username" value="{{ s.username }}" />
+              <p class="muted">重新匯入 CSV 需再次輸入 SSH 密碼：</p>
+              <label>SSH 密碼 <input name="password" type="password" required autocomplete="new-password" /></label>
+              <label>Enable <input name="enable_password" type="password" autocomplete="new-password" /></label>
+              <label>新 CSV <input type="file" name="csv_file" accept=".csv,text/csv" required /></label>
+              <button type="submit" class="btn-secondary btn-sm">重新匯入並測試</button>
+            </form>
           </details>
-          <form method="post" action="/schedules/{{ s.id }}/run" class="inline-form">
-            <button type="submit" class="btn-secondary btn-sm">立即 mock</button>
-          </form>
           <form method="post" action="/schedules/{{ s.id }}/toggle" class="inline-form">
             <button type="submit" class="btn-secondary btn-sm">{% if s.enabled %}停用{% else %}啟用{% endif %}</button>
           </form>
@@ -115,10 +92,40 @@ lab,10.0.0.2,cisco,22</textarea>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="muted">尚無排程。</td></tr>
+      <tr><td colspan="8" class="muted">尚無排程。</td></tr>
       {% endfor %}
     </tbody>
   </table>
   </div>
 </section>
+
+<dialog id="schedule-devices-dialog" class="schedule-dialog">
+  <form method="dialog">
+    <h2 id="schedule-devices-title">設備清單</h2>
+    <div id="schedule-devices-body" class="table-scroll"></div>
+    <button type="submit" class="btn-secondary btn-sm">關閉</button>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll(".schedule-devices-btn").forEach(function (btn) {
+  btn.addEventListener("click", async function () {
+    const id = btn.getAttribute("data-schedule-id");
+    const name = btn.getAttribute("data-schedule-name");
+    const dlg = document.getElementById("schedule-devices-dialog");
+    const body = document.getElementById("schedule-devices-body");
+    const title = document.getElementById("schedule-devices-title");
+    title.textContent = "設備清單 — " + name;
+    body.innerHTML = "<p class=\"muted\">載入中…</p>";
+    dlg.showModal();
+    try {
+      const r = await fetch("/schedules/" + id + "/devices");
+      body.innerHTML = await r.text();
+    } catch (e) {
+      body.innerHTML = "<p class=\"error\">載入失敗</p>";
+    }
+  });
+});
+</script>
 {% endblock %}

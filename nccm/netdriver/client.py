@@ -169,3 +169,14 @@ class NetDriverClient:
             )
         except httpx.HTTPError:
             pass
+
+    def probe(self, *, ip: str, port: int = 22, timeout: float = 3.0) -> dict[str, Any]:
+        body = {"ip": ip, "port": int(port), "timeout": float(timeout)}
+        r = httpx.post(
+            f"{self.base_url}/api/v1/probe",
+            json=body,
+            timeout=max(5.0, float(timeout) + 2.0),
+        )
+        if r.status_code >= 400:
+            raise NetDriverError(f"probe HTTP {r.status_code}: {r.text[:500]}")
+        return r.json()

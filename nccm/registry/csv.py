@@ -49,3 +49,28 @@ def load_devices_csv(path: Path) -> list[DeviceRow]:
                 )
             )
     return rows
+
+
+def load_devices_csv_text(csv_text: str) -> list[DeviceRow]:
+    import tempfile
+
+    body = (csv_text or "").strip()
+    if not body:
+        raise ValueError("empty csv")
+    with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as tmp:
+        tmp.write(body)
+        path = Path(tmp.name)
+    try:
+        return load_devices_csv(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def devices_to_csv(devices: list[DeviceRow]) -> str:
+    if not devices:
+        raise ValueError("no devices")
+    lines = ["Site,IP,Vendor,Port"]
+    for d in devices:
+        port = d.port or 22
+        lines.append(f"{d.site},{d.ip},{d.vendor},{port}")
+    return "\n".join(lines) + "\n"
