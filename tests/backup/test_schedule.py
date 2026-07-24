@@ -87,6 +87,32 @@ def test_due_uses_days(sched_env):
     assert sch._due(s2, last_ts + 86400 * 2) is True
 
 
+def test_due_skips_when_job_in_progress(sched_env):
+    sch = sched_env
+    result = sch.create_schedule("daily", CSV_OK, interval_days=1, username="u", password="p")
+    s = result.schedule
+    busy = sch.Schedule(
+        id=s.id,
+        name=s.name,
+        csv_text=s.csv_text,
+        interval_days=1,
+        enabled=True,
+        username=s.username,
+        password_set=True,
+        enable_password_set=False,
+        device_count=2,
+        csv_filename="",
+        devices_verified_at="",
+        running_job_id="job-active",
+        last_run_at="",
+        last_result="",
+        last_ok_count=0,
+        last_fail_count=0,
+        created_by="",
+    )
+    assert sch._due(busy, 0) is False
+
+
 def test_probe_devices_mock(sched_env, monkeypatch: pytest.MonkeyPatch):
     devices = [
         DeviceRow(site="lab", ip="10.0.0.1", vendor="huawei", port=22),
@@ -148,6 +174,95 @@ def test_execute_schedule_starts_job(sched_env, monkeypatch: pytest.MonkeyPatch)
     out = ex.execute_schedule(sid, triggered_by="test")
     assert out["ok"] is True
     assert out["job_id"] == "job-123"
+
+
+def test_execute_schedule_skips_when_job_active(sched_env, monkeypatch: pytest.MonkeyPatch):
+    from nccm.backup import schedule_executor as ex
+
+    sch = sched_env
+    result = sch.create_schedule("daily", CSV_OK, interval_days=1, username="u", password="p")
+    sid = result.schedule.id
+
+    mock_job = MagicMock()
+    mock_job.status = "running"
+    mock_job.job_id = "job-123"
+    calls = {"n": 0}
+
+    def fake_start(*a, **k):
+        calls["n"] += 1
+        return "job-123"
+
+    monkeypatch.setattr("nccm.backup.schedule_executor.start_backup_job_async", fake_start)
+    monkeypatch.setattr("nccm.backup.schedule_executor.get_job", lambda _jid: mock_job)
+
+    first = ex.execute_schedule(sid, triggered_by="manual")
+    second = ex.execute_schedule(sid, triggered_by="watcher")
+    assert first["ok"] is True
+    assert second.get("skipped") is True
+    assert calls["n"] == 1
+
+
+def test_poll_running_jobs_finalizes_orphan_run(sched_env, monkeypatch: pytest.MonkeyPatch):
+    from nccm.backup import schedule_executor as ex
+    from nccm.models import BackupResult
+
+    sch = sched_env
+    result = sch.create_schedule("daily", CSV_OK, interval_days=1, username="u", password="p")
+    sid = result.schedule.id
+    with ex._connect() as conn:
+        ex._insert_run(
+            conn,
+            schedule_id=sid,
+            mode=ex.MODE_LIVE,
+            status="running",
+            triggered_by="watcher",
+            job_id="job-lost",
+            device_count=2,
+        )
+        conn.execute(
+            "UPDATE schedules SET running_job_id = ? WHERE id = ?",
+            ("job-lost", sid),
+        )
+
+    monkeypatch.setattr("nccm.backup.schedule_executor.get_job", lambda _jid: None)
+    ex.poll_running_jobs()
+    run = sch.list_schedule_runs(schedule_id=sid)[0]
+    assert run.status == "failed"
+    assert "lost" in run.summary
+    assert sch.get_schedule(sid).running_job_id == ""
+
+
+def test_poll_running_jobs_finalizes_done_job(sched_env, monkeypatch: pytest.MonkeyPatch):
+    from nccm.backup import schedule_executor as ex
+    from nccm.models import BackupResult
+
+    sch = sched_env
+    result = sch.create_schedule("daily", CSV_OK, interval_days=1, username="u", password="p")
+    sid = result.schedule.id
+
+    done = MagicMock()
+    done.status = "done"
+    done.job_id = "job-done"
+    done.result_run_id = "run-1"
+    done.results = [
+        BackupResult(site="lab", ip="10.0.0.1", hostname="sw1", status="ok"),
+    ]
+    done.error = None
+
+    monkeypatch.setattr(
+        "nccm.backup.schedule_executor.start_backup_job_async",
+        lambda *a, **k: "job-done",
+    )
+    monkeypatch.setattr("nccm.backup.schedule_executor.get_job", lambda _jid: done)
+
+    ex.execute_schedule(sid, triggered_by="manual")
+    assert sch.list_schedule_runs(schedule_id=sid)[0].status == "running"
+
+    ex.poll_running_jobs()
+    run = sch.list_schedule_runs(schedule_id=sid)[0]
+    assert run.status == "done"
+    assert run.ok_count == 1
+    assert sch.get_schedule(sid).running_job_id == ""
 
 
 def test_list_schedule_runs(sched_env):

@@ -7,6 +7,7 @@ import re
 import secrets
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -835,6 +836,10 @@ async def schedules_run_now(
         elif ok:
             msg = r.get("message") or f"備份已啟動（{r.get('device_count', 0)} 台）"
             err = None
+            return RedirectResponse(
+                url=f"/schedules?message={quote(msg)}",
+                status_code=303,
+            )
         else:
             err = r.get("error") or "執行失敗"
             msg = None

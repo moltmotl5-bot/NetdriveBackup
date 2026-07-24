@@ -531,6 +531,8 @@ _watcher_lock = threading.Lock()
 def _due(sch: Schedule, now_ts: float) -> bool:
     if not sch.enabled:
         return False
+    if sch.running_job_id:
+        return False
     if not sch.last_run_at:
         return True
     try:
@@ -542,7 +544,7 @@ def _due(sch: Schedule, now_ts: float) -> bool:
 
 
 def tick_schedules() -> list[dict]:
-    from nccm.backup.schedule_executor import ScheduleLock, execute_schedule, poll_running_jobs
+    from nccm.backup.schedule_executor import ScheduleLock, _execute_schedule_body, poll_running_jobs
 
     out: list[dict] = []
     lock = ScheduleLock()
@@ -553,7 +555,7 @@ def tick_schedules() -> list[dict]:
         now_ts = time.time()
         for sch in list_schedules():
             if _due(sch, now_ts):
-                out.append(execute_schedule(sch.id, triggered_by="watcher"))
+                out.append(_execute_schedule_body(sch.id, triggered_by="watcher"))
     finally:
         lock.release()
     return out
