@@ -12,11 +12,16 @@ def sched_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     store = tmp_path / "store"
     store.mkdir()
     monkeypatch.setenv("NCCM_STORE_DIR", str(store))
+    monkeypatch.delenv("NCCM_SECRETS_KEY", raising=False)
+    monkeypatch.delenv("NCCM_SECRETS_KEY_FILE", raising=False)
     import importlib
     import nccm.backup.schedule as sch
+    import nccm.backup.secrets as secrets
 
+    importlib.reload(secrets)
     importlib.reload(sch)
     yield sch
+    importlib.reload(secrets)
     importlib.reload(sch)
 
 
@@ -26,9 +31,11 @@ def sched_env_with_key(sched_env, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("NCCM_SECRETS_KEY", key)
     import importlib
     import nccm.backup.secrets as secrets
+    import nccm.backup.schedule as sch
 
     importlib.reload(secrets)
-    yield sched_env
+    importlib.reload(sch)
+    yield sch
 
 
 CSV_OK = """Site,IP,Vendor,Port
@@ -47,10 +54,12 @@ def test_mock_run_csv(sched_env):
 
 def test_create_and_run_schedule(sched_env):
     sch = sched_env
-    s = sch.create_schedule("lab", CSV_OK, every_minutes=30)
+    result = sch.create_schedule("lab", CSV_OK, every_minutes=30)
+    s = result.schedule
     assert s.id > 0
     assert s.mode == sch.MODE_DRY_MOCK
     assert s.password_set is False
+    assert result.key_created is False
     r = sch.run_schedule(s.id)
     assert r["ok"] is True
     assert r["device_count"] == 2
@@ -65,21 +74,50 @@ def test_bad_csv_raises(sched_env):
         sch.mock_run_csv("noheader\n1,2,3")
 
 
-def test_live_requires_secrets_key(sched_env):
+def test_live_auto_init_master_key_on_first_create(sched_env):
     sch = sched_env
-    with pytest.raises(ValueError, match="NCCM_SECRETS_KEY"):
-        sch.create_schedule(
-            "live",
-            CSV_OK,
-            mode=sch.MODE_LIVE,
-            username="admin",
-            password="secret",
-        )
+    from nccm.backup.secrets import secrets_configured, store_master_key_path
+
+    assert secrets_configured() is False
+    result = sch.create_schedule(
+        "live",
+        CSV_OK,
+        mode=sch.MODE_LIVE,
+        username="admin",
+        password="secret",
+    )
+    assert result.key_created is True
+    assert result.key_source == "store"
+    assert secrets_configured() is True
+    assert store_master_key_path().is_file()
+    s = result.schedule
+    assert s.mode == sch.MODE_LIVE
+    assert s.password_set is True
+
+
+def test_live_auto_init_idempotent(sched_env):
+    sch = sched_env
+    first = sch.create_schedule(
+        "live1",
+        CSV_OK,
+        mode=sch.MODE_LIVE,
+        username="admin",
+        password="secret",
+    )
+    assert first.key_created is True
+    second = sch.create_schedule(
+        "live2",
+        CSV_OK,
+        mode=sch.MODE_LIVE,
+        username="admin2",
+        password="secret2",
+    )
+    assert second.key_created is False
 
 
 def test_create_live_schedule_encrypted(sched_env_with_key):
     sch = sched_env_with_key
-    s = sch.create_schedule(
+    result = sch.create_schedule(
         "live-lab",
         CSV_OK,
         mode=sch.MODE_LIVE,
@@ -88,10 +126,12 @@ def test_create_live_schedule_encrypted(sched_env_with_key):
         enable_password="enable1",
         created_by="admin",
     )
+    s = result.schedule
     assert s.mode == sch.MODE_LIVE
     assert s.username == "netops"
     assert s.password_set is True
     assert s.enable_password_set is True
+    assert result.key_created is False
 
     with sqlite3.connect(str(sch.schedules_db_path())) as conn:
         conn.row_factory = sqlite3.Row
@@ -111,22 +151,24 @@ def test_create_live_schedule_encrypted(sched_env_with_key):
 
 def test_update_blank_password_preserves(sched_env_with_key):
     sch = sched_env_with_key
-    s = sch.create_schedule(
+    result = sch.create_schedule(
         "live",
         CSV_OK,
         mode=sch.MODE_LIVE,
         username="u1",
         password="keep-me",
     )
+    s = result.schedule
     updated = sch.update_schedule(s.id, name="live-renamed", password=None)
-    assert updated.name == "live-renamed"
+    assert updated.schedule.name == "live-renamed"
     creds = sch.resolve_schedule_credentials(s.id)
     assert creds.password == "keep-me"
 
 
 def test_migration_defaults_dry_mock(sched_env):
     sch = sched_env
-    s = sch.create_schedule("legacy", CSV_OK)
+    result = sch.create_schedule("legacy", CSV_OK)
+    s = result.schedule
     assert s.mode == sch.MODE_DRY_MOCK
 
     with sqlite3.connect(str(sch.schedules_db_path())) as conn:
@@ -136,15 +178,40 @@ def test_migration_defaults_dry_mock(sched_env):
         assert row
 
 
-def test_live_run_returns_phase_b_pending(sched_env_with_key):
-    sch = sched_env_with_key
-    s = sch.create_schedule(
+def test_live_run_returns_phase_b_pending(sched_env):
+    sch = sched_env
+    result = sch.create_schedule(
         "live",
         CSV_OK,
         mode=sch.MODE_LIVE,
         username="u",
         password="p",
     )
-    r = sch.run_schedule(s.id)
+    r = sch.run_schedule(result.schedule.id)
     assert r["ok"] is False
     assert "Phase B" in r.get("error", "")
+
+
+def test_env_key_overrides_store_auto(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    store = tmp_path / "store"
+    store.mkdir()
+    monkeypatch.setenv("NCCM_STORE_DIR", str(store))
+    env_key = Fernet.generate_key().decode()
+    monkeypatch.setenv("NCCM_SECRETS_KEY", env_key)
+    import importlib
+    import nccm.backup.secrets as secrets
+    import nccm.backup.schedule as sch
+
+    importlib.reload(secrets)
+    importlib.reload(sch)
+
+    result = sch.create_schedule(
+        "live",
+        CSV_OK,
+        mode=sch.MODE_LIVE,
+        username="u",
+        password="p",
+    )
+    assert result.key_created is False
+    assert secrets.secrets_key_source() == "env"
+    assert not secrets.store_master_key_path().exists()

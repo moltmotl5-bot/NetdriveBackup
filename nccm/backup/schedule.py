@@ -11,8 +11,12 @@ from pathlib import Path
 from typing import Iterator
 
 from nccm.backup.secrets import (
+    KeyEnsureResult,
+    SecretsKeyWriteError,
     SecretsNotConfiguredError,
+    decrypt,
     encrypt,
+    ensure_master_key,
     secrets_configured,
 )
 from nccm.config import store_dir
@@ -128,6 +132,13 @@ class ScheduleCredentials:
     enable_password: str
 
 
+@dataclass(frozen=True)
+class ScheduleWriteResult:
+    schedule: Schedule
+    key_created: bool = False
+    key_source: str = ""
+
+
 def _row(r: sqlite3.Row) -> Schedule:
     password_enc = str(r["password_enc"] or "")
     enable_enc = str(r["enable_password_enc"] or "")
@@ -159,15 +170,36 @@ def _normalize_mode(mode: str) -> str:
     return MODE_DRY_MOCK
 
 
-def _validate_live(*, username: str, password_enc: str, password_plain: str | None) -> None:
-    if not secrets_configured():
-        raise ValueError("未設定 NCCM_SECRETS_KEY（或 secret 檔），無法使用 live 模式")
+def _validate_live_fields(*, username: str, password_enc: str, password_plain: str | None) -> None:
     user = (username or "").strip()
     has_password = bool((password_enc or "").strip()) or bool(password_plain)
     if not user or not has_password:
         raise ValueError("live 模式需要 SSH 帳號與密碼")
 
 
+def _prepare_live_storage(
+    *,
+    username: str,
+    password: str,
+    enable_password: str,
+    password_enc: str = "",
+    enable_enc: str = "",
+) -> tuple[str, str, str, KeyEnsureResult | None]:
+    _validate_live_fields(
+        username=username,
+        password_enc=password_enc,
+        password_plain=password or None,
+    )
+    key_result: KeyEnsureResult | None = None
+    needs_key = bool(password) or bool(enable_password) or not secrets_configured()
+    if needs_key:
+        try:
+            key_result = ensure_master_key()
+        except SecretsKeyWriteError as exc:
+            raise ValueError(str(exc)) from exc
+    out_pass = encrypt(password) if password else password_enc
+    out_enable = encrypt(enable_password) if enable_password else enable_enc
+    return (username or "").strip(), out_pass, out_enable, key_result
 
 def list_schedules() -> list[Schedule]:
     with _connect() as conn:
@@ -195,7 +227,7 @@ def create_schedule(
     password: str = "",
     enable_password: str = "",
     created_by: str = "",
-) -> Schedule:
+) -> ScheduleWriteResult:
     name = (name or "").strip() or "schedule"
     body = (csv_text or "").strip()
     if not body:
@@ -203,14 +235,13 @@ def create_schedule(
     mock_run_csv(body)
     mins = max(1, int(every_minutes))
     mode_n = _normalize_mode(mode)
-    user = (username or "").strip()
+    key_result: KeyEnsureResult | None = None
     if mode_n == MODE_LIVE:
-        if not password:
-            _validate_live(username=user, password_enc="", password_plain=None)
-        else:
-            _validate_live(username=user, password_enc="", password_plain=password)
-        password_enc = encrypt(password) if password else ""
-        enable_enc = encrypt(enable_password) if enable_password else ""
+        user, password_enc, enable_enc, key_result = _prepare_live_storage(
+            username=username,
+            password=password,
+            enable_password=enable_password,
+        )
     else:
         if password or enable_password:
             raise ValueError("dry-mock 排程不可儲存 SSH 憑證；請選 live 模式")
@@ -244,7 +275,11 @@ def create_schedule(
         sid = int(cur.lastrowid)
     got = get_schedule(sid)
     assert got
-    return got
+    return ScheduleWriteResult(
+        schedule=got,
+        key_created=bool(key_result and key_result.created),
+        key_source=key_result.source if key_result else "",
+    )
 
 
 def update_schedule(
@@ -257,7 +292,8 @@ def update_schedule(
     username: str | None = None,
     password: str | None = None,
     enable_password: str | None = None,
-) -> Schedule:
+) -> ScheduleWriteResult:
+    key_result: KeyEnsureResult | None = None
     with _connect() as conn:
         row = _get_schedule_row(conn, int(schedule_id))
         if not row:
@@ -275,17 +311,24 @@ def update_schedule(
 
         password_enc = str(row["password_enc"] or "")
         enable_enc = str(row["enable_password_enc"] or "")
-        if password is not None:
-            password_enc = encrypt(password) if password else ""
-        if enable_password is not None:
-            enable_enc = encrypt(enable_password) if enable_password else ""
 
         if new_mode == MODE_LIVE:
-            _validate_live(
-                username=new_user,
-                password_enc=password_enc,
-                password_plain=None,
-            )
+            plain_pass = password if password is not None else ""
+            plain_enable = enable_password if enable_password is not None else ""
+            if password is not None or enable_password is not None or not secrets_configured():
+                new_user, password_enc, enable_enc, key_result = _prepare_live_storage(
+                    username=new_user,
+                    password=plain_pass if password is not None else "",
+                    enable_password=plain_enable if enable_password is not None else "",
+                    password_enc=password_enc if password is None else "",
+                    enable_enc=enable_enc if enable_password is None else "",
+                )
+            else:
+                _validate_live_fields(
+                    username=new_user,
+                    password_enc=password_enc,
+                    password_plain=None,
+                )
         else:
             new_user = ""
             password_enc = ""
@@ -314,13 +357,15 @@ def update_schedule(
         )
     got = get_schedule(int(schedule_id))
     assert got
-    return got
+    return ScheduleWriteResult(
+        schedule=got,
+        key_created=bool(key_result and key_result.created),
+        key_source=key_result.source if key_result else "",
+    )
 
 
 def resolve_schedule_credentials(schedule_id: int) -> ScheduleCredentials:
     """Decrypt stored credentials for backup execution (Phase B)."""
-    from nccm.backup.secrets import decrypt
-
     with _connect() as conn:
         row = _get_schedule_row(conn, int(schedule_id))
         if not row:
@@ -330,7 +375,7 @@ def resolve_schedule_credentials(schedule_id: int) -> ScheduleCredentials:
         user = str(row["username"] or "").strip()
         password_enc = str(row["password_enc"] or "")
         enable_enc = str(row["enable_password_enc"] or "")
-        _validate_live(username=user, password_enc=password_enc, password_plain=None)
+        _validate_live_fields(username=user, password_enc=password_enc, password_plain=None)
         try:
             password = decrypt(password_enc)
             enable_password = decrypt(enable_enc) if enable_enc.strip() else ""
@@ -349,7 +394,7 @@ def set_enabled(schedule_id: int, enabled: bool) -> None:
         raise ValueError("schedule not found")
     if enabled and sch.mode == MODE_LIVE:
         if not secrets_configured():
-            raise ValueError("未設定 NCCM_SECRETS_KEY（或 secret 檔），無法啟用 live 排程")
+            raise ValueError("加密主金鑰遺失或無法讀取，無法啟用 live 排程")
         if not sch.username.strip() or not sch.password_set:
             raise ValueError("live 排程缺少 SSH 帳密，無法啟用")
     with _connect() as conn:

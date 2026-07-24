@@ -7,7 +7,10 @@ from cryptography.fernet import Fernet
 
 
 @pytest.fixture()
-def secrets_env(monkeypatch: pytest.MonkeyPatch):
+def secrets_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    store = tmp_path / "store"
+    store.mkdir()
+    monkeypatch.setenv("NCCM_STORE_DIR", str(store))
     key = Fernet.generate_key().decode()
     monkeypatch.setenv("NCCM_SECRETS_KEY", key)
     monkeypatch.delenv("NCCM_SECRETS_KEY_FILE", raising=False)
@@ -19,13 +22,23 @@ def secrets_env(monkeypatch: pytest.MonkeyPatch):
     importlib.reload(secrets)
 
 
-def test_secrets_not_configured_without_key(monkeypatch: pytest.MonkeyPatch):
+@pytest.fixture()
+def secrets_store_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    store = tmp_path / "store"
+    store.mkdir()
+    monkeypatch.setenv("NCCM_STORE_DIR", str(store))
     monkeypatch.delenv("NCCM_SECRETS_KEY", raising=False)
     monkeypatch.delenv("NCCM_SECRETS_KEY_FILE", raising=False)
     import importlib
     import nccm.backup.secrets as secrets
 
     importlib.reload(secrets)
+    yield secrets
+    importlib.reload(secrets)
+
+
+def test_secrets_not_configured_without_key(secrets_store_only):
+    secrets = secrets_store_only
     assert secrets.secrets_configured() is False
     with pytest.raises(secrets.SecretsNotConfiguredError):
         secrets.encrypt("x")
@@ -63,5 +76,28 @@ def test_master_key_from_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     importlib.reload(secrets)
     assert secrets.secrets_configured() is True
+    assert secrets.secrets_key_source() == "file"
     token = secrets.encrypt("from-file")
     assert secrets.decrypt(token) == "from-file"
+
+
+def test_ensure_master_key_creates_store_file(secrets_store_only):
+    secrets = secrets_store_only
+    assert secrets.secrets_configured() is False
+    result = secrets.ensure_master_key()
+    assert result.created is True
+    assert result.source == "store"
+    assert secrets.secrets_configured() is True
+    assert secrets.store_master_key_path().is_file()
+    assert secrets.secrets_key_source() == "store"
+
+    again = secrets.ensure_master_key()
+    assert again.created is False
+    assert again.source == "store"
+
+
+def test_ensure_master_key_roundtrip_after_store_init(secrets_store_only):
+    secrets = secrets_store_only
+    secrets.ensure_master_key()
+    token = secrets.encrypt("stored")
+    assert secrets.decrypt(token) == "stored"

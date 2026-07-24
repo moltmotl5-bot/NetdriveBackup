@@ -3,11 +3,15 @@
 {% block content %}
 <h1>排程備份</h1>
 <p class="lead">
-  CSV 清單 + 間隔分鐘。<strong>dry-mock</strong> 僅解析 CSV；<strong>live</strong> 儲存加密 SSH 憑證（真實備份 Phase B 啟用）。
-  背景 watcher 依間隔執行（live 排程 Phase B 前仍只 mock／提示）。
+  CSV 清單 + 間隔分鐘。<strong>dry-mock</strong> 僅解析 CSV；<strong>live</strong> 儲存加密 SSH 憑證。
+  首次建立 live 排程並輸入 SSH 密碼時，系統會在 <code>store/.secrets/</code> 自動產生加密主金鑰（真實備份 Phase B 啟用）。
 </p>
-{% if not secrets_configured %}
-<p class="warn-banner">未設定 <code>NCCM_SECRETS_KEY</code>（或 secret 檔）：無法建立或啟用 <strong>live</strong> 排程。dry-mock 仍可使用。</p>
+{% if secrets_configured and secrets_key_source == 'store' %}
+<p class="info-banner">加密主金鑰已就緒（store 自動初始化）。請定期備份 <code>store/</code> 目錄；遺失金鑰將無法還原已存 SSH 密碼。</p>
+{% elif secrets_configured and secrets_key_source == 'env' %}
+<p class="info-banner">加密主金鑰來自環境變數 <code>NCCM_SECRETS_KEY</code>（覆寫 store 自動初始化）。</p>
+{% elif secrets_configured and secrets_key_source == 'file' %}
+<p class="info-banner">加密主金鑰來自 secret 檔（覆寫 store 自動初始化）。</p>
 {% endif %}
 {% if message %}<p class="ok-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
@@ -20,14 +24,14 @@
     <label>模式
       <select name="mode">
         <option value="dry_mock" selected>dry-mock（僅解析 CSV）</option>
-        <option value="live" {% if not secrets_configured %}disabled{% endif %}>live（加密存 SSH 憑證）</option>
+        <option value="live">live（加密存 SSH 憑證）</option>
       </select>
     </label>
     <label class="schedule-cred">SSH 帳號
       <input name="username" autocomplete="off" placeholder="live 必填" />
     </label>
     <label class="schedule-cred">SSH 密碼
-      <input name="password" type="password" autocomplete="new-password" placeholder="live 必填；不入 log" />
+      <input name="password" type="password" autocomplete="new-password" placeholder="live 必填；首次輸入時自動初始化加密金鑰" />
     </label>
     <label class="schedule-cred">Enable 密碼（可選）
       <input name="enable_password" type="password" autocomplete="new-password" placeholder="Huawei/Fortinet 等" />
@@ -82,7 +86,7 @@ lab,10.0.0.2,cisco,22</textarea>
               <label>模式
                 <select name="mode">
                   <option value="dry_mock" {% if s.mode != 'live' %}selected{% endif %}>dry-mock</option>
-                  <option value="live" {% if s.mode == 'live' %}selected{% endif %} {% if not secrets_configured %}disabled{% endif %}>live</option>
+                  <option value="live" {% if s.mode == 'live' %}selected{% endif %}>live</option>
                 </select>
               </label>
               <label>SSH 帳號 <input name="username" value="{{ s.username }}" autocomplete="off" /></label>

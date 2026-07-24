@@ -573,13 +573,14 @@ async def inventory_retention(
 
 def _schedules_ctx(request: Request, **extra):
     from nccm.backup.schedule import list_schedules
-    from nccm.backup.secrets import secrets_configured
+    from nccm.backup.secrets import secrets_configured, secrets_key_source
 
     base = _ctx(
         request,
         "schedules",
         schedules=list_schedules(),
         secrets_configured=secrets_configured(),
+        secrets_key_source=secrets_key_source(),
     )
     base.update(extra)
     return base
@@ -618,7 +619,7 @@ async def schedules_create(
     from nccm.backup.schedule import MODE_LIVE, create_schedule
 
     try:
-        sch = create_schedule(
+        result = create_schedule(
             name,
             csv_text,
             every_minutes=every_minutes,
@@ -628,6 +629,15 @@ async def schedules_create(
             enable_password=enable_password,
             created_by=user,
         )
+        sch = result.schedule
+        if result.key_created:
+            write_audit(
+                request=request,
+                event="secrets_key_init",
+                success=True,
+                actor=user,
+                detail=f"source={result.key_source or 'store'}",
+            )
         write_audit(
             request=request,
             event="schedule_create",
@@ -636,7 +646,13 @@ async def schedules_create(
             detail=f"id={sch.id};mode={sch.mode};name={sch.name}",
         )
         if sch.mode == MODE_LIVE:
-            msg = "已建立 live 排程（憑證已加密存放；真實備份 Phase B 啟用）"
+            if result.key_created:
+                msg = (
+                    "已建立 live 排程；加密主金鑰已自動初始化（請備份 store 目錄）。"
+                    "真實備份 Phase B 啟用。"
+                )
+            else:
+                msg = "已建立 live 排程（憑證已加密存放；真實備份 Phase B 啟用）"
         else:
             msg = "已建立 dry-mock 排程（解析 CSV、不連設備）"
         err = None
@@ -672,7 +688,7 @@ async def schedules_update(
     from nccm.backup.schedule import update_schedule
 
     try:
-        sch = update_schedule(
+        result = update_schedule(
             schedule_id,
             name=name,
             csv_text=csv_text,
@@ -682,6 +698,15 @@ async def schedules_update(
             password=password if password else None,
             enable_password=enable_password if enable_password else None,
         )
+        sch = result.schedule
+        if result.key_created:
+            write_audit(
+                request=request,
+                event="secrets_key_init",
+                success=True,
+                actor=user,
+                detail=f"source={result.key_source or 'store'}",
+            )
         write_audit(
             request=request,
             event="schedule_update",
@@ -689,7 +714,11 @@ async def schedules_update(
             actor=user,
             detail=f"id={sch.id};mode={sch.mode};name={sch.name}",
         )
-        msg, err = "已更新排程", None
+        if result.key_created:
+            msg = "已更新排程；加密主金鑰已自動初始化（請備份 store 目錄）。"
+        else:
+            msg = "已更新排程"
+        err = None
     except ValueError as e:
         msg, err = None, str(e)
         write_audit(
