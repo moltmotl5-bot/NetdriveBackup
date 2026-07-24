@@ -64,3 +64,7 @@ def current_user(request: Request) -> str:
 
 def role_can_operate(role: str) -> bool:
     return (role or "") in ("admin", "operator")
+
+
+def role_can_view_schedules(role: str) -> bool:
+    return (role or "") in ("admin", "operator", "viewer")

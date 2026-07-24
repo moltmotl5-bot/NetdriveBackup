@@ -148,3 +148,34 @@ def test_execute_schedule_starts_job(sched_env, monkeypatch: pytest.MonkeyPatch)
     out = ex.execute_schedule(sid, triggered_by="test")
     assert out["ok"] is True
     assert out["job_id"] == "job-123"
+
+
+def test_list_schedule_runs(sched_env):
+    from nccm.backup.schedule_executor import MODE_LIVE, _connect, _insert_run
+
+    sch = sched_env
+    result = sch.create_schedule("daily", CSV_OK, interval_days=1, username="u", password="p")
+    sid = result.schedule.id
+    with _connect() as conn:
+        _insert_run(
+            conn,
+            schedule_id=sid,
+            mode=MODE_LIVE,
+            status="done",
+            triggered_by="manual",
+            summary="live ok 2/2",
+            device_count=2,
+            job_id="job-abc",
+        )
+    runs = sch.list_schedule_runs()
+    assert len(runs) == 1
+    assert runs[0].schedule_name == "daily"
+    assert runs[0].schedule_id == sid
+    assert runs[0].status == "done"
+    assert runs[0].triggered_by == "manual"
+    assert runs[0].job_id == "job-abc"
+
+    filtered = sch.list_schedule_runs(schedule_id=sid, limit=5)
+    assert len(filtered) == 1
+    assert filtered[0].schedule_id == sid
+    assert sch.list_schedule_runs(schedule_id=999) == []

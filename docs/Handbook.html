@@ -155,7 +155,7 @@
   <a href="#use-inventory-retention">快照保留（預覽刪除／執行清理）</a>
   <a href="#use-neighbors">CDP/LLDP 鄰居</a>
   <a href="#use-interfaces">Interface Map</a>
-  <a href="#use-schedules">排程備份（dry-mock）</a>
+  <a href="#use-schedules">排程備份</a>
   <a href="#use-cli">命令列 CLI</a>
   <div class="group">資料</div>
   <a href="#data-store">備份儲存結構</a>
@@ -178,7 +178,7 @@
     <p>NCCM v3（Network Configuration Change Management）以 <strong>FastAPI Web 入口</strong>搭配 <strong>NetDriver Agent</strong>，透過 SSH 對網路設備執行 CLI，擷取組態與狀態並寫入本機 <code>store/</code> 目錄與 SQLite 索引。</p>
     <ul>
       <li><strong>支援廠牌</strong>：Cisco（IOS / NX-OS）、Fortinet FortiGate、Huawei CE（v3 路線圖<strong>不含 WLC</strong>）。</li>
-      <li><strong>Web 功能</strong>：批次備份、設備總表與版控（含 Config Diff／快照保留）、CDP/LLDP 鄰居、Interface Map、<strong>排程備份（dry-mock）</strong>。角色：admin／operator／viewer。</li>
+      <li><strong>Web 功能</strong>：批次備份、設備總表與版控（含 Config Diff／快照保留）、CDP/LLDP 鄰居、Interface Map、<strong>排程備份</strong>（CSV 上傳、Agent 探測、週期真實備份）。角色：admin／operator／viewer（viewer 對排程為唯讀）。</li>
       <li><strong>正式部署</strong>：專案根目錄 <code>docker-compose.yml</code>（Portal + Agent）。舊版 Streamlit 已移至 <code>legacy/</code>。</li>
     </ul>
   </section>
@@ -493,87 +493,74 @@ dc,10.2.1.5,huawei,22</code></pre>
     <li>選設備後於下方顯示埠位表；設備列表同樣為固定高度捲動。</li>
   </ul>
 
-  <h2 id="use-schedules">使用 — 排程備份（dry-mock）</h2>
+  <h2 id="use-schedules">使用 — 排程備份</h2>
   <section class="block">
-    <p>側欄「<strong>排程備份</strong>」路徑 <code>/schedules</code>。用途是<strong>先驗證 CSV 清單與週期觸發</strong>，為日後真排程備份打底。
-    <strong>本版明確不做真實備份</strong>：不 SSH、不呼叫 NetDriver Agent、不寫新快照、不改 <code>index.db</code>。</p>
+    <p>側欄「<strong>排程備份</strong>」路徑 <code>/schedules</code>。以<strong>日</strong>為週期對已納入清單的設備執行<strong>真實備份</strong>（與批次備份共用 runner／NetDriver Agent），結果寫入 <code>store/</code> 快照與 <code>index.db</code>。</p>
 
-    <h4>權限與入口</h4>
-    <ul>
-      <li>僅 <strong>admin</strong>／<strong>operator</strong> 可開此頁（viewer 側欄不顯示）。</li>
-      <li>與「批次備份」分開：批次備份才會真正連設備；排程頁只跑 <strong>dry-mock</strong>。</li>
-    </ul>
+    <h4>權限</h4>
+    <table class="inv-table">
+      <thead><tr><th>角色</th><th>排程頁</th></tr></thead>
+      <tbody>
+        <tr><td><strong>admin</strong>／<strong>operator</strong></td><td>建立、編輯、啟停、立即備份、刪除；可檢視執行歷史</td></tr>
+        <tr><td><strong>viewer</strong></td><td>側欄可進入排程頁（<strong>唯讀</strong>）：檢視排程列表、設備清單、執行歷史；無法上傳 CSV 或觸發備份</td></tr>
+      </tbody>
+    </table>
+    <p>viewer 側欄<strong>不顯示</strong>「批次備份」，其餘頁面（總表、鄰居、介面、排程）可讀。</p>
 
     <h4>資料存放</h4>
     <ul>
-      <li>SQLite：<code>store/schedules.db</code>（隨 Portal <code>store/</code> volume 持久化）。</li>
-      <li>每筆排程含：名稱、CSV 全文、間隔分鐘、啟用狀態、上次執行時間、上次結果摘要。</li>
-      <li>CSV 格式與批次備份相同（見「設備清單 CSV」）：至少 <code>Site,IP,Vendor,Port</code> 等。</li>
+      <li>SQLite：<code>store/schedules.db</code>（排程定義、加密 SSH 憑證、<code>schedule_runs</code> 執行記錄）。</li>
+      <li>加密主金鑰：首次儲存 live 憑證時自動建立 <code>store/.secrets/fernet.key</code>；亦可由環境變數 <code>NCCM_SECRETS_KEY</code> 覆寫。</li>
+      <li>排程欄位：名稱、CSV 全文（僅含探測成功設備）、間隔（<strong>日</strong>）、SSH 帳密（加密）、啟用狀態、上次執行／結果、進行中 job_id。</li>
+      <li>CSV 格式與批次備份相同：至少 <code>Site,IP,Vendor,Port</code> 等（見「設備清單 CSV」）。</li>
     </ul>
 
-    <h4>建立排程</h4>
+    <h4>建立排程（admin／operator）</h4>
     <ol>
-      <li>填<strong>名稱</strong>（例如 <code>lab-nightly</code>）。</li>
-      <li>填<strong>間隔（分鐘）</strong>，最小 1，預設 60。</li>
-      <li>貼上完整 CSV 文字後按「建立」。</li>
-      <li>建立時會先 <code>mock_run_csv</code>：解析 CSV；格式錯誤則拒絕建立並顯示錯誤。</li>
+      <li>填<strong>名稱</strong>、<strong>間隔（日）</strong>（最小 1）、SSH 帳密（Enable 可選）。</li>
+      <li>選擇 CSV 檔案後按「<strong>上傳並連線測試</strong>」（僅檔案上傳，不支援貼上文字）。</li>
+      <li>Portal 呼叫 NetDriver Agent <code>POST /api/v1/probe</code> 對每台設備做 TCP 連線測試。</li>
+      <li>預覽頁顯示每台 OK／FAIL；按「<strong>確認建立排程</strong>」後，<strong>僅 OK 設備</strong>寫入排程。</li>
     </ol>
 
-    <h4>dry-mock 實際做了什麼</h4>
-    <ul>
-      <li>用與批次備份相同的 <code>load_devices_csv</code> 解析列數與 Vendor／IP。</li>
-      <li>回傳摘要：模式 <code>dry-mock</code>、設備台數、各列 site/ip/hostname/vendor。</li>
-      <li>訊息固定語意：<code>mock only — no SSH / no Agent</code>。</li>
-      <li>成功時 <code>last_result</code> 類似 <code>ok mock N devices</code>；失敗則 <code>error: …</code>。</li>
-    </ul>
-
-    <h4>列表上的操作</h4>
+    <h4>列表操作（admin／operator）</h4>
     <table class="inv-table">
-      <thead>
-        <tr><th>按鈕</th><th>行為</th></tr>
-      </thead>
+      <thead><tr><th>按鈕</th><th>行為</th></tr></thead>
       <tbody>
-        <tr>
-          <td><strong>立即 mock</strong></td>
-          <td>立刻對該排程跑一次 dry-mock，更新「上次執行」「結果」。不連網管設備。</td>
-        </tr>
-        <tr>
-          <td><strong>啟用／停用</strong></td>
-          <td>停用後背景 watcher <strong>不會</strong>再自動觸發；手動「立即 mock」仍可按（仍只 mock）。</td>
-        </tr>
-        <tr>
-          <td><strong>刪除</strong></td>
-          <td>自 <code>schedules.db</code> 移除該筆（需確認）。</td>
-        </tr>
+        <tr><td><strong>設備 (N)</strong></td><td>彈出視窗顯示該排程納入的設備清單（viewer 亦可檢視）</td></tr>
+        <tr><td><strong>立即備份</strong></td><td>立刻啟動非同步備份 job，更新執行歷史</td></tr>
+        <tr><td><strong>編輯</strong></td><td>修改名稱、間隔、帳密；或重新上傳 CSV（需再次探測與確認）</td></tr>
+        <tr><td><strong>啟用／停用</strong></td><td>停用後背景 watcher 不再自動觸發；手動「立即備份」仍可用</td></tr>
+        <tr><td><strong>刪除</strong></td><td>自 <code>schedules.db</code> 移除排程及其 <code>schedule_runs</code>（需確認）</td></tr>
       </tbody>
     </table>
 
+    <h4>執行歷史</h4>
+    <p>排程頁下方「<strong>執行歷史</strong>」列出最近執行記錄（預設 30 筆），含排程名稱、開始／結束時間、狀態（<code>running</code>／<code>done</code>／<code>failed</code>／<code>skipped</code>）、觸發來源（<code>manual</code>／<code>watcher</code>）、成功台數與 job 摘要。所有角色皆可檢視。</p>
+
     <h4>背景自動觸發（watcher）</h4>
     <ul>
-      <li>Portal 程序啟動時會開一條 daemon 執行緒 <code>nccm-schedule-watcher</code>（約每 <strong>30 秒</strong>掃一次）。</li>
-      <li>對每筆<strong>已啟用</strong>排程：若從未跑過，或距離 <code>last_run_at</code> 已滿「間隔分鐘」，則自動 <code>run_schedule</code>（仍是 mock）。</li>
-      <li>多 Portal／HA 時須注意：目前<strong>沒有 leader 選舉</strong>，多實例可能重複 mock（本版無 SSH 副作用；未來真備份前必須改 single-leader）。</li>
-      <li>Portal 重啟後 watcher 重新開始；排程定義仍在 <code>schedules.db</code>。</li>
+      <li>Portal 啟動時開 daemon 執行緒 <code>nccm-schedule-watcher</code>，約每 <strong>60 秒</strong>掃描一次。</li>
+      <li>以 <code>store/schedule.lock</code> flock 避免多實例同時執行（single-instance 契約）。</li>
+      <li>對每筆<strong>已啟用</strong>排程：若從未跑過，或距 <code>last_run_at</code> 已滿「間隔日」，則 <code>execute_schedule</code> 啟動真實備份 job。</li>
+      <li>進行中 job 由 <code>poll_running_jobs</code> 輪詢完成後寫入 <code>schedule_runs</code> 與排程摘要。</li>
     </ul>
 
     <h4>與「批次備份」對照</h4>
     <table class="inv-table">
-      <thead>
-        <tr><th></th><th>批次備份</th><th>排程備份（本版）</th></tr>
-      </thead>
+      <thead><tr><th></th><th>批次備份</th><th>排程備份</th></tr></thead>
       <tbody>
-        <tr><td>SSH／Agent</td><td>會</td><td><strong>不會</strong></td></tr>
-        <tr><td>寫入快照／index</td><td>會</td><td><strong>不會</strong></td></tr>
-        <tr><td>帳密</td><td>表單當場輸入</td><td>不收集、不儲存</td></tr>
-        <tr><td>CSV</td><td>單次工作</td><td>存在 schedules.db，可週期 mock</td></tr>
-        <tr><td>用途</td><td>真正備份</td><td>驗清單／週期／UI 流程</td></tr>
+        <tr><td>觸發</td><td>手動、單次</td><td>手動或週期（日）</td></tr>
+        <tr><td>SSH／Agent</td><td>會</td><td>會（共用 runner）</td></tr>
+        <tr><td>帳密</td><td>表單當場輸入</td><td>加密存於 schedules.db</td></tr>
+        <tr><td>CSV</td><td>單次工作</td><td>持久化；匯入前 Agent TCP 探測</td></tr>
+        <tr><td>執行記錄</td><td>job log（SSE）</td><td><code>schedule_runs</code> + 排程頁歷史表</td></tr>
       </tbody>
     </table>
 
     <div class="warn">
-      <strong>請勿假設排程已在備份設備。</strong>
-      生產若需自動真備份，屬後續產品化項目（需 SSH 憑證策略、job 佇列、與批次備份共用 runner、以及 HA 單一執行者）。
-      本版僅 dry-mock，適合 lab 驗證 CSV 與操作流程。
+      <strong>憑證與 store 備份：</strong>
+      排程 SSH 密碼經 Fernet 加密；遺失 <code>store/.secrets/fernet.key</code>（且無 env 覆寫）將無法解密或啟用排程。請將整個 <code>store/</code> 納入備份策略。
     </div>
   </section>
 

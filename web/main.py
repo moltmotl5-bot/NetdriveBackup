@@ -28,6 +28,8 @@ from web.account import build_account_router
 from web.deps import (
     current_user,
     require_operator,
+    require_user,
+    role_can_operate,
     session_role,
     session_user_id,
     session_username,
@@ -65,7 +67,7 @@ ADMIN_NAV = [
 def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
     items = list(NAV)
     if role == "viewer":
-        items = [x for x in items if x[0] not in ("backup", "schedules")]
+        items = [x for x in items if x[0] != "backup"]
     if role == "admin":
         items = [*items, *ADMIN_NAV]
     return items
@@ -572,13 +574,16 @@ async def inventory_retention(
 
 
 def _schedules_ctx(request: Request, **extra):
-    from nccm.backup.schedule import list_schedules
+    from nccm.backup.schedule import list_schedule_runs, list_schedules
     from nccm.backup.secrets import secrets_configured, secrets_key_source
 
+    role = session_role(request)
     base = _ctx(
         request,
         "schedules",
         schedules=list_schedules(),
+        schedule_runs=list_schedule_runs(limit=30),
+        can_operate=role_can_operate(role),
         secrets_configured=secrets_configured(),
         secrets_key_source=secrets_key_source(),
     )
@@ -589,7 +594,7 @@ def _schedules_ctx(request: Request, **extra):
 @app.get("/schedules", response_class=HTMLResponse)
 async def schedules_page(
     request: Request,
-    user: str = Depends(require_operator),
+    user: str = Depends(require_user),
     message: str = "",
     error: str = "",
 ):
@@ -737,7 +742,7 @@ async def schedules_confirm(
 async def schedules_devices_partial(
     request: Request,
     schedule_id: int,
-    user: str = Depends(require_operator),
+    user: str = Depends(require_user),
 ):
     from nccm.backup.schedule import get_schedule, load_schedule_devices
 

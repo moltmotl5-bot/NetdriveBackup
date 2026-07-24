@@ -149,6 +149,11 @@ th, td { border: 1px solid var(--border); padding: 0.45rem 0.6rem; text-align: l
 .mode-badge { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 0.12rem 0.45rem; border-radius: 999px; }
 .mode-mock { background: #243044; color: var(--muted); }
 .mode-live { background: #1a3a2a; color: #8ef0c8; }
+.run-badge { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 0.12rem 0.45rem; border-radius: 999px; background: #243044; color: var(--muted); }
+.run-running { background: #1a3a2a; color: #8ef0c8; }
+.run-done { background: #1a3a2a; color: #8ef0c8; }
+.run-failed { background: #3a1a1a; color: #f07178; }
+.run-skipped { background: #3a301a; color: #e6a700; }
 .error-inline { color: var(--danger, #f07178); }
 .schedule-form .schedule-cred { min-width: 10rem; }
 .schedule-edit { display: inline-block; margin-right: 0.25rem; }

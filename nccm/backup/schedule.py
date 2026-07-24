@@ -450,6 +450,74 @@ def delete_schedule(schedule_id: int) -> None:
         conn.execute("DELETE FROM schedules WHERE id = ?", (int(schedule_id),))
 
 
+@dataclass(frozen=True)
+class ScheduleRun:
+    id: int
+    schedule_id: int
+    schedule_name: str
+    started_at: str
+    finished_at: str
+    status: str
+    job_id: str
+    run_id: str
+    ok_count: int
+    fail_count: int
+    device_count: int
+    summary: str
+    triggered_by: str
+
+
+def _run_row(r: sqlite3.Row) -> ScheduleRun:
+    return ScheduleRun(
+        id=int(r["id"]),
+        schedule_id=int(r["schedule_id"]),
+        schedule_name=str(r["schedule_name"] or ""),
+        started_at=str(r["started_at"] or ""),
+        finished_at=str(r["finished_at"] or ""),
+        status=str(r["status"] or ""),
+        job_id=str(r["job_id"] or ""),
+        run_id=str(r["run_id"] or ""),
+        ok_count=int(r["ok_count"] or 0),
+        fail_count=int(r["fail_count"] or 0),
+        device_count=int(r["device_count"] or 0),
+        summary=str(r["summary"] or ""),
+        triggered_by=str(r["triggered_by"] or ""),
+    )
+
+
+def list_schedule_runs(
+    *,
+    schedule_id: int | None = None,
+    limit: int = 30,
+) -> list[ScheduleRun]:
+    lim = max(1, min(int(limit), 200))
+    with _connect() as conn:
+        if schedule_id is not None:
+            rows = conn.execute(
+                """
+                SELECT r.*, s.name AS schedule_name
+                FROM schedule_runs r
+                JOIN schedules s ON s.id = r.schedule_id
+                WHERE r.schedule_id = ?
+                ORDER BY r.started_at DESC, r.id DESC
+                LIMIT ?
+                """,
+                (int(schedule_id), lim),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT r.*, s.name AS schedule_name
+                FROM schedule_runs r
+                JOIN schedules s ON s.id = r.schedule_id
+                ORDER BY r.started_at DESC, r.id DESC
+                LIMIT ?
+                """,
+                (lim,),
+            ).fetchall()
+    return [_run_row(r) for r in rows]
+
+
 def run_schedule(schedule_id: int, *, triggered_by: str = "manual") -> dict:
     from nccm.backup.schedule_executor import execute_schedule
 
