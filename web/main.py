@@ -571,6 +571,20 @@ async def inventory_retention(
     )
 
 
+def _schedules_ctx(request: Request, **extra):
+    from nccm.backup.schedule import list_schedules
+    from nccm.backup.secrets import secrets_configured
+
+    base = _ctx(
+        request,
+        "schedules",
+        schedules=list_schedules(),
+        secrets_configured=secrets_configured(),
+    )
+    base.update(extra)
+    return base
+
+
 @app.get("/schedules", response_class=HTMLResponse)
 async def schedules_page(
     request: Request,
@@ -578,15 +592,11 @@ async def schedules_page(
     message: str = "",
     error: str = "",
 ):
-    from nccm.backup.schedule import list_schedules
-
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _ctx(
+        _schedules_ctx(
             request,
-            "schedules",
-            schedules=list_schedules(),
             message=message or None,
             error=error or None,
         ),
@@ -600,24 +610,99 @@ async def schedules_create(
     name: Annotated[str, Form()] = "",
     csv_text: Annotated[str, Form()] = "",
     every_minutes: Annotated[int, Form()] = 60,
+    mode: Annotated[str, Form()] = "dry_mock",
+    username: Annotated[str, Form()] = "",
+    password: Annotated[str, Form()] = "",
+    enable_password: Annotated[str, Form()] = "",
 ):
-    from nccm.backup.schedule import create_schedule, list_schedules
+    from nccm.backup.schedule import MODE_LIVE, create_schedule
 
     try:
-        create_schedule(name, csv_text, every_minutes=every_minutes)
-        msg, err = "已建立排程（僅 dry-mock，不連設備）", None
+        sch = create_schedule(
+            name,
+            csv_text,
+            every_minutes=every_minutes,
+            mode=mode,
+            username=username,
+            password=password,
+            enable_password=enable_password,
+            created_by=user,
+        )
+        write_audit(
+            request=request,
+            event="schedule_create",
+            success=True,
+            actor=user,
+            detail=f"id={sch.id};mode={sch.mode};name={sch.name}",
+        )
+        if sch.mode == MODE_LIVE:
+            msg = "已建立 live 排程（憑證已加密存放；真實備份 Phase B 啟用）"
+        else:
+            msg = "已建立 dry-mock 排程（解析 CSV、不連設備）"
+        err = None
     except ValueError as e:
         msg, err = None, str(e)
+        write_audit(
+            request=request,
+            event="schedule_create",
+            success=False,
+            actor=user,
+            detail=str(e)[:200],
+        )
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _ctx(
-            request,
-            "schedules",
-            schedules=list_schedules(),
-            message=msg,
-            error=err,
-        ),
+        _schedules_ctx(request, message=msg, error=err),
+    )
+
+
+@app.post("/schedules/{schedule_id}/update", response_class=HTMLResponse)
+async def schedules_update(
+    request: Request,
+    schedule_id: int,
+    user: str = Depends(require_operator),
+    name: Annotated[str, Form()] = "",
+    csv_text: Annotated[str, Form()] = "",
+    every_minutes: Annotated[int, Form()] = 60,
+    mode: Annotated[str, Form()] = "dry_mock",
+    username: Annotated[str, Form()] = "",
+    password: Annotated[str, Form()] = "",
+    enable_password: Annotated[str, Form()] = "",
+):
+    from nccm.backup.schedule import update_schedule
+
+    try:
+        sch = update_schedule(
+            schedule_id,
+            name=name,
+            csv_text=csv_text,
+            every_minutes=every_minutes,
+            mode=mode,
+            username=username,
+            password=password if password else None,
+            enable_password=enable_password if enable_password else None,
+        )
+        write_audit(
+            request=request,
+            event="schedule_update",
+            success=True,
+            actor=user,
+            detail=f"id={sch.id};mode={sch.mode};name={sch.name}",
+        )
+        msg, err = "已更新排程", None
+    except ValueError as e:
+        msg, err = None, str(e)
+        write_audit(
+            request=request,
+            event="schedule_update",
+            success=False,
+            actor=user,
+            detail=f"id={schedule_id};{str(e)[:180]}",
+        )
+    return templates.TemplateResponse(
+        request,
+        "schedules.html",
+        _schedules_ctx(request, message=msg, error=err),
     )
 
 
@@ -627,27 +712,40 @@ async def schedules_run_now(
     schedule_id: int,
     user: str = Depends(require_operator),
 ):
-    from nccm.backup.schedule import list_schedules, run_schedule
+    from nccm.backup.schedule import get_schedule, list_schedules, run_schedule
 
+    sch = get_schedule(schedule_id)
+    if not sch:
+        raise HTTPException(404)
     try:
         r = run_schedule(schedule_id)
-        msg = f"mock 完成：{r.get('device_count', 0)} 台 — {r.get('message', '')}"
-        err = None
-        if not r.get("ok", True):
-            err = r.get("error") or msg
+        ok = r.get("ok", True)
+        write_audit(
+            request=request,
+            event="schedule_run_manual",
+            success=ok,
+            actor=user,
+            detail=f"id={schedule_id};mode={sch.mode};ok={ok}",
+        )
+        if ok:
+            msg = f"mock 完成：{r.get('device_count', 0)} 台 — {r.get('message', '')}"
+            err = None
+        else:
+            err = r.get("error") or "執行失敗"
             msg = None
     except ValueError as e:
         msg, err = None, str(e)
+        write_audit(
+            request=request,
+            event="schedule_run_manual",
+            success=False,
+            actor=user,
+            detail=f"id={schedule_id};{str(e)[:180]}",
+        )
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _ctx(
-            request,
-            "schedules",
-            schedules=list_schedules(),
-            message=msg,
-            error=err,
-        ),
+        _schedules_ctx(request, message=msg, error=err),
     )
 
 
@@ -657,22 +755,35 @@ async def schedules_toggle(
     schedule_id: int,
     user: str = Depends(require_operator),
 ):
-    from nccm.backup.schedule import get_schedule, list_schedules, set_enabled
+    from nccm.backup.schedule import get_schedule, set_enabled
 
     sch = get_schedule(schedule_id)
     if not sch:
         raise HTTPException(404)
-    set_enabled(schedule_id, not sch.enabled)
+    new_enabled = not sch.enabled
+    try:
+        set_enabled(schedule_id, new_enabled)
+        write_audit(
+            request=request,
+            event="schedule_toggle",
+            success=True,
+            actor=user,
+            detail=f"id={schedule_id};enabled={1 if new_enabled else 0};mode={sch.mode}",
+        )
+        msg, err = "已更新啟用狀態", None
+    except ValueError as e:
+        msg, err = None, str(e)
+        write_audit(
+            request=request,
+            event="schedule_toggle",
+            success=False,
+            actor=user,
+            detail=f"id={schedule_id};{str(e)[:180]}",
+        )
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _ctx(
-            request,
-            "schedules",
-            schedules=list_schedules(),
-            message="已更新啟用狀態",
-            error=None,
-        ),
+        _schedules_ctx(request, message=msg, error=err),
     )
 
 
@@ -682,19 +793,23 @@ async def schedules_delete(
     schedule_id: int,
     user: str = Depends(require_operator),
 ):
-    from nccm.backup.schedule import delete_schedule, list_schedules
+    from nccm.backup.schedule import delete_schedule, get_schedule
 
+    sch = get_schedule(schedule_id)
+    if not sch:
+        raise HTTPException(404)
     delete_schedule(schedule_id)
+    write_audit(
+        request=request,
+        event="schedule_delete",
+        success=True,
+        actor=user,
+        detail=f"id={schedule_id};name={sch.name};mode={sch.mode}",
+    )
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _ctx(
-            request,
-            "schedules",
-            schedules=list_schedules(),
-            message="已刪除排程",
-            error=None,
-        ),
+        _schedules_ctx(request, message="已刪除排程", error=None),
     )
 
 

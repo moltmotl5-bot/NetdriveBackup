@@ -1,4 +1,4 @@
-"""Scheduled backup jobs: CSV list + dry/mock run (no SSH / no Agent)."""
+"""Scheduled backup jobs: CSV list + dry/mock or live (credentials encrypted at rest)."""
 from __future__ import annotations
 
 import sqlite3
@@ -10,8 +10,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
+from nccm.backup.secrets import (
+    SecretsNotConfiguredError,
+    encrypt,
+    secrets_configured,
+)
 from nccm.config import store_dir
 from nccm.registry.csv import load_devices_csv
+
+MODE_DRY_MOCK = "dry_mock"
+MODE_LIVE = "live"
+VALID_MODES = frozenset({MODE_DRY_MOCK, MODE_LIVE})
 
 
 def _utc_now() -> str:
@@ -22,6 +31,65 @@ def schedules_db_path() -> Path:
     return store_dir() / "schedules.db"
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(r[1]) for r in rows}
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            csv_text TEXT NOT NULL,
+            every_minutes INTEGER NOT NULL DEFAULT 60,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            last_run_at TEXT,
+            last_result TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    cols = _table_columns(conn, "schedules")
+    for name, ddl in (
+        ("mode", "TEXT NOT NULL DEFAULT 'dry_mock'"),
+        ("username", "TEXT NOT NULL DEFAULT ''"),
+        ("password_enc", "TEXT NOT NULL DEFAULT ''"),
+        ("enable_password_enc", "TEXT NOT NULL DEFAULT ''"),
+        ("running_job_id", "TEXT NOT NULL DEFAULT ''"),
+        ("last_job_id", "TEXT NOT NULL DEFAULT ''"),
+        ("last_ok_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("last_fail_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("created_by", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        if name not in cols:
+            conn.execute(f"ALTER TABLE schedules ADD COLUMN {name} {ddl}")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schedule_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_id INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            mode TEXT NOT NULL,
+            job_id TEXT NOT NULL DEFAULT '',
+            run_id TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL,
+            ok_count INTEGER NOT NULL DEFAULT 0,
+            fail_count INTEGER NOT NULL DEFAULT 0,
+            device_count INTEGER NOT NULL DEFAULT 0,
+            summary TEXT NOT NULL DEFAULT '',
+            triggered_by TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_schedule_runs_schedule ON schedule_runs(schedule_id, started_at DESC)"
+    )
+
+
 @contextmanager
 def _connect() -> Iterator[sqlite3.Connection]:
     path = schedules_db_path()
@@ -29,21 +97,7 @@ def _connect() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(str(path), timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS schedules (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                csv_text TEXT NOT NULL,
-                every_minutes INTEGER NOT NULL DEFAULT 60,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                last_run_at TEXT,
-                last_result TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
+        _ensure_schema(conn)
         conn.commit()
         yield conn
         conn.commit()
@@ -58,20 +112,61 @@ class Schedule:
     csv_text: str
     every_minutes: int
     enabled: bool
+    mode: str
+    username: str
+    password_set: bool
+    enable_password_set: bool
     last_run_at: str
     last_result: str
+    created_by: str
+
+
+@dataclass(frozen=True)
+class ScheduleCredentials:
+    username: str
+    password: str
+    enable_password: str
 
 
 def _row(r: sqlite3.Row) -> Schedule:
+    password_enc = str(r["password_enc"] or "")
+    enable_enc = str(r["enable_password_enc"] or "")
+    mode = str(r["mode"] or MODE_DRY_MOCK)
+    if mode not in VALID_MODES:
+        mode = MODE_DRY_MOCK
     return Schedule(
         id=int(r["id"]),
         name=str(r["name"]),
         csv_text=str(r["csv_text"] or ""),
         every_minutes=int(r["every_minutes"] or 60),
         enabled=bool(r["enabled"]),
+        mode=mode,
+        username=str(r["username"] or ""),
+        password_set=bool(password_enc.strip()),
+        enable_password_set=bool(enable_enc.strip()),
         last_run_at=str(r["last_run_at"] or ""),
         last_result=str(r["last_result"] or ""),
+        created_by=str(r["created_by"] or ""),
     )
+
+
+def _normalize_mode(mode: str) -> str:
+    m = (mode or MODE_DRY_MOCK).strip().lower()
+    if m in ("dry-mock", "dry_mock", "mock"):
+        return MODE_DRY_MOCK
+    if m in ("live", "real"):
+        return MODE_LIVE
+    return MODE_DRY_MOCK
+
+
+def _validate_live(*, username: str, password_enc: str, password_plain: str | None) -> None:
+    if not secrets_configured():
+        raise ValueError("未設定 NCCM_SECRETS_KEY（或 secret 檔），無法使用 live 模式")
+    user = (username or "").strip()
+    has_password = bool((password_enc or "").strip()) or bool(password_plain)
+    if not user or not has_password:
+        raise ValueError("live 模式需要 SSH 帳號與密碼")
+
 
 
 def list_schedules() -> list[Schedule]:
@@ -86,22 +181,65 @@ def get_schedule(schedule_id: int) -> Schedule | None:
     return _row(r) if r else None
 
 
-def create_schedule(name: str, csv_text: str, every_minutes: int = 60) -> Schedule:
+def _get_schedule_row(conn: sqlite3.Connection, schedule_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM schedules WHERE id = ?", (int(schedule_id),)).fetchone()
+
+
+def create_schedule(
+    name: str,
+    csv_text: str,
+    *,
+    every_minutes: int = 60,
+    mode: str = MODE_DRY_MOCK,
+    username: str = "",
+    password: str = "",
+    enable_password: str = "",
+    created_by: str = "",
+) -> Schedule:
     name = (name or "").strip() or "schedule"
     body = (csv_text or "").strip()
     if not body:
         raise ValueError("csv_text required")
-    # Validate parse
     mock_run_csv(body)
     mins = max(1, int(every_minutes))
+    mode_n = _normalize_mode(mode)
+    user = (username or "").strip()
+    if mode_n == MODE_LIVE:
+        if not password:
+            _validate_live(username=user, password_enc="", password_plain=None)
+        else:
+            _validate_live(username=user, password_enc="", password_plain=password)
+        password_enc = encrypt(password) if password else ""
+        enable_enc = encrypt(enable_password) if enable_password else ""
+    else:
+        if password or enable_password:
+            raise ValueError("dry-mock 排程不可儲存 SSH 憑證；請選 live 模式")
+        password_enc = ""
+        enable_enc = ""
+        user = ""
     now = _utc_now()
     with _connect() as conn:
         cur = conn.execute(
             """
-            INSERT INTO schedules (name, csv_text, every_minutes, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, 1, ?, ?)
+            INSERT INTO schedules (
+                name, csv_text, every_minutes, enabled, mode,
+                username, password_enc, enable_password_enc,
+                created_by, created_at, updated_at
+            )
+            VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, body, mins, now, now),
+            (
+                name,
+                body,
+                mins,
+                mode_n,
+                user,
+                password_enc,
+                enable_enc,
+                (created_by or "").strip()[:128],
+                now,
+                now,
+            ),
         )
         sid = int(cur.lastrowid)
     got = get_schedule(sid)
@@ -109,7 +247,111 @@ def create_schedule(name: str, csv_text: str, every_minutes: int = 60) -> Schedu
     return got
 
 
+def update_schedule(
+    schedule_id: int,
+    *,
+    name: str | None = None,
+    csv_text: str | None = None,
+    every_minutes: int | None = None,
+    mode: str | None = None,
+    username: str | None = None,
+    password: str | None = None,
+    enable_password: str | None = None,
+) -> Schedule:
+    with _connect() as conn:
+        row = _get_schedule_row(conn, int(schedule_id))
+        if not row:
+            raise ValueError("schedule not found")
+
+        new_name = (name if name is not None else str(row["name"])).strip() or "schedule"
+        new_csv = (csv_text if csv_text is not None else str(row["csv_text"] or "")).strip()
+        if not new_csv:
+            raise ValueError("csv_text required")
+        mock_run_csv(new_csv)
+
+        new_mins = max(1, int(every_minutes if every_minutes is not None else row["every_minutes"]))
+        new_mode = _normalize_mode(mode if mode is not None else str(row["mode"] or MODE_DRY_MOCK))
+        new_user = (username if username is not None else str(row["username"] or "")).strip()
+
+        password_enc = str(row["password_enc"] or "")
+        enable_enc = str(row["enable_password_enc"] or "")
+        if password is not None:
+            password_enc = encrypt(password) if password else ""
+        if enable_password is not None:
+            enable_enc = encrypt(enable_password) if enable_password else ""
+
+        if new_mode == MODE_LIVE:
+            _validate_live(
+                username=new_user,
+                password_enc=password_enc,
+                password_plain=None,
+            )
+        else:
+            new_user = ""
+            password_enc = ""
+            enable_enc = ""
+
+        now = _utc_now()
+        conn.execute(
+            """
+            UPDATE schedules SET
+                name = ?, csv_text = ?, every_minutes = ?, mode = ?,
+                username = ?, password_enc = ?, enable_password_enc = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                new_name,
+                new_csv,
+                new_mins,
+                new_mode,
+                new_user,
+                password_enc,
+                enable_enc,
+                now,
+                int(schedule_id),
+            ),
+        )
+    got = get_schedule(int(schedule_id))
+    assert got
+    return got
+
+
+def resolve_schedule_credentials(schedule_id: int) -> ScheduleCredentials:
+    """Decrypt stored credentials for backup execution (Phase B)."""
+    from nccm.backup.secrets import decrypt
+
+    with _connect() as conn:
+        row = _get_schedule_row(conn, int(schedule_id))
+        if not row:
+            raise ValueError("schedule not found")
+        if str(row["mode"] or MODE_DRY_MOCK) != MODE_LIVE:
+            raise ValueError("schedule is not live mode")
+        user = str(row["username"] or "").strip()
+        password_enc = str(row["password_enc"] or "")
+        enable_enc = str(row["enable_password_enc"] or "")
+        _validate_live(username=user, password_enc=password_enc, password_plain=None)
+        try:
+            password = decrypt(password_enc)
+            enable_password = decrypt(enable_enc) if enable_enc.strip() else ""
+        except SecretsNotConfiguredError as exc:
+            raise ValueError(str(exc)) from exc
+        return ScheduleCredentials(
+            username=user,
+            password=password,
+            enable_password=enable_password,
+        )
+
+
 def set_enabled(schedule_id: int, enabled: bool) -> None:
+    sch = get_schedule(schedule_id)
+    if not sch:
+        raise ValueError("schedule not found")
+    if enabled and sch.mode == MODE_LIVE:
+        if not secrets_configured():
+            raise ValueError("未設定 NCCM_SECRETS_KEY（或 secret 檔），無法啟用 live 排程")
+        if not sch.username.strip() or not sch.password_set:
+            raise ValueError("live 排程缺少 SSH 帳密，無法啟用")
     with _connect() as conn:
         conn.execute(
             "UPDATE schedules SET enabled = ?, updated_at = ? WHERE id = ?",
@@ -119,6 +361,7 @@ def set_enabled(schedule_id: int, enabled: bool) -> None:
 
 def delete_schedule(schedule_id: int) -> None:
     with _connect() as conn:
+        conn.execute("DELETE FROM schedule_runs WHERE schedule_id = ?", (int(schedule_id),))
         conn.execute("DELETE FROM schedules WHERE id = ?", (int(schedule_id),))
 
 
@@ -156,6 +399,14 @@ def run_schedule(schedule_id: int) -> dict:
     sch = get_schedule(schedule_id)
     if not sch:
         raise ValueError("schedule not found")
+    if sch.mode == MODE_LIVE:
+        return {
+            "ok": False,
+            "mode": MODE_LIVE,
+            "schedule_id": schedule_id,
+            "error": "live 執行尚未實作（Phase B）；請使用 dry-mock 或「立即 mock」",
+            "message": "Phase B pending",
+        }
     try:
         result = mock_run_csv(sch.csv_text)
         summary = f"ok mock {result['device_count']} devices"
@@ -186,7 +437,6 @@ def _due(sch: Schedule, now_ts: float) -> bool:
     if not sch.last_run_at:
         return True
     try:
-        # 2026-07-23T10:00:00Z
         last = datetime.strptime(sch.last_run_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         elapsed = now_ts - last.timestamp()
         return elapsed >= sch.every_minutes * 60
@@ -195,7 +445,7 @@ def _due(sch: Schedule, now_ts: float) -> bool:
 
 
 def tick_schedules() -> list[dict]:
-    """Run all due schedules (mock)."""
+    """Run all due schedules (mock for dry_mock; live skipped until Phase B)."""
     now_ts = time.time()
     out: list[dict] = []
     for sch in list_schedules():

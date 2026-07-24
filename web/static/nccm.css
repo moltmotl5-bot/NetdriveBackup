@@ -144,6 +144,20 @@ th, td { border: 1px solid var(--border); padding: 0.45rem 0.6rem; text-align: l
 .btn-secondary { background: #2a3548; width: auto; display: inline-block; padding: 0.4rem 0.8rem; margin-bottom: 0.5rem; }
 .inline-form { display: inline; }
 .ok-banner { color: var(--ok); font-size: 0.9rem; }
+.warn-banner { color: #e6a700; font-size: 0.9rem; margin: 0.5rem 0; }
+.mode-badge { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 0.12rem 0.45rem; border-radius: 999px; }
+.mode-mock { background: #243044; color: var(--muted); }
+.mode-live { background: #1a3a2a; color: #8ef0c8; }
+.error-inline { color: var(--danger, #f07178); }
+.schedule-form .schedule-cred { min-width: 10rem; }
+.schedule-edit { display: inline-block; margin-right: 0.25rem; }
+.schedule-edit-form {
+  margin-top: 0.5rem; padding: 0.75rem; background: #121a24; border: 1px solid var(--border);
+  border-radius: 8px; display: flex; flex-direction: column; gap: 0.5rem; min-width: 18rem;
+}
+.schedule-edit-form label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.82rem; }
+.schedule-edit summary { cursor: pointer; list-style: none; }
+.schedule-edit summary::-webkit-details-marker { display: none; }
 .muted { color: var(--muted); }
 .version-pick select { margin-bottom: 0.75rem; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin: 1rem 0; }
