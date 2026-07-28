@@ -49,18 +49,26 @@ docker compose up -d --build
 
 ---
 
-## 安全（PR1 + PR2）
+## 安全
 
 | 控制 | 說明 |
 |------|------|
 | **Agent 網路隔離** | Production `docker-compose.yml` 不 publish Agent port；僅 Portal 容器可連 |
-| **HMAC 認證** | Portal 呼叫 Agent `/api/v1/connect`、`/cmd`、`/probe` 須帶 `X-NCCM-*` 簽章；未認證一律拒絕 |
-| **Web 安全** | CSRF token 保護所有 POST；CSP；Session `SameSite=Strict`；登入後輪換 session |
-| **CSV 驗證** | `Site` 限安全字元；`IP` 須為合法位址；`Port` 須在 allowlist（預設 22、2222） |
-| **Store 邊界** | 讀寫／下載／刪除快照前驗證路徑在 `store/` 內，防止 path traversal |
-| **Retention 兩段式** | 先「預覽刪除（dry-run）」取得 confirm token，再「確認執行清理」 |
+| **HMAC 認證** | Portal 呼叫 Agent `/api/v1/connect`、`/cmd`、`/probe` 須帶 `X-NCCM-*` 簽章 |
+| **Web 安全** | CSRF、CSP、Session `SameSite=Strict`、登入後輪換 session |
+| **CSV / store** | Site/IP/Port 驗證；store 路徑邊界；retention 兩段式確認 |
 
-共用密鑰 **`NCCM_AGENT_HMAC_SECRET`** 必須寫入 `.env`，Portal 與 Agent 容器皆會讀取。**勿提交 Git。**
+### PR3 bypass（已知風險接受）
+
+下列項目**刻意不在目前版本實作**，詳見 [docs/Security-PR3-Bypass.md](docs/Security-PR3-Bypass.md) 與 Portal `/help`：
+
+| 跳過（PR3） | 補償控制 |
+|-------------|----------|
+| SSH host key 驗證 | 管理 VLAN + 固定設備 IP |
+| Agent egress CIDR 白名單 | Firewall + VLAN 隔離 + HMAC |
+| 弱 SSH 演算法禁用 | 舊設備相容；待汰換後再評估 |
+
+**不得** 以 PR3 bypass 為由放寬 Agent HMAC、CSV/store 或 CSRF 要求。
 
 ### Agent 本機除錯
 
@@ -138,7 +146,8 @@ curl -s http://127.0.0.1:8000/health
 
 | 文件 | 說明 |
 |------|------|
-| Portal **`/help`** | 使用手冊（安裝、操作、疑難排解） |
+| Portal **`/help`** | 使用手冊（安裝、操作、疑難排解、PR3 決策） |
+| [docs/Security-PR3-Bypass.md](docs/Security-PR3-Bypass.md) | PR3 bypass 決策與補償控制（維運/稽核） |
 | [docs/NCCM-v3-spec.md](docs/NCCM-v3-spec.md) | 技術規格（開發者） |
 
 ---
