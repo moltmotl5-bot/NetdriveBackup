@@ -12,8 +12,8 @@
 git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
 cp .env.example .env
-# 必填：管理員密碼（≥12 字元）與 Portal↔Agent HMAC 共用密鑰
-python3 -c "import secrets; print('NCCM_AGENT_HMAC_SECRET=' + secrets.token_hex(32))" >> .env
+# 必填：管理員密碼（≥12 字元）、HMAC 密鑰、Session 簽章
+python3 -c "import secrets; print('NCCM_AGENT_HMAC_SECRET=' + secrets.token_hex(32)); print('NCCM_SESSION_SECRET=' + secrets.token_hex(32))" >> .env
 # 編輯 .env，設定 NCCM_ADMIN_PASS
 chmod 600 .env
 mkdir -p store
@@ -55,6 +55,7 @@ docker compose up -d --build
 |------|------|
 | **Agent 網路隔離** | Production `docker-compose.yml` 不 publish Agent port；僅 Portal 容器可連 |
 | **HMAC 認證** | Portal 呼叫 Agent `/api/v1/connect`、`/cmd`、`/probe` 須帶 `X-NCCM-*` 簽章；未認證一律拒絕 |
+| **Web 安全** | CSRF token 保護所有 POST；CSP；Session `SameSite=Strict`；登入後輪換 session |
 | **CSV 驗證** | `Site` 限安全字元；`IP` 須為合法位址；`Port` 須在 allowlist（預設 22、2222） |
 | **Store 邊界** | 讀寫／下載／刪除快照前驗證路徑在 `store/` 內，防止 path traversal |
 | **Retention 兩段式** | 先「預覽刪除（dry-run）」取得 confirm token，再「確認執行清理」 |
@@ -123,6 +124,7 @@ curl -s http://127.0.0.1:8000/health
 |------|------|
 | `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS` | Web 登入 |
 | **`NCCM_AGENT_HMAC_SECRET`** | **必填** — Portal ↔ Agent HMAC 共用密鑰 |
+| **`NCCM_SESSION_SECRET`** | **必填** — Web Session / CSRF 簽章 |
 | `NCCM_NETDRIVER_URL` | Portal → Agent（Compose 預設 `http://netdriver-agent:8000`） |
 | `NCCM_STORE_DIR` | 備份根目錄（容器內 `/data/store` → `./store`） |
 | `NCCM_ALLOWED_SSH_PORTS` | 可選 — CSV Port allowlist（預設 `22,2222`） |
@@ -159,7 +161,8 @@ pytest
 | 現象 | 處理 |
 |------|------|
 | `Set NCCM_AGENT_HMAC_SECRET in .env` | 在 `.env` 產生並設定 HMAC 密鑰，重啟 compose |
-| Agent 401 / connect 失敗 | 確認 Portal 與 Agent 使用**相同** `NCCM_AGENT_HMAC_SECRET` |
+| `Set NCCM_SESSION_SECRET in .env` | 在 `.env` 產生並設定 Session 密鑰，重啟 compose |
+| **CSRF validation failed** | 常見原因：① 頁面太舊（硬重新整理）；② 反向代理未設 `NCCM_HTTPS=1` 卻用 HTTPS；③ **HTTP 存取但誤設 `NCCM_HTTPS=1`**（Secure cookie 不會送出）。本機 HTTP 請勿設 `NCCM_HTTPS=1` |
 | 主機連不上 `:8000` | 預期行為；除錯請用 `docker-compose.dev.yml` |
 | CSV 匯入被拒 | 檢查 Site 字元、IP 格式、Port 是否在 allowlist |
 | Agent 離線 | `docker compose logs netdriver-agent` |

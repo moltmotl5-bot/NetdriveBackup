@@ -31,6 +31,7 @@
       <td>
         {% if t.is_active %}
         <form method="post" action="/admin/api-tokens/{{ t.id }}/deactivate" style="display:inline">
+          {% include "_csrf.html" %}
           <button type="submit" class="btn-secondary">停用</button>
         </form>
         {% else %}—{% endif %}

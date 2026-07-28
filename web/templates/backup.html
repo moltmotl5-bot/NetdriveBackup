@@ -5,6 +5,7 @@
 <p class="lead">上傳或貼上 CSV 後<strong>背景執行</strong>。只需 <code>Site,IP,Vendor,Port</code>；型號與版本由 Agent 自動辨識。不支援 WLC。</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <form method="post" action="/backup/start" class="grid-2" id="backup-form" enctype="multipart/form-data">
+  {% include "_csrf.html" %}
   <div>
     <h2>設備認證</h2>
     <label>SSH 帳號</label>
@@ -30,7 +31,7 @@ dc,10.2.1.5,huawei,22</textarea>
   </div>
 </form>
 
-<section class="live-panel" id="live-panel" {% if not job_id %}hidden{% endif %}>
+<section class="live-panel" id="live-panel" {% if not job_id %}hidden{% endif %} data-job-id="{{ job_id }}">
   <h2>即時日誌</h2>
   <pre class="log live-log" id="live-log"></pre>
   <h2>結果</h2>
@@ -47,23 +48,4 @@ dc,10.2.1.5,huawei,22</textarea>
 {% endblock %}
 {% block scripts %}
 <script src="/static/backup.js"></script>
-<script>
-  window.NCCM_BACKUP_JOB_ID = {{ job_id|tojson }};
-  document.getElementById("csv-file-input")?.addEventListener("change", function (ev) {
-    const f = ev.target.files && ev.target.files[0];
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = function () {
-      const ta = document.getElementById("csv-text");
-      if (ta) ta.value = String(r.result || "");
-    };
-    r.readAsText(f, "UTF-8");
-  });
-  document.getElementById("backup-form")?.addEventListener("submit", function () {
-    const btn = document.getElementById("backup-submit");
-    const hint = document.getElementById("submit-hint");
-    if (btn) btn.disabled = true;
-    if (hint) hint.hidden = false;
-  });
-</script>
 {% endblock %}

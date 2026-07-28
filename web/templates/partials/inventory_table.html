@@ -12,7 +12,8 @@
         hx-get="/inventory/partial/detail?device_id={{ r.device_id | urlencode }}"
         hx-target="#inv-detail"
         hx-swap="innerHTML"
-        onclick="document.getElementById('device_id_field').value='{{ r.device_id }}'">
+        data-pick-field="device_id_field"
+        data-pick-value="{{ r.device_id }}">
       <td>{{ r.site }}</td>
       <td>{{ r.ip }}</td>
       <td>{{ r.port }}</td>

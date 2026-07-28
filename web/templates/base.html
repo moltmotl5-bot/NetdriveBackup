@@ -2,10 +2,10 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}NetdriverBackup{% endblock %}</title>
   <link rel="stylesheet" href="/static/nccm.css" />
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="/static/htmx.min.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -24,7 +24,14 @@
           {% if portal_user %}
           <span class="meta sidebar-user">使用者: {{ portal_user }}{% if portal_role %} ({{ portal_role }}){% endif %}</span>
           {% endif %}
-          <a class="logout" href="/logout">登出</a>
+          {% if csrf_token %}
+          <form method="post" action="/logout" class="logout-form">
+            {% include "_csrf.html" %}
+            <button type="submit" class="logout">登出</button>
+          </form>
+          {% else %}
+          <a class="logout" href="/login">登入</a>
+          {% endif %}
         </div>
       </div>
     </aside>
@@ -32,6 +39,7 @@
       {% block content %}{% endblock %}
     </main>
   </div>
+  <script src="/static/nccm.js"></script>
   {% block scripts %}{% endblock %}
   </body>
 </html>

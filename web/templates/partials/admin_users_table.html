@@ -18,16 +18,19 @@
       <td class="muted">{{ u.last_login_at or '—' }}</td>
       <td class="admin-actions">
         <form method="post" action="/admin/users/{{ u.id }}/toggle" class="inline-form">
+          {% include "_csrf.html" %}
           <button type="submit" class="btn-secondary btn-sm">{% if u.is_active %}停用{% else %}啟用{% endif %}</button>
         </form>
         <form method="post" action="/admin/users/{{ u.id }}/role" class="inline-form">
-          <select name="role" onchange="this.form.submit()">
+          {% include "_csrf.html" %}
+          <select name="role" data-auto-submit="1">
             <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>admin</option>
             <option value="operator" {% if u.role == 'operator' %}selected{% endif %}>operator</option>
             <option value="viewer" {% if u.role == 'viewer' %}selected{% endif %}>viewer</option>
           </select>
         </form>
         <form method="post" action="/admin/users/{{ u.id }}/password" class="inline-form password-reset">
+          {% include "_csrf.html" %}
           <input name="new_password" type="password" placeholder="新密碼 ≥12" minlength="12" required />
           <button type="submit" class="btn-secondary btn-sm">重設密碼</button>
         </form>

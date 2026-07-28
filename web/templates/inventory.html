@@ -16,9 +16,11 @@
 {% endif %}
 {% if portal_role in ('admin', 'operator') %}
 <form method="post" action="/inventory/rebuild" class="inline-form">
+  {% include "_csrf.html" %}
   <button type="submit" class="btn-secondary">重建索引</button>
 </form>
 <form method="post" action="/inventory/retention" class="inline-form retention-form">
+  {% include "_csrf.html" %}
   <label class="muted" title="每台設備保留最新 N 份成功快照；超出者可預覽或刪除">保留最近
     <input type="number" name="keep_last" value="{{ retention_confirm.keep_last if retention_confirm else 10 }}" min="1" max="500" style="width:4rem" />
     份快照
