@@ -97,6 +97,7 @@
   <a href="#api">REST API</a>
   <a href="#docker-update">Docker 更新</a>
   <a href="#csv">設備 CSV</a>
+  <a href="#security-pr3">已知風險與 PR3 決策</a>
   <a href="#troubleshoot">疑難排解</a>
 </nav>
 
@@ -411,6 +412,53 @@ dc,10.2.1.5,huawei,22</code></pre>
       <tr><td>Model / Version</td><td>可選；省略則備份時自動辨識</td></tr>
     </table>
     <p>範例檔：專案根目錄 <code>DEMO-v3.csv</code>。</p>
+  </section>
+
+  <h2 id="security-pr3">已知風險與 PR3 決策</h2>
+  <section class="block">
+    <div class="warn">
+      <strong>PR3 安全修復目前刻意不做（bypass）。</strong>這是已核准的風險接受決策，不是實作遺漏。
+      完整紀錄見 <code>docs/Security-PR3-Bypass.md</code>。
+    </div>
+    <h3>跳過項目（PR3）</h3>
+    <table>
+      <tr><th>項目</th><th>現況</th><th>殘留風險</th></tr>
+      <tr>
+        <td>SSH host key 驗證</td>
+        <td>Agent 自動接受設備 host key（<code>known_hosts=None</code>）</td>
+        <td>管理 VLAN 內理論上存在 SSH MITM 可能</td>
+      </tr>
+      <tr>
+        <td>Agent egress allowlist</td>
+        <td>Agent 依 CSV 連線至指定 IP:Port，應用層無 CIDR 白名單</td>
+        <td>Portal 被入侵時，可能濫用 Agent 掃描 VLAN 內 SSH</td>
+      </tr>
+      <tr>
+        <td>弱 SSH 演算法禁用</td>
+        <td>未強制關閉 legacy KEX/cipher</td>
+        <td>舊設備相容優先；弱算法關閉可能中斷備份</td>
+      </tr>
+    </table>
+    <h3>已實施補償控制（請維持）</h3>
+    <table>
+      <tr><th>層級</th><th>控制</th></tr>
+      <tr><td>應用程式</td><td>Agent 不 publish host port；Portal↔Agent HMAC；CSV/store 邊界；Web CSRF/CSP/Session</td></tr>
+      <tr><td>網路</td><td>管理 VLAN 隔離；Firewall 限制 Portal 來源 IP</td></tr>
+      <tr><td>營運</td><td>設備管理 IP 固定；RBAC；audit；限制 <code>store/</code> 主機存取</td></tr>
+    </table>
+    <h3>不得因 bypass 而放寬</h3>
+    <ul>
+      <li>不得重新對外開放 Agent <code>:8000</code> 或關閉 HMAC</li>
+      <li>不得省略 CSV 驗證、store 路徑檢查、CSRF</li>
+      <li>不得以「管理 VLAN 已夠安全」取消 Portal 登入與權限控管</li>
+    </ul>
+    <h3>何時重新評估 PR3</h3>
+    <ul>
+      <li>Portal 暴露至原設管理網段以外</li>
+      <li>合規稽核要求 host key / egress 白名單</li>
+      <li>舊設備汰換後可關閉弱 SSH 演算法</li>
+    </ul>
+    <p class="tip">若將來實作 PR3，建議順序：egress allowlist → host key → 弱演算法。</p>
   </section>
 
   <h2 id="troubleshoot">疑難排解</h2>
