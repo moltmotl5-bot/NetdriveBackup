@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from nccm.backup.job_manager import get_job, start_backup_job_async
+from nccm.backup.job_manager import get_job, job_accessible, start_backup_job_async
 from nccm.config import netdriver_url, store_dir
 from nccm.netdriver.client import NetDriverClient
 from nccm.registry.csv import load_devices_csv
@@ -35,7 +35,8 @@ from web.deps import (
     session_username,
     set_session_user,
 )
-from nccm.auth.audit import audit_portal_login, write_audit
+from nccm.auth.audit import audit_portal_login, client_ip, write_audit
+from nccm.auth.login_limit import LoginRateLimited, check_login_allowed, record_login_failure, record_login_success
 from web.security import production_mode, session_secret, https_only_cookies
 from web.csrf import (
     CsrfMiddleware,
@@ -169,8 +170,32 @@ async def login_submit(
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
 ):
+    ip = client_ip(request)
+    try:
+        check_login_allowed(username=username, ip=ip)
+    except LoginRateLimited as exc:
+        audit_portal_login(request, username, False)
+        write_audit(
+            request=request,
+            event="portal_login_locked",
+            success=False,
+            actor=username,
+            detail=f"retry_after={exc.retry_after}",
+        )
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "title": "登入",
+                "error": f"登入嘗試過多，請 {exc.retry_after} 秒後再試",
+                "csrf_token": get_or_create_csrf_token(request),
+            },
+            status_code=429,
+        )
+
     portal_user = authenticate(username, password)
     if portal_user:
+        record_login_success(username=username, ip=ip)
         request.session.clear()
         set_session_user(
             request,
@@ -181,10 +206,19 @@ async def login_submit(
         )
         rotate_csrf_token(request)
         audit_portal_login(request, portal_user.username, True)
+        if portal_user.id == 0:
+            write_audit(
+                request=request,
+                event="break_glass_login",
+                success=True,
+                actor=portal_user.username,
+                detail="env admin session",
+            )
         if portal_user.must_change_password:
             return RedirectResponse(url="/account/change-password", status_code=303)
         dest = "/inventory" if portal_user.role == "viewer" else "/backup"
         return RedirectResponse(url=dest, status_code=303)
+    record_login_failure(username=username, ip=ip)
     audit_portal_login(request, username, False)
     return templates.TemplateResponse(
         request,
@@ -315,6 +349,8 @@ async def backup_start(
             username=ssh_user,
             password=ssh_password,
             agent_url=netdriver_url(),
+            owner_uid=session_user_id(request),
+            owner_username=user,
         )
         write_audit(
             request=request,
@@ -345,6 +381,19 @@ async def backup_events(
             yield f"data: {json.dumps({'type': 'error', 'message': 'unknown job'})}\n\n"
 
         return StreamingResponse(_err(), media_type="text/event-stream")
+
+    if not job_accessible(job, uid=session_user_id(request), role=session_role(request)):
+        async def _deny():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'forbidden'})}\n\n"
+
+        write_audit(
+            request=request,
+            event="backup_job_access_denied",
+            success=False,
+            actor=user,
+            detail=f"job_id={job_id}",
+        )
+        return StreamingResponse(_deny(), media_type="text/event-stream")
 
     async def _stream():
         idx = 0

@@ -12,10 +12,32 @@ from typing import Iterator
 
 from nccm.backup.reachability import ProbeResult, probe_devices
 from nccm.backup.schedule import ScheduleWriteResult, create_schedule, get_schedule, update_schedule
+from nccm.backup.secrets import SecretsDecryptError, decrypt, encrypt, ensure_master_key
 from nccm.config import store_dir
 from nccm.registry.csv import devices_to_csv, load_devices_csv_text
 
 _DRAFT_TTL_HOURS = 2
+_ENC_PREFIX = "fernet:"
+
+
+def _encrypt_field(value: str) -> str:
+    text = value or ""
+    if not text:
+        return ""
+    ensure_master_key()
+    return _ENC_PREFIX + encrypt(text)
+
+
+def _decrypt_field(value: str) -> str:
+    blob = value or ""
+    if not blob:
+        return ""
+    if blob.startswith(_ENC_PREFIX):
+        try:
+            return decrypt(blob[len(_ENC_PREFIX) :])
+        except SecretsDecryptError:
+            raise ValueError("draft credential decrypt failed") from None
+    return blob
 
 
 def _utc_now() -> str:
@@ -193,8 +215,8 @@ def create_draft_from_upload(
                 (name or "").strip() or "schedule",
                 max(1, int(interval_days)),
                 (username or "").strip(),
-                password,
-                enable_password or "",
+                _encrypt_field(password),
+                _encrypt_field(enable_password or ""),
                 (csv_filename or "upload.csv").strip()[:200],
                 body,
                 _serialize_probe(results),
@@ -245,6 +267,8 @@ def confirm_draft(draft_id: str) -> ScheduleWriteResult:
             raise ValueError("無任何設備通過連線測試，無法建立排程")
         csv_text = devices_to_csv(ok_devices)
         edit_id = int(row["edit_schedule_id"]) if row["edit_schedule_id"] else None
+        pwd = _decrypt_field(str(row["password"] or ""))
+        enable_pwd = _decrypt_field(str(row["enable_password"] or ""))
         conn.execute("DELETE FROM schedule_drafts WHERE id = ?", (draft_id,))
 
     if edit_id:
@@ -254,8 +278,8 @@ def confirm_draft(draft_id: str) -> ScheduleWriteResult:
             csv_text=csv_text,
             interval_days=int(row["interval_days"] or 1),
             username=str(row["username"] or ""),
-            password=str(row["password"] or ""),
-            enable_password=str(row["enable_password"] or "") or None,
+            password=pwd,
+            enable_password=enable_pwd or None,
             csv_filename=str(row["csv_filename"] or ""),
         )
     else:
@@ -264,8 +288,8 @@ def confirm_draft(draft_id: str) -> ScheduleWriteResult:
             csv_text,
             interval_days=int(row["interval_days"] or 1),
             username=str(row["username"] or ""),
-            password=str(row["password"] or ""),
-            enable_password=str(row["enable_password"] or ""),
+            password=pwd,
+            enable_password=enable_pwd,
             created_by=str(row["created_by"] or ""),
             csv_filename=str(row["csv_filename"] or ""),
         )

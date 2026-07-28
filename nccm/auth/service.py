@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Literal
 
 from nccm.auth import db as auth_db
+from nccm.auth.break_glass import break_glass_enabled
 from nccm.auth.passwords import (
     assert_password_policy,
     hash_password,
@@ -13,6 +15,8 @@ from nccm.auth.passwords import (
 
 Role = Literal["admin", "operator", "viewer"]
 VALID_ROLES: frozenset[str] = frozenset({"admin", "operator", "viewer"})
+
+_log = logging.getLogger(__name__)
 
 
 def user_count() -> int:
@@ -239,7 +243,7 @@ def authenticate(username: str, password: str) -> auth_db.PortalUser | None:
         _touch_last_login(u.id)
         return get_user_by_id(u.id)
 
-    if _verify_env_login(name, password):
+    if break_glass_enabled() and _verify_env_login(name, password):
         return auth_db.PortalUser(
             id=0,
             username=name,
@@ -255,12 +259,15 @@ def authenticate(username: str, password: str) -> auth_db.PortalUser | None:
 
 
 def _touch_last_login(user_id: int) -> None:
-    now = auth_db._utc_now()
-    with auth_db.connect() as conn:
-        conn.execute(
-            "UPDATE portal_users SET last_login_at = ?, updated_at = ? WHERE id = ?",
-            (now, now, int(user_id)),
-        )
+    try:
+        now = auth_db._utc_now()
+        with auth_db.connect() as conn:
+            conn.execute(
+                "UPDATE portal_users SET last_login_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, int(user_id)),
+            )
+    except Exception as exc:
+        _log.warning("failed to update last_login_at uid=%s: %s", user_id, exc)
 
 
 def ensure_portal_can_start() -> None:

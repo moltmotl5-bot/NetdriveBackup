@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -13,6 +14,9 @@ from typing import Iterator
 from starlette.requests import Request
 
 from nccm.config import store_dir
+from nccm.security.redaction import redact_text
+
+_log = logging.getLogger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS audit_events (
@@ -86,7 +90,7 @@ def write_audit(
         ip_s = _clean(ip or client_ip(request), 64)
         actor_s = _clean(actor, 128)
         event_s = _clean(event, 64) or "unknown"
-        detail_s = _clean(detail, 512)
+        detail_s = redact_text(_clean(detail, 512))
         with _connect() as conn:
             conn.execute(
                 """
@@ -95,8 +99,8 @@ def write_audit(
                 """,
                 (ts, ip_s, actor_s, event_s, 1 if success else 0, detail_s),
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.error("audit write failed event=%s: %s", event, exc)
 
 
 def audit_portal_login(request: Request, username: str, success: bool) -> None:

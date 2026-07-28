@@ -4,70 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NCCM v3 使用手冊</title>
-  <style>
-    :root {
-      --bg: #0c1018; --sidebar: #121a28; --panel: #1a2436; --text: #e8edf5;
-      --muted: #8fa3be; --accent: #3d8bfd; --accent2: #2dd4a8; --warn: #e6a700;
-      --border: #2a3850; --code: #0a0f16;
-    }
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: "PingFang TC", "Segoe UI", system-ui, sans-serif;
-      background: var(--bg); color: var(--text); line-height: 1.65; margin: 0;
-      display: grid; grid-template-columns: minmax(11rem, 15rem) 1fr; min-height: 100vh;
-    }
-    nav.toc {
-      position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto;
-      background: var(--sidebar); border-right: 1px solid var(--border);
-      padding: 1rem 0.85rem 2rem; font-size: 0.82rem;
-    }
-    nav.toc .brand { font-weight: 700; font-size: 0.95rem; color: #fff; margin-bottom: 0.25rem; }
-    nav.toc .back { display: block; color: var(--accent); margin-bottom: 1rem; font-size: 0.85rem; }
-    nav.toc .group {
-      color: #6b7f99; font-size: 0.68rem; text-transform: uppercase;
-      letter-spacing: 0.06em; margin: 1rem 0 0.3rem 0.35rem;
-    }
-    nav.toc a {
-      display: block; color: var(--muted); text-decoration: none;
-      padding: 0.3rem 0.45rem; border-radius: 6px; margin: 0.05rem 0;
-    }
-    nav.toc a:hover { background: rgba(61,139,253,0.12); color: var(--text); }
-    main { padding: 1.75rem 2rem 3rem; max-width: 46rem; }
-    h1 { font-size: 1.75rem; margin: 0 0 0.35rem; }
-    .lead { color: var(--muted); font-size: 1rem; margin-bottom: 1.5rem; }
-    h2 {
-      font-size: 1.2rem; margin-top: 2.5rem; padding-bottom: 0.35rem;
-      border-bottom: 1px solid var(--border); scroll-margin-top: 1rem;
-    }
-    h3 { font-size: 1rem; margin-top: 1.25rem; color: #c5d4e8; }
-    section.block {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-      padding: 1rem 1.2rem; margin: 0.85rem 0;
-    }
-    pre {
-      background: var(--code); border: 1px solid var(--border); border-radius: 6px;
-      padding: 0.75rem 0.9rem; overflow-x: auto; font-size: 0.8rem; line-height: 1.5;
-    }
-    code { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.86em; }
-    p code, li code, td code {
-      background: var(--code); padding: 0.1em 0.35em; border-radius: 4px;
-    }
-    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.75rem 0; }
-    th, td { border: 1px solid var(--border); padding: 0.45rem 0.65rem; text-align: left; vertical-align: top; }
-    th { background: var(--code); color: #c5d4e8; }
-    ul, ol { padding-left: 1.3rem; }
-    li { margin: 0.3rem 0; }
-    .tip, .warn {
-      border-left: 4px solid var(--accent2); background: rgba(45,212,168,0.07);
-      padding: 0.75rem 1rem; margin: 0.85rem 0; border-radius: 0 6px 6px 0; font-size: 0.92rem;
-    }
-    .warn { border-left-color: var(--warn); background: rgba(230,167,0,0.08); }
-    @media (max-width: 768px) {
-      body { grid-template-columns: 1fr; }
-      nav.toc { position: relative; max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
-    }
-  </style>
+  <link rel="stylesheet" href="/static/handbook.css" />
 </head>
 <body>
 
@@ -97,6 +34,7 @@
   <a href="#api">REST API</a>
   <a href="#docker-update">Docker 更新</a>
   <a href="#csv">設備 CSV</a>
+  <a href="#security-phase3">平台安全強化</a>
   <a href="#security-pr3">已知風險與 PR3 決策</a>
   <a href="#troubleshoot">疑難排解</a>
 </nav>
@@ -414,6 +352,21 @@ dc,10.2.1.5,huawei,22</code></pre>
     <p>範例檔：專案根目錄 <code>DEMO-v3.csv</code>。</p>
   </section>
 
+  <h2 id="security-phase3">平台安全強化（Phase 3）</h2>
+  <section class="block">
+    <p>下列控制已內建於 Portal 與 Docker 映像，無須額外設定即可生效（break-glass 除外）：</p>
+    <table>
+      <tr><th>控制</th><th>說明</th></tr>
+      <tr><td>Break-glass 預設關閉</td><td><code>.env</code> 管理員僅在 DB 空庫時可 bootstrap；DB 已有使用者時須設 <code>NCCM_BREAK_GLASS=1</code> 才能緊急登入</td></tr>
+      <tr><td>登入速率限制</td><td>同一帳號 + IP 連續失敗過多會暫時鎖定（可調 <code>NCCM_LOGIN_*</code>）</td></tr>
+      <tr><td>排程 draft 加密</td><td>上傳 CSV 後暫存的 SSH 密碼以 Fernet 加密，不再明文寫入 SQLite</td></tr>
+      <tr><td>備份 job 擁有權</td><td>operator 僅能訂閱自己啟動的 SSE job；admin 可存取全部</td></tr>
+      <tr><td>Audit 脫敏</td><td>寫入審計日誌前遮罩 password、token、cookie 等欄位</td></tr>
+      <tr><td>Portal 容器</td><td>非 root（uid 1000）、<code>no-new-privileges</code>、<code>cap_drop: ALL</code>、記憶體/CPU 上限</td></tr>
+    </table>
+    <p class="tip">依賴版本已釘選於 <code>requirements-v3.txt</code>；CI 以 <code>pip-audit</code> 掃描已知漏洞。</p>
+  </section>
+
   <h2 id="security-pr3">已知風險與 PR3 決策</h2>
   <section class="block">
     <div class="warn">
@@ -442,7 +395,7 @@ dc,10.2.1.5,huawei,22</code></pre>
     <h3>已實施補償控制（請維持）</h3>
     <table>
       <tr><th>層級</th><th>控制</th></tr>
-      <tr><td>應用程式</td><td>Agent 不 publish host port；Portal↔Agent HMAC；CSV/store 邊界；Web CSRF/CSP/Session</td></tr>
+      <tr><td>應用程式</td><td>Agent 不 publish host port；Portal↔Agent HMAC；CSV/store 邊界；Web CSRF/CSP/Session；Phase 3 登入限制／draft 加密／job 擁有權</td></tr>
       <tr><td>網路</td><td>管理 VLAN 隔離；Firewall 限制 Portal 來源 IP</td></tr>
       <tr><td>營運</td><td>設備管理 IP 固定；RBAC；audit；限制 <code>store/</code> 主機存取</td></tr>
     </table>
@@ -471,13 +424,14 @@ dc,10.2.1.5,huawei,22</code></pre>
       <tr><td>庫存缺設備／只有一台</td><td>同 Site+IP 需不同 port 或 hostname；按「重建索引」</td></tr>
       <tr><td>Stack／HA 展開不對</td><td>重新備份 → 重建索引 → rebuild portal</td></tr>
       <tr><td>排程一直 running</td><td>等 job 完成；更新至最新 main；必要時停用再啟用排程</td></tr>
+      <tr><td>登入 <strong>Internal Server Error</strong></td><td>常見於 Phase 3 升級後 <code>store/</code> 仍為 root 擁有：主機執行 <code>sudo chown -R 1000:1000 store</code>，再 <code>docker compose up -d --build</code></td></tr>
       <tr><td>Agent unhealthy</td><td><code>docker compose down -v</code> 後重建（見 Docker 更新）</td></tr>
       <tr><td>API 401</td><td>token 過期或打錯；至 API Token 頁重建</td></tr>
       <tr><td>API 500</td><td>尚無啟用中的 API Token</td></tr>
     </table>
   </section>
 
-  <p class="lead" style="margin-top:2.5rem">開發者技術規格：<code>docs/NCCM-v3-spec.md</code> · 專案 <code>README.md</code></p>
+  <p class="lead handbook-footer-note">開發者技術規格：<code>docs/NCCM-v3-spec.md</code> · 專案 <code>README.md</code></p>
 </main>
 </body>
 </html>
