@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 import re
-import secrets
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
@@ -37,6 +36,13 @@ from web.deps import (
     set_session_user,
 )
 from nccm.auth.audit import audit_portal_login, write_audit
+from web.security import production_mode, session_secret, https_only_cookies
+from web.csrf import (
+    CsrfMiddleware,
+    SecurityHeadersMiddleware,
+    get_or_create_csrf_token,
+    rotate_csrf_token,
+)
 
 load_dotenv()
 
@@ -44,8 +50,13 @@ _WEB_DIR = Path(__file__).resolve().parent
 _ROOT = _WEB_DIR.parent
 _HANDBOOK = _ROOT / "docs" / "Handbook.html"
 
-app = FastAPI(title="NetdriverBackup NCCM v3")
-_secret = os.environ.get("NCCM_SESSION_SECRET") or secrets.token_hex(32)
+app = FastAPI(
+    title="NetdriverBackup NCCM v3",
+    docs_url=None if production_mode() else "/docs",
+    redoc_url=None if production_mode() else "/redoc",
+    openapi_url=None if production_mode() else "/openapi.json",
+)
+_secret = session_secret()
 app.include_router(api_router, prefix="/api/v1")
 
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
@@ -78,7 +89,9 @@ def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
     return items
 
 
-_PUBLIC_PATHS = {"/login", "/health", "/openapi.json", "/docs", "/redoc"}
+_PUBLIC_PATHS = {"/login", "/health"}
+if not production_mode():
+    _PUBLIC_PATHS |= {"/openapi.json", "/docs", "/redoc"}
 _MUST_CHANGE_PASSWORD_ALLOW = {"/account/change-password", "/logout"}
 
 
@@ -113,8 +126,17 @@ class SessionGateMiddleware:
         await self.app(scope, receive, send)
 
 
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CsrfMiddleware)
 app.add_middleware(SessionGateMiddleware)
-app.add_middleware(SessionMiddleware, secret_key=_secret)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_secret,
+    session_cookie="nccm_session",
+    max_age=60 * 60 * 24 * 7,
+    same_site="strict",
+    https_only=https_only_cookies(),
+)
 
 
 @app.on_event("startup")
@@ -133,7 +155,11 @@ async def login_page(request: Request):
     return templates.TemplateResponse(
         request,
         "login.html",
-        {"title": "登入", "error": None},
+        {
+            "title": "登入",
+            "error": None,
+            "csrf_token": get_or_create_csrf_token(request),
+        },
     )
 
 
@@ -145,6 +171,7 @@ async def login_submit(
 ):
     portal_user = authenticate(username, password)
     if portal_user:
+        request.session.clear()
         set_session_user(
             request,
             username=portal_user.username,
@@ -152,6 +179,7 @@ async def login_submit(
             user_id=portal_user.id,
             must_change_password=portal_user.must_change_password,
         )
+        rotate_csrf_token(request)
         audit_portal_login(request, portal_user.username, True)
         if portal_user.must_change_password:
             return RedirectResponse(url="/account/change-password", status_code=303)
@@ -161,12 +189,16 @@ async def login_submit(
     return templates.TemplateResponse(
         request,
         "login.html",
-        {"title": "登入", "error": "帳號或密碼錯誤"},
+        {
+            "title": "登入",
+            "error": "帳號或密碼錯誤",
+            "csrf_token": get_or_create_csrf_token(request),
+        },
         status_code=401,
     )
 
 
-@app.get("/logout")
+@app.post("/logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
@@ -213,6 +245,7 @@ def _ctx(request: Request, page: str, **extra):
         "portal_user": session_username(request),
         "portal_role": role,
         "current_uid": session_user_id(request),
+        "csrf_token": get_or_create_csrf_token(request),
     }
     base.update(extra)
     return base

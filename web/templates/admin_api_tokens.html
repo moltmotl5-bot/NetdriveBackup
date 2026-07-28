@@ -22,6 +22,7 @@
 <section class="inv-result-below">
   <h2>建立 Token</h2>
   <form method="post" action="/admin/api-tokens" class="inv-filter-form">
+    {% include "_csrf.html" %}
     <label>名稱</label>
     <input name="name" required maxlength="128" placeholder="postman-uat" />
     <label>權限範圍</label>

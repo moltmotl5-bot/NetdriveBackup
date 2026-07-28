@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import importlib
+import re
 from io import BytesIO
 from pathlib import Path
 from unittest import mock
 
 import pytest
+
+
+def csrf_from_html(html: str) -> str:
+    match = re.search(r'name="csrf_token"\s+value="([^"]+)"', html)
+    assert match, "csrf_token not found in HTML"
+    return match.group(1)
 
 
 @pytest.fixture()
@@ -41,12 +48,24 @@ def web_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 def _login(client, username: str) -> None:
+    r = client.get("/login")
+    token = csrf_from_html(r.text)
     r = client.post(
         "/login",
-        data={"username": username, "password": "password123456"},
+        data={
+            "username": username,
+            "password": "password123456",
+            "csrf_token": token,
+        },
         follow_redirects=False,
     )
     assert r.status_code == 303
+
+
+def _csrf(client) -> str:
+    r = client.get("/schedules")
+    assert r.status_code == 200
+    return csrf_from_html(r.text)
 
 
 def test_viewer_schedules_readonly(web_client):
@@ -61,13 +80,20 @@ def test_viewer_schedules_readonly(web_client):
 
 def test_viewer_cannot_mutate_schedules(web_client):
     _login(web_client, "viewer1")
-    assert web_client.post("/schedules/1/run").status_code == 403
-    assert web_client.post("/schedules/1/toggle").status_code == 403
-    assert web_client.post("/schedules/1/delete").status_code == 403
+    token = _csrf(web_client)
+    assert web_client.post("/schedules/1/run", data={"csrf_token": token}).status_code == 403
+    assert web_client.post("/schedules/1/toggle", data={"csrf_token": token}).status_code == 403
+    assert web_client.post("/schedules/1/delete", data={"csrf_token": token}).status_code == 403
     assert (
         web_client.post(
             "/schedules/upload",
-            data={"name": "x", "interval_days": "1", "username": "u", "password": "p"},
+            data={
+                "name": "x",
+                "interval_days": "1",
+                "username": "u",
+                "password": "p",
+                "csrf_token": token,
+            },
             files={"csv_file": ("t.csv", BytesIO(b"Site,IP,Vendor,Port\n"), "text/csv")},
         ).status_code
         == 403

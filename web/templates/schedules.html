@@ -19,6 +19,7 @@
 <section class="panel">
   <h2>新增排程</h2>
   <form method="post" action="/schedules/upload" enctype="multipart/form-data" class="admin-user-form schedule-form">
+    {% include "_csrf.html" %}
     <label>名稱 <input name="name" required placeholder="lab-daily" /></label>
     <label>間隔（日） <input name="interval_days" type="number" min="1" value="1" /></label>
     <label class="schedule-cred">SSH 帳號 <input name="username" required autocomplete="off" /></label>
@@ -63,12 +64,14 @@
         {% if can_operate %}
         <td class="admin-actions">
           <form method="post" action="/schedules/{{ s.id }}/run" class="inline-form"
-                onsubmit="return confirm('立即對 {{ s.device_count }} 台設備執行備份？');">
+                data-confirm="立即對 {{ s.device_count }} 台設備執行備份？">
+            {% include "_csrf.html" %}
             <button type="submit" class="btn-primary btn-sm">立即備份</button>
           </form>
           <details class="schedule-edit">
             <summary class="btn-secondary btn-sm">編輯</summary>
             <form method="post" action="/schedules/{{ s.id }}/update" class="schedule-edit-form">
+              {% include "_csrf.html" %}
               <label>名稱 <input name="name" value="{{ s.name }}" required /></label>
               <label>間隔（日） <input name="interval_days" type="number" min="1" value="{{ s.interval_days }}" /></label>
               <label>SSH 帳號 <input name="username" value="{{ s.username }}" autocomplete="off" /></label>
@@ -77,6 +80,7 @@
               <button type="submit" class="btn-primary btn-sm">儲存</button>
             </form>
             <form method="post" action="/schedules/upload" enctype="multipart/form-data" class="schedule-edit-form">
+              {% include "_csrf.html" %}
               <input type="hidden" name="edit_schedule_id" value="{{ s.id }}" />
               <input type="hidden" name="name" value="{{ s.name }}" />
               <input type="hidden" name="interval_days" value="{{ s.interval_days }}" />
@@ -89,10 +93,12 @@
             </form>
           </details>
           <form method="post" action="/schedules/{{ s.id }}/toggle" class="inline-form">
+            {% include "_csrf.html" %}
             <button type="submit" class="btn-secondary btn-sm">{% if s.enabled %}停用{% else %}啟用{% endif %}</button>
           </form>
           <form method="post" action="/schedules/{{ s.id }}/delete" class="inline-form"
-                onsubmit="return confirm('刪除此排程？');">
+                data-confirm="刪除此排程？">
+            {% include "_csrf.html" %}
             <button type="submit" class="btn-secondary btn-sm">刪除</button>
           </form>
         </td>
@@ -155,24 +161,5 @@
 </dialog>
 {% endblock %}
 {% block scripts %}
-<script>
-document.querySelectorAll(".schedule-devices-btn").forEach(function (btn) {
-  btn.addEventListener("click", async function () {
-    const id = btn.getAttribute("data-schedule-id");
-    const name = btn.getAttribute("data-schedule-name");
-    const dlg = document.getElementById("schedule-devices-dialog");
-    const body = document.getElementById("schedule-devices-body");
-    const title = document.getElementById("schedule-devices-title");
-    title.textContent = "設備清單 — " + name;
-    body.innerHTML = "<p class=\"muted\">載入中…</p>";
-    dlg.showModal();
-    try {
-      const r = await fetch("/schedules/" + id + "/devices");
-      body.innerHTML = await r.text();
-    } catch (e) {
-      body.innerHTML = "<p class=\"error\">載入失敗</p>";
-    }
-  });
-});
-</script>
+<script src="/static/schedules.js"></script>
 {% endblock %}

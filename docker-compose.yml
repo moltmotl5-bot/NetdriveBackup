@@ -57,6 +57,8 @@ services:
       NCCM_STORE_DIR: /data/store
       NCCM_APP_ROOT: /app
       NCCM_AGENT_HMAC_SECRET: ${NCCM_AGENT_HMAC_SECRET:?Set NCCM_AGENT_HMAC_SECRET in .env}
+      NCCM_SESSION_SECRET: ${NCCM_SESSION_SECRET:?Set NCCM_SESSION_SECRET in .env}
+      NCCM_ENV: production
     volumes:
       - ./store:/data/store
     ports:
