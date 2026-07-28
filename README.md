@@ -16,6 +16,8 @@ python3 -c "import secrets; print('NCCM_AGENT_HMAC_SECRET=' + secrets.token_hex(
 # 編輯 .env：設定 NCCM_ADMIN_PASS（≥12 字元）
 chmod 600 .env
 mkdir -p store
+# Portal 容器以 uid 1000 執行，store 須可寫入
+sudo chown -R 1000:1000 store
 docker compose up -d --build
 ```
 
@@ -26,7 +28,30 @@ docker compose up -d --build
 
 檢查：`docker compose ps` · `curl -s http://localhost:8501/health`
 
-更新：`git pull && docker compose up -d --build`（重大變更前請備份 `./store`）
+> **`store/` 權限：** Compose 將主機 `./store` 掛載至容器 `/data/store`。Portal 以 **uid 1000** 讀寫此目錄（含 `portal_auth.db`、備份快照、索引）。新安裝或 clone 後請先 `chown -R 1000:1000 store`，否則可能無法登入或 Portal 異常。
+
+---
+
+## 更新
+
+```bash
+# 1. 備份資料
+tar -czf store-backup-$(date +%Y%m%d).tar.gz store/
+
+# 2. 拉程式並重建
+git pull origin main
+docker compose build --no-cache portal
+docker compose up -d --build
+
+# 3. 修正 store 擁有者（自舊版升級時必做；若已是 1000:1000 可略過）
+sudo chown -R 1000:1000 store
+
+# 4. 確認
+docker compose ps
+curl -s http://localhost:8501/health
+```
+
+自舊版升級時，若 `./store` 仍為 **root** 擁有，Portal 可能登入失敗或容器反覆重啟；執行上述 `chown` 後再 `docker compose up -d portal` 即可。
 
 ---
 
@@ -42,7 +67,7 @@ docker compose up -d --build
 |------|------|
 | **portal** | Web UI：備份、庫存、鄰居、介面、排程 |
 | **netdriver-agent** | SSH 連線與廠牌 plugin（預設僅 Docker 內部網路可連） |
-| **store/** | 持久化 volume（務必備份） |
+| **store/** | 持久化 volume（務必備份）；主機目錄須為 **uid 1000** 可寫（見「快速開始」） |
 
 ---
 
