@@ -426,6 +426,7 @@ async def inventory_page(
             diff_text=diff_text,
             diff_meta=diff_meta,
             rebuild_msg=None,
+            retention_confirm=request.session.get("retention_confirm"),
         ),
     )
 
@@ -539,7 +540,12 @@ async def inventory_download_config(
         raise HTTPException(status_code=404, detail="snapshot not found")
     if device_id and snap.device_id != device_id:
         raise HTTPException(status_code=403, detail="snapshot does not belong to device")
-    path = Path(snap.snapshot_path) / "config.txt"
+    from nccm.storage.store_paths import SecurityError, resolve_snapshot_file
+
+    try:
+        path = resolve_snapshot_file(snap.snapshot_path, "config.txt")
+    except SecurityError:
+        raise HTTPException(status_code=403, detail="invalid snapshot path")
     if not path.is_file():
         raise HTTPException(status_code=404, detail="config.txt not found")
     _site, ip, _port, host = parse_device_id(snap.device_id)
@@ -567,23 +573,71 @@ async def inventory_retention(
     keep_last: Annotated[int, Form()] = 10,
     dry_run: Annotated[str, Form()] = "1",
     device_id: Annotated[str, Form()] = "",
+    confirm_token: Annotated[str, Form()] = "",
 ):
-    from nccm.storage.retention import apply_retention, plan_retention
+    from nccm.storage.retention import (
+        RetentionError,
+        apply_retention,
+        issue_retention_token,
+        plan_retention,
+    )
 
-    plan = plan_retention(keep_last=keep_last, device_id=device_id or None)
+    did = device_id or None
+    try:
+        plan = plan_retention(keep_last=keep_last, device_id=did)
+    except RetentionError as e:
+        return RedirectResponse(
+            url=f"/inventory?retention=error&msg={str(e)[:120]}",
+            status_code=303,
+        )
     is_dry = dry_run != "0"
-    result = apply_retention(plan, dry_run=is_dry)
-    q = "dry" if is_dry else "done"
-    n = result.get("would_delete") if is_dry else result.get("deleted")
+    if is_dry:
+        token = issue_retention_token(plan, device_id=did)
+        request.session["retention_confirm"] = {
+            "token": token,
+            "keep_last": plan.keep_last,
+            "device_id": did or "",
+            "n": len(plan.candidates),
+        }
+        result = apply_retention(plan, dry_run=True)
+        n = result.get("would_delete")
+        write_audit(
+            request=request,
+            event="snapshot_retention",
+            success=True,
+            actor=user,
+            detail=f"dry_run=True;keep_last={plan.keep_last};n={n};device_id={did or '*'}",
+        )
+        return RedirectResponse(
+            url=f"/inventory?retention=preview&n={n}&keep={plan.keep_last}",
+            status_code=303,
+        )
+    token = (confirm_token or "").strip() or str(
+        (request.session.get("retention_confirm") or {}).get("token") or ""
+    )
+    try:
+        result = apply_retention(
+            plan,
+            dry_run=False,
+            confirm_token=token,
+            device_id=did,
+        )
+    except RetentionError as e:
+        return RedirectResponse(
+            url=f"/inventory?retention=error&msg={str(e)[:120]}",
+            status_code=303,
+        )
+    request.session.pop("retention_confirm", None)
+    n = result.get("deleted")
     write_audit(
         request=request,
         event="snapshot_retention",
         success=True,
         actor=user,
-        detail=f"dry_run={is_dry};keep_last={plan.keep_last};n={n};device_id={device_id or '*'}",
+        detail=f"dry_run=False;keep_last={plan.keep_last};n={n};device_id={did or '*'}",
     )
     return RedirectResponse(
-        url=f"/inventory?retention={q}&n={n}&keep={plan.keep_last}",
+        url=f"/inventory?retention=done&n={n}&keep={plan.keep_last}",
         status_code=303,
     )
 

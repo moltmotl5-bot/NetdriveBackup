@@ -11,7 +11,10 @@
 ```bash
 git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
-cp .env.example .env    # 設定 NCCM_ADMIN_PASS（≥12 字元）
+cp .env.example .env
+# 必填：管理員密碼（≥12 字元）與 Portal↔Agent HMAC 共用密鑰
+python3 -c "import secrets; print('NCCM_AGENT_HMAC_SECRET=' + secrets.token_hex(32))" >> .env
+# 編輯 .env，設定 NCCM_ADMIN_PASS
 chmod 600 .env
 mkdir -p store
 docker compose up -d --build
@@ -21,7 +24,8 @@ docker compose up -d --build
 |------|------|
 | http://localhost:8501/login | Portal 登入 |
 | http://localhost:8501/help | **使用手冊**（登入後側欄也可進入） |
-| http://localhost:8000/docs | Agent API（除錯） |
+
+> **Agent API 預設不對外開 port。** Production Compose 僅在 Docker 內部網路暴露 Agent（`expose: 8000`），主機無法直接連 `localhost:8000`。本機除錯 Agent 請見下方「Agent 本機除錯」。
 
 檢查：`docker compose ps` · `curl -s http://localhost:8501/health`
 
@@ -33,21 +37,57 @@ docker compose up -d --build
 
 ```
 瀏覽器 → nccm-portal (FastAPI) → netdriver-agent (SSH) → 網路設備
-                ↓
+                ↓                      ↑ HMAC 簽章
             store/（快照 + SQLite 索引）
 ```
 
 | 元件 | 說明 |
 |------|------|
 | **portal** | Web UI：備份、庫存、鄰居、介面、排程 |
-| **netdriver-agent** | SSH 連線與廠牌 plugin |
+| **netdriver-agent** | SSH 連線與廠牌 plugin；**僅 Portal 可呼叫**（HMAC 認證） |
 | **store/** | 持久化 volume（務必備份） |
+
+---
+
+## 安全（PR1 + PR2）
+
+| 控制 | 說明 |
+|------|------|
+| **Agent 網路隔離** | Production `docker-compose.yml` 不 publish Agent port；僅 Portal 容器可連 |
+| **HMAC 認證** | Portal 呼叫 Agent `/api/v1/connect`、`/cmd`、`/probe` 須帶 `X-NCCM-*` 簽章；未認證一律拒絕 |
+| **CSV 驗證** | `Site` 限安全字元；`IP` 須為合法位址；`Port` 須在 allowlist（預設 22、2222） |
+| **Store 邊界** | 讀寫／下載／刪除快照前驗證路徑在 `store/` 內，防止 path traversal |
+| **Retention 兩段式** | 先「預覽刪除（dry-run）」取得 confirm token，再「確認執行清理」 |
+
+共用密鑰 **`NCCM_AGENT_HMAC_SECRET`** 必須寫入 `.env`，Portal 與 Agent 容器皆會讀取。**勿提交 Git。**
+
+### Agent 本機除錯
+
+僅在本機需要直接連 Agent API 時使用（綁定 `127.0.0.1`，不可用于 production）：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+curl -s http://127.0.0.1:8000/health
+```
+
+驗證 production compose 未誤開 Agent host port：
+
+```bash
+./scripts/check-compose-production.sh
+```
 
 ---
 
 ## 設備 CSV
 
 必填：**`Site,IP,Vendor,Port`**
+
+| 欄位 | 規則 |
+|------|------|
+| **Site** | `A–Z` / `a–z` / `0–9` / `.` / `_` / `-` 開頭，最長 64；不可含 `/`、`\`、`..` |
+| **IP** | 合法 IPv4 或 IPv6 |
+| **Port** | 1–65535；預設允許 **22**、**2222**（可選 `NCCM_ALLOWED_SSH_PORTS=22,2222,830`） |
+| **Vendor** | 見下表；WLC 不支援 |
 
 | Vendor | 說明 |
 |--------|------|
@@ -62,7 +102,7 @@ docker compose up -d --build
 ## Web 功能
 
 1. **批次備份** — CSV + SSH，SSE 即時 log  
-2. **設備總表** — 版控、Config Diff、快照保留（admin/operator）  
+2. **設備總表** — 版控、Config Diff、快照保留（admin/operator；保留需先 dry-run 再確認）  
 3. **CDP/LLDP 鄰居** · **Interface Map**  
 4. **排程備份** — CSV 上傳 → Agent 探測 → 以**日**為週期自動備份  
 
@@ -82,8 +122,11 @@ docker compose up -d --build
 | 變數 | 說明 |
 |------|------|
 | `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS` | Web 登入 |
+| **`NCCM_AGENT_HMAC_SECRET`** | **必填** — Portal ↔ Agent HMAC 共用密鑰 |
 | `NCCM_NETDRIVER_URL` | Portal → Agent（Compose 預設 `http://netdriver-agent:8000`） |
 | `NCCM_STORE_DIR` | 備份根目錄（容器內 `/data/store` → `./store`） |
+| `NCCM_ALLOWED_SSH_PORTS` | 可選 — CSV Port allowlist（預設 `22,2222`） |
+| `NCCM_RETENTION_MAX_DELETE` | 可選 — 單次 retention 最多刪除筆數（預設 500） |
 
 完整列表見 `.env.example`。
 
@@ -101,9 +144,13 @@ docker compose up -d --build
 ## 測試
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -r requirements-v3.txt -r requirements-dev.txt
+export NCCM_AGENT_HMAC_SECRET=test-hmac-secret   # pytest 需設定（conftest 亦有預設）
 pytest
+./scripts/check-compose-production.sh
 ```
+
+手動安全測試 script 請放 **`scripts/security-local/`**（已列入 `.gitignore`，不提交 Git）。
 
 ---
 
@@ -111,10 +158,15 @@ pytest
 
 | 現象 | 處理 |
 |------|------|
+| `Set NCCM_AGENT_HMAC_SECRET in .env` | 在 `.env` 產生並設定 HMAC 密鑰，重啟 compose |
+| Agent 401 / connect 失敗 | 確認 Portal 與 Agent 使用**相同** `NCCM_AGENT_HMAC_SECRET` |
+| 主機連不上 `:8000` | 預期行為；除錯請用 `docker-compose.dev.yml` |
+| CSV 匯入被拒 | 檢查 Site 字元、IP 格式、Port 是否在 allowlist |
 | Agent 離線 | `docker compose logs netdriver-agent` |
 | 備份失敗 | 確認 Agent 容器可 SSH 至設備；看 Portal SSE log |
 | Agent unhealthy | `docker compose down -v && docker compose up -d --build` |
 | 庫存不對 | Web「重建索引」；Stack/HA 異常時重新備份 |
+| Retention 無法執行 | 須先按「預覽刪除」再按「確認執行清理」；token 5 分鐘有效 |
 
 ---
 

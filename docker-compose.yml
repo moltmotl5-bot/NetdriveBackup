@@ -5,6 +5,8 @@
 #
 # Agent unhealthy 常見原因：舊版 agent-logs volume 權限（uid 1000 無法寫入）。
 # 修復：docker compose down -v && docker compose up -d --build
+#
+# 本機除錯 Agent port：docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 name: netdriverbackup-nccm
 
@@ -18,12 +20,13 @@ services:
     restart: unless-stopped
     environment:
       NETDRIVER_AGENT_CONFIG: /app/config/agent/agent.yml
+      NCCM_AGENT_HMAC_SECRET: ${NCCM_AGENT_HMAC_SECRET:?Set NCCM_AGENT_HMAC_SECRET in .env}
     volumes:
       - ./deploy/config/agent:/app/config/agent:ro
       # 勿掛載 root-owned named volume 到 /app/logs；Agent 以 uid 1000 執行，寫 log 失敗會起不來。
       # 日誌請用：docker compose logs -f netdriver-agent
-    ports:
-      - "${NETDRIVER_AGENT_PORT:-8000}:8000"
+    expose:
+      - "8000"
     networks:
       - nccm
     healthcheck:
@@ -53,6 +56,7 @@ services:
       NCCM_NETDRIVER_URL: http://netdriver-agent:8000
       NCCM_STORE_DIR: /data/store
       NCCM_APP_ROOT: /app
+      NCCM_AGENT_HMAC_SECRET: ${NCCM_AGENT_HMAC_SECRET:?Set NCCM_AGENT_HMAC_SECRET in .env}
     volumes:
       - ./store:/data/store
     ports:

@@ -5,9 +5,17 @@ from pathlib import Path
 
 import pytest
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
 PRIVATE_TESTDATA = Path(os.environ.get("NCCM_PRIVATE_TESTDATA", str(ROOT / "testdata")))
+
+
+@pytest.fixture(autouse=True)
+def _agent_hmac_secret(monkeypatch: pytest.MonkeyPatch):
+    if not os.environ.get("NCCM_AGENT_HMAC_SECRET"):
+        monkeypatch.setenv("NCCM_AGENT_HMAC_SECRET", "pytest-hmac-secret")
 
 
 def read_fixture(*parts: str) -> str:

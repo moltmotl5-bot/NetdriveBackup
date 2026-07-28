@@ -19,6 +19,7 @@ from netdriver_agent.containers import container
 from netdriver_agent.handlers.error_handlers import global_exception_handlers
 from netdriver_agent.client.pool import SessionPool
 from netdriver_agent.plugins.engine import PluginEngine
+from netdriver_agent.security.hmac_auth import HmacAuthMiddleware
 from netdriver_core.log import logman
 
 
@@ -66,6 +67,7 @@ app: FastAPI = FastAPI(
 app.add_middleware(
     CorrelationIdMiddleware, header_name="X-Correlation-Id", validator=None
 )
+app.add_middleware(HmacAuthMiddleware)
 app.include_router(rest.router)
 
 
