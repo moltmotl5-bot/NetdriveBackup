@@ -152,10 +152,10 @@ def test_job_accessible_owner_and_admin():
 def test_portal_dockerfile_runs_non_root():
     dockerfile = Path(__file__).resolve().parents[2] / "docker" / "Dockerfile.portal"
     text = dockerfile.read_text(encoding="utf-8")
-    assert "portal-entrypoint.sh" in text
+    assert "USER nccm" in text
     assert "useradd" in text
     entrypoint = Path(__file__).resolve().parents[2] / "docker" / "portal-entrypoint.sh"
-    assert "su nccm" in entrypoint.read_text(encoding="utf-8")
+    assert "su nccm" not in entrypoint.read_text(encoding="utf-8")
 
 
 def test_compose_portal_hardening():
