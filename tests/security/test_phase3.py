@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from nccm.auth.audit import write_audit
 from nccm.backup.job_manager import BackupJob, job_accessible
 from nccm.security.redaction import redact_text
 
@@ -51,6 +50,16 @@ def test_bootstrap_still_works_on_empty_db(tmp_path, monkeypatch):
     user = svc.authenticate("envadmin", "envpassword12345")
     assert user is not None
     assert user.id > 0
+
+
+def test_login_succeeds_when_last_login_update_readonly(tmp_path, monkeypatch):
+    svc = _auth_env(tmp_path, monkeypatch)
+    svc.create_user("dbuser", "dbpassword123456", role="admin")
+    db_path = tmp_path / "store" / "portal_auth.db"
+    db_path.chmod(0o444)
+    user = svc.authenticate("dbuser", "dbpassword123456")
+    assert user is not None
+    assert user.username == "dbuser"
 
 
 def test_login_rate_limit_lockout(monkeypatch):
@@ -143,8 +152,10 @@ def test_job_accessible_owner_and_admin():
 def test_portal_dockerfile_runs_non_root():
     dockerfile = Path(__file__).resolve().parents[2] / "docker" / "Dockerfile.portal"
     text = dockerfile.read_text(encoding="utf-8")
-    assert "USER nccm" in text
+    assert "portal-entrypoint.sh" in text
     assert "useradd" in text
+    entrypoint = Path(__file__).resolve().parents[2] / "docker" / "portal-entrypoint.sh"
+    assert "su nccm" in entrypoint.read_text(encoding="utf-8")
 
 
 def test_compose_portal_hardening():

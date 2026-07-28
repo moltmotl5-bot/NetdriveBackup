@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Literal
 
@@ -14,6 +15,8 @@ from nccm.auth.passwords import (
 
 Role = Literal["admin", "operator", "viewer"]
 VALID_ROLES: frozenset[str] = frozenset({"admin", "operator", "viewer"})
+
+_log = logging.getLogger(__name__)
 
 
 def user_count() -> int:
@@ -256,12 +259,15 @@ def authenticate(username: str, password: str) -> auth_db.PortalUser | None:
 
 
 def _touch_last_login(user_id: int) -> None:
-    now = auth_db._utc_now()
-    with auth_db.connect() as conn:
-        conn.execute(
-            "UPDATE portal_users SET last_login_at = ?, updated_at = ? WHERE id = ?",
-            (now, now, int(user_id)),
-        )
+    try:
+        now = auth_db._utc_now()
+        with auth_db.connect() as conn:
+            conn.execute(
+                "UPDATE portal_users SET last_login_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, int(user_id)),
+            )
+    except Exception as exc:
+        _log.warning("failed to update last_login_at uid=%s: %s", user_id, exc)
 
 
 def ensure_portal_can_start() -> None:

@@ -487,6 +487,7 @@ dc,10.2.1.5,huawei,22</code></pre>
       <tr><td>庫存缺設備／只有一台</td><td>同 Site+IP 需不同 port 或 hostname；按「重建索引」</td></tr>
       <tr><td>Stack／HA 展開不對</td><td>重新備份 → 重建索引 → rebuild portal</td></tr>
       <tr><td>排程一直 running</td><td>等 job 完成；更新至最新 main；必要時停用再啟用排程</td></tr>
+      <tr><td>登入 <strong>Internal Server Error</strong></td><td>常見於 Phase 3 升級後 <code>store/</code> 仍為 root 擁有：主機執行 <code>sudo chown -R 1000:1000 store</code>，再 <code>docker compose up -d --build</code></td></tr>
       <tr><td>Agent unhealthy</td><td><code>docker compose down -v</code> 後重建（見 Docker 更新）</td></tr>
       <tr><td>API 401</td><td>token 過期或打錯；至 API Token 頁重建</td></tr>
       <tr><td>API 500</td><td>尚無啟用中的 API Token</td></tr>

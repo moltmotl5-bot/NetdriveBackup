@@ -180,7 +180,7 @@ pytest
 | CSV 匯入被拒 | 檢查 Site 字元、IP 格式、Port 是否在 allowlist |
 | Agent 離線 | `docker compose logs netdriver-agent` |
 | 備份失敗 | 確認 Agent 容器可 SSH 至設備；看 Portal SSE log |
-| Agent unhealthy | `docker compose down -v && docker compose up -d --build` |
+| **Internal Server Error** 登入 | Phase 3 起 Portal 以 uid 1000 執行；若 `./store` 為舊版 root 建立，請 `sudo chown -R 1000:1000 store` 或 `docker compose up -d --build`（entrypoint 會嘗試修正權限） |
 | 庫存不對 | Web「重建索引」；Stack/HA 異常時重新備份 |
 | Retention 無法執行 | 須先按「預覽刪除」再按「確認執行清理」；token 5 分鐘有效 |
 
