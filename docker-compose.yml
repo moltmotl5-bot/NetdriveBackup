@@ -59,6 +59,8 @@ services:
       NCCM_AGENT_HMAC_SECRET: ${NCCM_AGENT_HMAC_SECRET:?Set NCCM_AGENT_HMAC_SECRET in .env}
       NCCM_SESSION_SECRET: ${NCCM_SESSION_SECRET:?Set NCCM_SESSION_SECRET in .env}
       NCCM_ENV: production
+      # Plain HTTP (default localhost:8501): do NOT set NCCM_HTTPS=1.
+      # Enable only behind TLS reverse proxy: NCCM_HTTPS=1
     volumes:
       - ./store:/data/store
     ports:

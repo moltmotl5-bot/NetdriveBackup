@@ -60,12 +60,15 @@ def _extract_csrf_from_body(content_type: str, body: bytes) -> str | None:
         raw = values.get(CSRF_FORM_FIELD, [None])[0]
         return str(raw) if raw is not None else None
     if "multipart/form-data" in ct:
-        match = re.search(
+        # Match csrf field whether it appears before or after file parts.
+        patterns = [
             rb'name="' + re.escape(CSRF_FORM_FIELD.encode()) + rb'"\r\n\r\n([^\r\n]+)',
-            body,
-        )
-        if match:
-            return match.group(1).decode("utf-8", errors="replace")
+            rb'name="' + re.escape(CSRF_FORM_FIELD.encode()) + rb'"\s*\r\n\r\n([^\r\n]+)',
+        ]
+        for pat in patterns:
+            match = re.search(pat, body)
+            if match:
+                return match.group(1).decode("utf-8", errors="replace")
     return None
 
 

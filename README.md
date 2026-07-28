@@ -161,7 +161,8 @@ pytest
 | 現象 | 處理 |
 |------|------|
 | `Set NCCM_AGENT_HMAC_SECRET in .env` | 在 `.env` 產生並設定 HMAC 密鑰，重啟 compose |
-| Agent 401 / connect 失敗 | 確認 Portal 與 Agent 使用**相同** `NCCM_AGENT_HMAC_SECRET` |
+| `Set NCCM_SESSION_SECRET in .env` | 在 `.env` 產生並設定 Session 密鑰，重啟 compose |
+| **CSRF validation failed** | 常見原因：① 頁面太舊（硬重新整理）；② 反向代理未設 `NCCM_HTTPS=1` 卻用 HTTPS；③ **HTTP 存取但誤設 `NCCM_HTTPS=1`**（Secure cookie 不會送出）。本機 HTTP 請勿設 `NCCM_HTTPS=1` |
 | 主機連不上 `:8000` | 預期行為；除錯請用 `docker-compose.dev.yml` |
 | CSV 匯入被拒 | 檢查 Site 字元、IP 格式、Port 是否在 allowlist |
 | Agent 離線 | `docker compose logs netdriver-agent` |

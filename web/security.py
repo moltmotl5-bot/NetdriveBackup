@@ -11,7 +11,8 @@ def production_mode() -> bool:
 
 
 def https_only_cookies() -> bool:
-    return os.environ.get("NCCM_HTTPS") == "1" or production_mode()
+    """Secure session cookies — only when TLS is actually in use."""
+    return os.environ.get("NCCM_HTTPS", "").strip() == "1"
 
 
 def session_secret() -> str:
