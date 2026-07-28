@@ -6,6 +6,12 @@ from pathlib import Path
 from nccm.config import WLC_VENDOR_ALIASES
 from nccm.models import DeviceRow
 from nccm.profiles import normalize_vendor
+from nccm.registry.csv_validation import (
+    validate_hostname_hint,
+    validate_ip,
+    validate_port,
+    validate_site,
+)
 
 
 def load_devices_csv(path: Path) -> list[DeviceRow]:
@@ -18,33 +24,32 @@ def load_devices_csv(path: Path) -> list[DeviceRow]:
         for req in ("Site", "IP", "Vendor"):
             if req not in fields:
                 raise ValueError(f"CSV missing column: {req}")
-        for raw in reader:
+        for line_no, raw in enumerate(reader, start=2):
+            row_hint = f" (CSV line {line_no}, IP={raw.get('IP')!r})"
             vendor = normalize_vendor(raw.get("Vendor", ""))
             if vendor in WLC_VENDOR_ALIASES or "wlc" in vendor:
                 raise ValueError(
-                    f"WLC not supported in v3 (row IP={raw.get('IP')}, Vendor={raw.get('Vendor')})"
+                    f"WLC not supported in v3{row_hint}, Vendor={raw.get('Vendor')}"
                 )
-            port = 22
-            if raw.get("Port"):
-                try:
-                    port = int(str(raw["Port"]).strip())
-                except ValueError:
-                    port = 22
+            site = validate_site(str(raw["Site"]), row_hint=row_hint)
+            ip = validate_ip(str(raw["IP"]), row_hint=row_hint)
+            port = validate_port(raw.get("Port"), row_hint=row_hint)
             hint = ""
             for col in ("Hostname", "hostname", "Name"):
                 if col in raw and str(raw.get(col, "")).strip():
                     hint = str(raw[col]).strip()
                     break
+            hostname_hint = validate_hostname_hint(hint, row_hint=row_hint)
             model = str(raw.get("Model", "") or "").strip() or None
             version = str(raw.get("Version", "") or "").strip() or None
             rows.append(
                 DeviceRow(
-                    site=str(raw["Site"]).strip(),
-                    ip=str(raw["IP"]).strip(),
+                    site=site,
+                    ip=ip,
                     vendor=vendor,
                     model=model,
                     version=version,
-                    hostname_hint=hint or None,
+                    hostname_hint=hostname_hint,
                     port=port,
                 )
             )

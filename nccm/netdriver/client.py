@@ -6,6 +6,7 @@ import httpx
 
 from nccm.config import netdriver_url
 from nccm.models import NetDriverProfile
+from nccm.netdriver.agent_auth import signed_post
 from nccm.profiles import normalize_profile_for_agent, normalize_vendor
 
 
@@ -41,6 +42,10 @@ class NetDriverClient:
         except httpx.HTTPError:
             return False
 
+    def _post_api(self, path: str, body: dict[str, Any], *, timeout: float | None = None) -> httpx.Response:
+        url = f"{self.base_url}{path}"
+        return signed_post(url, path=path, body=body, timeout=timeout or self.timeout)
+
     def connect(
         self,
         *,
@@ -67,11 +72,7 @@ class NetDriverClient:
             "vsys": "default",
             "timeout": timeout,
         }
-        r = httpx.post(
-            f"{self.base_url}/api/v1/connect",
-            json=body,
-            timeout=self.timeout,
-        )
+        r = self._post_api("/api/v1/connect", body, timeout=self.timeout)
         if r.status_code >= 400:
             raise NetDriverError(f"connect HTTP {r.status_code}: {r.text[:500]}")
         data = r.json()
@@ -115,9 +116,9 @@ class NetDriverClient:
                 )
             ],
         }
-        r = httpx.post(
-            f"{self.base_url}/api/v1/cmd",
-            json=body,
+        r = self._post_api(
+            "/api/v1/cmd",
+            body,
             timeout=max(self.timeout, float(timeout) + 10),
         )
         if r.status_code >= 400:
@@ -162,19 +163,15 @@ class NetDriverClient:
             "timeout": 30,
         }
         try:
-            httpx.post(
-                f"{self.base_url}/api/v1/disconnect",
-                json=body,
-                timeout=15.0,
-            )
-        except httpx.HTTPError:
+            self._post_api("/api/v1/disconnect", body, timeout=15.0)
+        except (httpx.HTTPError, RuntimeError):
             pass
 
     def probe(self, *, ip: str, port: int = 22, timeout: float = 3.0) -> dict[str, Any]:
         body = {"ip": ip, "port": int(port), "timeout": float(timeout)}
-        r = httpx.post(
-            f"{self.base_url}/api/v1/probe",
-            json=body,
+        r = self._post_api(
+            "/api/v1/probe",
+            body,
             timeout=max(5.0, float(timeout) + 2.0),
         )
         if r.status_code >= 400:
