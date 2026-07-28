@@ -105,6 +105,10 @@ def test_viewer_can_open_help(web_client):
     r = web_client.get("/help")
     assert r.status_code == 200
     assert "NCCM v3 使用手冊" in r.text
+    assert '/static/handbook.css' in r.text
+    css = web_client.get("/static/handbook.css")
+    assert css.status_code == 200
+    assert "--bg:" in css.text
 
 
 def test_operator_sees_schedule_form(web_client):

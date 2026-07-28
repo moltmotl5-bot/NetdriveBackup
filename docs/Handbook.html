@@ -4,70 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NCCM v3 使用手冊</title>
-  <style>
-    :root {
-      --bg: #0c1018; --sidebar: #121a28; --panel: #1a2436; --text: #e8edf5;
-      --muted: #8fa3be; --accent: #3d8bfd; --accent2: #2dd4a8; --warn: #e6a700;
-      --border: #2a3850; --code: #0a0f16;
-    }
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: "PingFang TC", "Segoe UI", system-ui, sans-serif;
-      background: var(--bg); color: var(--text); line-height: 1.65; margin: 0;
-      display: grid; grid-template-columns: minmax(11rem, 15rem) 1fr; min-height: 100vh;
-    }
-    nav.toc {
-      position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto;
-      background: var(--sidebar); border-right: 1px solid var(--border);
-      padding: 1rem 0.85rem 2rem; font-size: 0.82rem;
-    }
-    nav.toc .brand { font-weight: 700; font-size: 0.95rem; color: #fff; margin-bottom: 0.25rem; }
-    nav.toc .back { display: block; color: var(--accent); margin-bottom: 1rem; font-size: 0.85rem; }
-    nav.toc .group {
-      color: #6b7f99; font-size: 0.68rem; text-transform: uppercase;
-      letter-spacing: 0.06em; margin: 1rem 0 0.3rem 0.35rem;
-    }
-    nav.toc a {
-      display: block; color: var(--muted); text-decoration: none;
-      padding: 0.3rem 0.45rem; border-radius: 6px; margin: 0.05rem 0;
-    }
-    nav.toc a:hover { background: rgba(61,139,253,0.12); color: var(--text); }
-    main { padding: 1.75rem 2rem 3rem; max-width: 46rem; }
-    h1 { font-size: 1.75rem; margin: 0 0 0.35rem; }
-    .lead { color: var(--muted); font-size: 1rem; margin-bottom: 1.5rem; }
-    h2 {
-      font-size: 1.2rem; margin-top: 2.5rem; padding-bottom: 0.35rem;
-      border-bottom: 1px solid var(--border); scroll-margin-top: 1rem;
-    }
-    h3 { font-size: 1rem; margin-top: 1.25rem; color: #c5d4e8; }
-    section.block {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-      padding: 1rem 1.2rem; margin: 0.85rem 0;
-    }
-    pre {
-      background: var(--code); border: 1px solid var(--border); border-radius: 6px;
-      padding: 0.75rem 0.9rem; overflow-x: auto; font-size: 0.8rem; line-height: 1.5;
-    }
-    code { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.86em; }
-    p code, li code, td code {
-      background: var(--code); padding: 0.1em 0.35em; border-radius: 4px;
-    }
-    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.75rem 0; }
-    th, td { border: 1px solid var(--border); padding: 0.45rem 0.65rem; text-align: left; vertical-align: top; }
-    th { background: var(--code); color: #c5d4e8; }
-    ul, ol { padding-left: 1.3rem; }
-    li { margin: 0.3rem 0; }
-    .tip, .warn {
-      border-left: 4px solid var(--accent2); background: rgba(45,212,168,0.07);
-      padding: 0.75rem 1rem; margin: 0.85rem 0; border-radius: 0 6px 6px 0; font-size: 0.92rem;
-    }
-    .warn { border-left-color: var(--warn); background: rgba(230,167,0,0.08); }
-    @media (max-width: 768px) {
-      body { grid-template-columns: 1fr; }
-      nav.toc { position: relative; max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
-    }
-  </style>
+  <link rel="stylesheet" href="/static/handbook.css" />
 </head>
 <body>
 
@@ -494,7 +431,7 @@ dc,10.2.1.5,huawei,22</code></pre>
     </table>
   </section>
 
-  <p class="lead" style="margin-top:2.5rem">開發者技術規格：<code>docs/NCCM-v3-spec.md</code> · 專案 <code>README.md</code></p>
+  <p class="lead handbook-footer-note">開發者技術規格：<code>docs/NCCM-v3-spec.md</code> · 專案 <code>README.md</code></p>
 </main>
 </body>
 </html>
