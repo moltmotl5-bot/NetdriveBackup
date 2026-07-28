@@ -97,6 +97,7 @@
   <a href="#api">REST API</a>
   <a href="#docker-update">Docker 更新</a>
   <a href="#csv">設備 CSV</a>
+  <a href="#security-phase3">平台安全強化</a>
   <a href="#security-pr3">已知風險與 PR3 決策</a>
   <a href="#troubleshoot">疑難排解</a>
 </nav>
@@ -414,6 +415,21 @@ dc,10.2.1.5,huawei,22</code></pre>
     <p>範例檔：專案根目錄 <code>DEMO-v3.csv</code>。</p>
   </section>
 
+  <h2 id="security-phase3">平台安全強化（Phase 3）</h2>
+  <section class="block">
+    <p>下列控制已內建於 Portal 與 Docker 映像，無須額外設定即可生效（break-glass 除外）：</p>
+    <table>
+      <tr><th>控制</th><th>說明</th></tr>
+      <tr><td>Break-glass 預設關閉</td><td><code>.env</code> 管理員僅在 DB 空庫時可 bootstrap；DB 已有使用者時須設 <code>NCCM_BREAK_GLASS=1</code> 才能緊急登入</td></tr>
+      <tr><td>登入速率限制</td><td>同一帳號 + IP 連續失敗過多會暫時鎖定（可調 <code>NCCM_LOGIN_*</code>）</td></tr>
+      <tr><td>排程 draft 加密</td><td>上傳 CSV 後暫存的 SSH 密碼以 Fernet 加密，不再明文寫入 SQLite</td></tr>
+      <tr><td>備份 job 擁有權</td><td>operator 僅能訂閱自己啟動的 SSE job；admin 可存取全部</td></tr>
+      <tr><td>Audit 脫敏</td><td>寫入審計日誌前遮罩 password、token、cookie 等欄位</td></tr>
+      <tr><td>Portal 容器</td><td>非 root（uid 1000）、<code>no-new-privileges</code>、<code>cap_drop: ALL</code>、記憶體/CPU 上限</td></tr>
+    </table>
+    <p class="tip">依賴版本已釘選於 <code>requirements-v3.txt</code>；CI 以 <code>pip-audit</code> 掃描已知漏洞。</p>
+  </section>
+
   <h2 id="security-pr3">已知風險與 PR3 決策</h2>
   <section class="block">
     <div class="warn">
@@ -442,7 +458,7 @@ dc,10.2.1.5,huawei,22</code></pre>
     <h3>已實施補償控制（請維持）</h3>
     <table>
       <tr><th>層級</th><th>控制</th></tr>
-      <tr><td>應用程式</td><td>Agent 不 publish host port；Portal↔Agent HMAC；CSV/store 邊界；Web CSRF/CSP/Session</td></tr>
+      <tr><td>應用程式</td><td>Agent 不 publish host port；Portal↔Agent HMAC；CSV/store 邊界；Web CSRF/CSP/Session；Phase 3 登入限制／draft 加密／job 擁有權</td></tr>
       <tr><td>網路</td><td>管理 VLAN 隔離；Firewall 限制 Portal 來源 IP</td></tr>
       <tr><td>營運</td><td>設備管理 IP 固定；RBAC；audit；限制 <code>store/</code> 主機存取</td></tr>
     </table>

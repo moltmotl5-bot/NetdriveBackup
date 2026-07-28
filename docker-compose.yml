@@ -70,6 +70,12 @@ services:
         condition: service_healthy
     networks:
       - nccm
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: "2.0"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8501/health"]
       interval: 30s

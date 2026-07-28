@@ -56,6 +56,8 @@ docker compose up -d --build
 | **Agent 網路隔離** | Production `docker-compose.yml` 不 publish Agent port；僅 Portal 容器可連 |
 | **HMAC 認證** | Portal 呼叫 Agent `/api/v1/connect`、`/cmd`、`/probe` 須帶 `X-NCCM-*` 簽章 |
 | **Web 安全** | CSRF、CSP、Session `SameSite=Strict`、登入後輪換 session |
+| **Phase 3 平台** | Break-glass 預設關閉、登入速率限制、排程 draft 密碼加密、備份 job 擁有權、audit 脫敏 |
+| **容器強化** | Portal 非 root（uid 1000）、`no-new-privileges`、`cap_drop: ALL`、資源上限 |
 | **CSV / store** | Site/IP/Port 驗證；store 路徑邊界；retention 兩段式確認 |
 
 ### PR3 bypass（已知風險接受）
@@ -133,6 +135,8 @@ curl -s http://127.0.0.1:8000/health
 | `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS` | Web 登入 |
 | **`NCCM_AGENT_HMAC_SECRET`** | **必填** — Portal ↔ Agent HMAC 共用密鑰 |
 | **`NCCM_SESSION_SECRET`** | **必填** — Web Session / CSRF 簽章 |
+| `NCCM_BREAK_GLASS` | 可選 — `1` 時允許 `.env` 管理員緊急登入（預設關閉） |
+| `NCCM_LOGIN_MAX_FAILURES` | 可選 — 登入失敗次數上限（預設 8） |
 | `NCCM_NETDRIVER_URL` | Portal → Agent（Compose 預設 `http://netdriver-agent:8000`） |
 | `NCCM_STORE_DIR` | 備份根目錄（容器內 `/data/store` → `./store`） |
 | `NCCM_ALLOWED_SSH_PORTS` | 可選 — CSV Port allowlist（預設 `22,2222`） |

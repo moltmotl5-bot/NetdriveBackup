@@ -14,6 +14,8 @@ from nccm.models import BackupResult, DeviceRow
 class BackupJob:
     job_id: str
     status: str  # queued | running | done | failed
+    owner_uid: int = 0
+    owner_username: str = ""
     logs: list[str] = field(default_factory=list)
     result_run_id: str | None = None
     results: list[BackupResult] | None = None
@@ -64,6 +66,14 @@ def get_job(job_id: str) -> BackupJob | None:
         return _jobs.get(job_id)
 
 
+def job_accessible(job: BackupJob, *, uid: int, role: str) -> bool:
+    if role == "admin":
+        return True
+    if uid <= 0:
+        return False
+    return job.owner_uid == uid
+
+
 def start_backup_job_async(
     devices: list[DeviceRow],
     *,
@@ -71,9 +81,16 @@ def start_backup_job_async(
     password: str,
     enable_password: str = "",
     agent_url: str | None = None,
+    owner_uid: int = 0,
+    owner_username: str = "",
 ) -> str:
     job_id = str(uuid.uuid4())
-    job = BackupJob(job_id=job_id, status="queued")
+    job = BackupJob(
+        job_id=job_id,
+        status="queued",
+        owner_uid=int(owner_uid),
+        owner_username=(owner_username or "").strip()[:128],
+    )
     with _jobs_lock:
         _jobs[job_id] = job
     _prune_jobs()

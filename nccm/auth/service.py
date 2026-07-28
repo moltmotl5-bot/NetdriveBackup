@@ -4,6 +4,7 @@ import os
 from typing import Literal
 
 from nccm.auth import db as auth_db
+from nccm.auth.break_glass import break_glass_enabled
 from nccm.auth.passwords import (
     assert_password_policy,
     hash_password,
@@ -239,7 +240,7 @@ def authenticate(username: str, password: str) -> auth_db.PortalUser | None:
         _touch_last_login(u.id)
         return get_user_by_id(u.id)
 
-    if _verify_env_login(name, password):
+    if break_glass_enabled() and _verify_env_login(name, password):
         return auth_db.PortalUser(
             id=0,
             username=name,
