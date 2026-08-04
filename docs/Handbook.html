@@ -51,7 +51,7 @@
       <tr><th>元件</th><th>預設容器</th><th>職責</th></tr>
       <tr><td>Portal</td><td><code>nccm-portal</code></td><td>登入、備份 UI、庫存、排程、API</td></tr>
       <tr><td>NetDriver Agent</td><td><code>nccm-netdriver-agent</code></td><td>SSH 連線、廠牌 plugin、探測</td></tr>
-      <tr><td>資料</td><td>主機 <code>./store</code></td><td>快照與索引（請持久化備份）</td></tr>
+      <tr><td>資料</td><td>主機 <code>./store</code></td><td>快照、索引、使用者與排程 DB（請持久化備份；須 uid <strong>1000</strong> 可寫）</td></tr>
     </table>
     <p>支援廠牌：<strong>Cisco</strong>（IOS / NX-OS）、<strong>Huawei CE</strong>、<strong>Fortinet FortiGate</strong>。<strong>不支援 WLC</strong>。</p>
   </section>
@@ -66,13 +66,16 @@ python3 -c "import secrets; print('NCCM_AGENT_HMAC_SECRET=' + secrets.token_hex(
 # 編輯 NCCM_ADMIN_PASS（至少 12 字元）
 chmod 600 .env
 mkdir -p store
+# Portal 容器以 uid 1000 執行，store 須可寫入
+sudo chown -R 1000:1000 store
 docker compose up -d --build</code></pre>
+    <div class="warn"><strong><code>store/</code> 權限：</strong>Compose 將主機 <code>./store</code> 掛載至容器 <code>/data/store</code>。Portal 以 uid <strong>1000</strong> 讀寫（含 <code>portal_auth.db</code>、<code>schedules.db</code>、備份快照、<code>index.db</code>）。新安裝或自舊版升級後請先 <code>chown -R 1000:1000 store</code>，否則可能無法登入、排程頁錯誤或 Portal 反覆重啟。</div>
     <table>
       <tr><th>URL</th><th>用途</th></tr>
       <tr><td><code>http://localhost:8501/login</code></td><td>Portal 登入</td></tr>
       <tr><td><code>http://localhost:8501/help</code></td><td>本手冊</td></tr>
     </table>
-    <p class="tip">Agent API 預設不對外開 port，僅 Portal 容器在 Docker 內部網路連線。本機除錯 Agent 請使用 <code>docker-compose.dev.yml</code>（見 README）。</p>
+    <p class="tip">Agent API 預設不對外開 port，僅 Portal 容器在 Docker 內部網路連線。本機除錯 Agent 請見「疑難排解 → Agent 本機除錯」。</p>
     <p>檢查：</p>
     <pre><code>docker compose ps
 docker compose logs -f portal
@@ -84,7 +87,7 @@ curl -s http://localhost:8501/health</code></pre>
 
   <h2 id="login">登入與角色</h2>
   <section class="block">
-    <p>首次啟動以 <code>.env</code> 的 <code>NCCM_ADMIN_USER</code>／<code>NCCM_ADMIN_PASS</code> 登入後，系統會<strong>強制變更密碼</strong>。之後日常請用 admin 建立的帳號；僅改 <code>.env</code> 不會更新已存在使用者的密碼。</p>
+    <p>首次以 <code>.env</code> bootstrap 登入後須<strong>強制變更密碼</strong>。之後日常請用 admin 建立的帳號；僅改 <code>.env</code> 不會更新已存在使用者的密碼。所有已登入角色可從側欄「<strong>使用手冊</strong>」或 <code>/help</code> 開啟本頁。</p>
     <table>
       <tr><th>角色</th><th>側欄可見</th><th>權限摘要</th></tr>
       <tr>
@@ -142,8 +145,10 @@ curl -s http://localhost:8501/health</code></pre>
       <tr><td><code>NCCM_NETDRIVER_URL</code></td><td>Portal 連 Agent（Compose 內 <code>http://netdriver-agent:8000</code>）</td></tr>
       <tr><td><code>NCCM_STORE_DIR</code></td><td>備份根目錄（容器 <code>/data/store</code> → <code>./store</code>）</td></tr>
       <tr><td><code>NCCM_PORT</code></td><td>Portal 對外埠（預設 8501）</td></tr>
+      <tr><td><code>NCCM_ALLOWED_SSH_PORTS</code></td><td>可選 — CSV Port allowlist（預設 <code>22,2222</code>）</td></tr>
+      <tr><td><code>NCCM_RETENTION_MAX_DELETE</code></td><td>可選 — 單次 retention 最多刪除筆數（預設 500）</td></tr>
     </table>
-    <p class="tip">設備 SSH 帳密在 Web「批次備份」或「排程備份」表單輸入，<strong>不寫入</strong> <code>.env</code>。</p>
+    <p class="tip">設備 SSH 帳密在 Web「批次備份」或「排程備份」表單輸入，<strong>不寫入</strong> <code>.env</code>。完整變數見專案 <code>.env.example</code>。</p>
   </section>
 
   <h2 id="backup">批次備份</h2>
@@ -171,7 +176,7 @@ curl -s http://localhost:8501/health</code></pre>
       <li>列出已索引設備；<strong>Cisco Stack</strong>、<strong>Huawei iStack</strong>、<strong>FortiGate HA</strong> 展開為每台實體一行（含 Stack#、Role、序號）。</li>
       <li>選單一設備可檢視快照版本列表、各版 artifact。</li>
       <li>選<strong>兩個版本</strong>可檢視 <strong>Config Diff</strong>（文字 diff）。</li>
-      <li>admin／operator：<strong>下載 config</strong>、<strong>重建索引</strong>（掃描整個 store）、<strong>快照保留</strong>（先 dry-run 預覽刪除筆數，再執行清理）。</li>
+      <li>admin／operator：<strong>下載 config</strong>、<strong>重建索引</strong>（掃描整個 store）、<strong>快照保留</strong>（須先「預覽刪除」再「確認執行清理」；確認 token 約 5 分鐘有效）。</li>
     </ul>
     <div class="tip">Stack／HA 展開異常時：對設備重新備份 →「重建索引」→ 若程式已更新請 <code>docker compose up -d --build portal</code>。</div>
   </section>
@@ -304,20 +309,28 @@ curl -sS -H "X-API-Key: $NCCM_API_TOKEN" \
   <h2 id="docker-update">Docker 更新</h2>
   <section class="block">
     <div class="warn">任何更新前請先備份主機 <code>./store</code> 目錄。</div>
-    <h3>日常更新（程式小改）</h3>
-    <pre><code>git pull
-docker compose build --no-cache
-docker compose up -d</code></pre>
-    <h3>完整更新（升級版本或行為異常）</h3>
-    <pre><code>docker compose down
-git pull
-docker compose build --no-cache
-docker compose up -d --build</code></pre>
+    <h3>建議更新流程</h3>
+    <pre><code># 1. 備份資料
+tar -czf store-backup-$(date +%Y%m%d).tar.gz store/
+
+# 2. 拉程式並重建
+git pull origin main
+docker compose build --no-cache portal
+docker compose up -d --build
+
+# 3. 修正 store 擁有者（自舊版升級時必做；若已是 1000:1000 可略過）
+sudo chown -R 1000:1000 store
+
+# 4. 確認
+docker compose ps
+curl -s http://localhost:8501/health</code></pre>
+    <p>自舊版升級時，若 <code>./store</code> 仍為 root 擁有，Portal 可能登入失敗、排程頁錯誤或容器反覆重啟；執行 <code>chown</code> 後再 <code>docker compose up -d portal</code>。</p>
     <h3>Agent unhealthy／volume 權限問題</h3>
     <pre><code>docker compose down -v
-git pull
+git pull origin main
 docker compose build --no-cache
-docker compose up -d --build</code></pre>
+docker compose up -d --build
+sudo chown -R 1000:1000 store</code></pre>
     <p><code>-v</code> 會刪除 Compose volumes；<strong>不會</strong>刪除 bind mount 的 <code>./store</code>，但仍請確認 store 已備份。</p>
     <h3>僅更新單一服務</h3>
     <pre><code># 僅 Agent
@@ -325,13 +338,9 @@ docker compose build --no-cache netdriver-agent
 docker compose up -d netdriver-agent
 
 # 僅 Portal
-docker compose build portal
+docker compose build --no-cache portal
 docker compose up -d portal</code></pre>
-    <h3>更新後檢查</h3>
-    <pre><code>docker compose ps
-docker compose logs -f netdriver-agent
-curl -s http://localhost:8501/health</code></pre>
-    <p>若索引結構或 hostname 解析有變，請於 Web「設備總表」按 <strong>重建索引</strong>。升級後若無法登入，可執行 <code>sudo chown -R 1000:1000 store</code> 再重建 Portal。</p>
+    <p>若索引結構或 hostname 解析有變，請於 Web「設備總表」按 <strong>重建索引</strong>。</p>
   </section>
 
   <h2 id="csv">設備 CSV</h2>
@@ -343,10 +352,10 @@ hq,10.1.1.20,fortinet,22
 dc,10.2.1.5,huawei,22</code></pre>
     <table>
       <tr><th>欄位</th><th>說明</th></tr>
-      <tr><td>Site</td><td>站點代碼，對應 store 目錄第一層</td></tr>
-      <tr><td>IP</td><td>管理 IP</td></tr>
-      <tr><td>Vendor</td><td><code>cisco</code>、<code>huawei</code>、<code>fortinet</code></td></tr>
-      <tr><td>Port</td><td>SSH 埠，通常 22</td></tr>
+      <tr><td>Site</td><td>站點代碼，對應 store 目錄第一層；<code>A–Z</code>／<code>a–z</code>／<code>0–9</code>／<code>.</code>／<code>_</code>／<code>-</code> 開頭，最長 64；不可含 <code>/</code>、<code>\</code>、<code>..</code></td></tr>
+      <tr><td>IP</td><td>合法 IPv4 或 IPv6</td></tr>
+      <tr><td>Vendor</td><td><code>cisco</code>、<code>huawei</code>、<code>fortinet</code>（WLC 不支援）</td></tr>
+      <tr><td>Port</td><td>1–65535；預設允許 <strong>22</strong>、<strong>2222</strong>（可選 <code>NCCM_ALLOWED_SSH_PORTS</code> 擴充）</td></tr>
       <tr><td>Model / Version</td><td>可選；省略則備份時自動辨識</td></tr>
     </table>
     <p>範例檔：專案根目錄 <code>DEMO-v3.csv</code>。</p>
@@ -356,18 +365,30 @@ dc,10.2.1.5,huawei,22</code></pre>
   <section class="block">
     <table>
       <tr><th>現象</th><th>建議</th></tr>
+      <tr><td><code>Set NCCM_AGENT_HMAC_SECRET in .env</code></td><td>在 <code>.env</code> 產生並設定 HMAC 密鑰，重啟 compose</td></tr>
+      <tr><td><code>Set NCCM_SESSION_SECRET in .env</code></td><td>在 <code>.env</code> 產生並設定 Session 密鑰，重啟 compose</td></tr>
+      <tr><td><strong>CSRF validation failed</strong></td><td>硬重新整理頁面；若經 HTTPS 反向代理請設 <code>NCCM_HTTPS=1</code>；本機 HTTP 請<strong>勿</strong>設 <code>NCCM_HTTPS=1</code></td></tr>
       <tr><td>側欄 Agent Offline</td><td><code>docker compose ps</code>；<code>docker compose logs netdriver-agent</code>；確認 healthcheck 通過</td></tr>
+      <tr><td>主機連不上 <code>:8000</code></td><td>預期行為；Agent 預設不 publish 至主機（見下方 Agent 本機除錯）</td></tr>
       <tr><td>備份全失敗</td><td>Agent 容器能否 SSH 至 CSV 的 IP:Port；帳密正確；看 SSE log</td></tr>
+      <tr><td>CSV 匯入被拒</td><td>檢查 Site 字元、IP 格式、Port 是否在 allowlist</td></tr>
       <tr><td>Huawei <code>Unsupported mode: login</code></td><td>請更新 Portal 映像（Huawei 需 <code>enable</code> 模式 payload）</td></tr>
       <tr><td>庫存缺設備／只有一台</td><td>同 Site+IP 需不同 port 或 hostname；按「重建索引」</td></tr>
       <tr><td>Stack／HA 展開不對</td><td>重新備份 → 重建索引 → rebuild portal</td></tr>
+      <tr><td>Retention 無法執行</td><td>須先按「預覽刪除」再按「確認執行清理」；token 5 分鐘有效</td></tr>
       <tr><td>排程一直 running</td><td>等 job 完成；更新至最新 main；必要時停用再啟用排程</td></tr>
       <tr><td>登入 <strong>Internal Server Error</strong></td><td><code>sudo chown -R 1000:1000 store</code> 後 <code>docker compose up -d --build portal</code></td></tr>
+      <tr><td>排程頁 <strong>Internal Server Error</strong></td><td>同上；多為 <code>store/schedules.db</code> 無寫入權限</td></tr>
+      <tr><td>Portal 反覆重啟</td><td><code>docker compose logs portal --tail 50</code>；確認 <code>.env</code> 已設 HMAC／Session 密鑰且已 rebuild 映像</td></tr>
       <tr><td>使用手冊無樣式／排版異常</td><td>重建 Portal 映像；確認 <code>/static/handbook.css</code> 可載入</td></tr>
       <tr><td>Agent unhealthy</td><td><code>docker compose down -v</code> 後重建（見 Docker 更新）</td></tr>
       <tr><td>API 401</td><td>token 過期或打錯；至 API Token 頁重建</td></tr>
       <tr><td>API 500</td><td>尚無啟用中的 API Token</td></tr>
     </table>
+    <h3>Agent 本機除錯</h3>
+    <p>僅在本機需要直接連 Agent API 時使用（綁定 <code>127.0.0.1</code>，不可用於 production）：</p>
+    <pre><code>docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+curl -s http://127.0.0.1:8000/health</code></pre>
   </section>
 
   <p class="lead handbook-footer-note">開發者技術規格：<code>docs/NCCM-v3-spec.md</code> · 專案 <code>README.md</code></p>
