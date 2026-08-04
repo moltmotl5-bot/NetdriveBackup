@@ -48,34 +48,63 @@ def _drafts_db_path() -> Path:
     return store_dir() / "schedules.db"
 
 
+def _draft_table_ready(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='schedule_drafts'"
+    ).fetchone()
+    return row is not None
+
+
+def _ensure_draft_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schedule_drafts (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            interval_days INTEGER NOT NULL DEFAULT 1,
+            username TEXT NOT NULL DEFAULT '',
+            password TEXT NOT NULL DEFAULT '',
+            enable_password TEXT NOT NULL DEFAULT '',
+            csv_filename TEXT NOT NULL DEFAULT '',
+            csv_original TEXT NOT NULL,
+            probe_json TEXT NOT NULL,
+            edit_schedule_id INTEGER,
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
+
 @contextmanager
 def _connect() -> Iterator[sqlite3.Connection]:
     path = _drafts_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise sqlite3.OperationalError(str(exc)) from exc
     conn = sqlite3.connect(str(path), timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS schedule_drafts (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                interval_days INTEGER NOT NULL DEFAULT 1,
-                username TEXT NOT NULL DEFAULT '',
-                password TEXT NOT NULL DEFAULT '',
-                enable_password TEXT NOT NULL DEFAULT '',
-                csv_filename TEXT NOT NULL DEFAULT '',
-                csv_original TEXT NOT NULL,
-                probe_json TEXT NOT NULL,
-                edit_schedule_id INTEGER,
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.commit()
+        try:
+            _ensure_draft_schema(conn)
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            readonly = "readonly" in msg or "read-only" in msg or "unable to open database" in msg
+            if readonly and _draft_table_ready(conn):
+                pass
+            else:
+                raise ValueError(
+                    "排程資料庫無法寫入；請確認 store 目錄為 uid 1000 可寫（sudo chown -R 1000:1000 store）"
+                ) from exc
         yield conn
-        conn.commit()
+        try:
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "readonly" not in msg and "read-only" not in msg:
+                raise
     finally:
         conn.close()
 

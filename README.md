@@ -154,6 +154,7 @@ pytest
 | `Set NCCM_SESSION_SECRET in .env` | 在 `.env` 產生並設定，重啟 compose |
 | **CSRF validation failed** | 硬重新整理頁面；若經 HTTPS 反向代理請設 `NCCM_HTTPS=1`；本機 HTTP 請勿設 `NCCM_HTTPS=1` |
 | 登入 **Internal Server Error** | `sudo chown -R 1000:1000 store` 後 `docker compose up -d --build` |
+| 排程頁 **Internal Server Error** | 同上；多為 `store/schedules.db` 無寫入權限 |
 | Portal 反覆重啟 | `docker compose logs portal --tail 50`；常見為映像未重建或 `.env` 缺 `NCCM_SESSION_SECRET`／`NCCM_AGENT_HMAC_SECRET` |
 | 使用手冊排版異常 | 重建 Portal 映像以取得 `/static/handbook.css` |
 | Agent 離線 | `docker compose logs netdriver-agent`；確認 Agent 容器 healthy |

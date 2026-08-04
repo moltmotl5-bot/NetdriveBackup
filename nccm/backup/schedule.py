@@ -108,17 +108,49 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     )
 
 
-@contextmanager
-def _connect() -> Iterator[sqlite3.Connection]:
-    path = schedules_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=30)
-    conn.row_factory = sqlite3.Row
+def _db_readonly_error(exc: sqlite3.OperationalError) -> bool:
+    msg = str(exc).lower()
+    return "readonly" in msg or "read-only" in msg or "unable to open database" in msg
+
+
+def _schema_ready(conn: sqlite3.Connection) -> bool:
+    rows = conn.execute(
+        """
+        SELECT name FROM sqlite_master
+        WHERE type='table' AND name IN ('schedules', 'schedule_runs')
+        """
+    ).fetchall()
+    names = {str(r[0]) for r in rows}
+    return "schedules" in names and "schedule_runs" in names
+
+
+def _apply_schema(conn: sqlite3.Connection) -> None:
     try:
         _ensure_schema(conn)
         conn.commit()
+    except sqlite3.OperationalError as exc:
+        if _db_readonly_error(exc) and _schema_ready(conn):
+            return
+        raise
+
+
+@contextmanager
+def _connect() -> Iterator[sqlite3.Connection]:
+    path = schedules_db_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise sqlite3.OperationalError(str(exc)) from exc
+    conn = sqlite3.connect(str(path), timeout=30)
+    conn.row_factory = sqlite3.Row
+    try:
+        _apply_schema(conn)
         yield conn
-        conn.commit()
+        try:
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            if not _db_readonly_error(exc):
+                raise
     finally:
         conn.close()
 
@@ -166,8 +198,9 @@ def _interval_days_from_row(r: sqlite3.Row) -> int:
 
 
 def _row(r: sqlite3.Row) -> Schedule:
-    password_enc = str(r["password_enc"] or "")
-    enable_enc = str(r["enable_password_enc"] or "")
+    keys = r.keys()
+    password_enc = str(r["password_enc"] or "") if "password_enc" in keys else ""
+    enable_enc = str(r["enable_password_enc"] or "") if "enable_password_enc" in keys else ""
     device_count = int(r["device_count"] or 0) if "device_count" in r.keys() else 0
     if device_count <= 0:
         try:
@@ -180,7 +213,7 @@ def _row(r: sqlite3.Row) -> Schedule:
         csv_text=str(r["csv_text"] or ""),
         interval_days=_interval_days_from_row(r),
         enabled=bool(r["enabled"]),
-        username=str(r["username"] or ""),
+        username=str(r["username"] or "") if "username" in keys else "",
         password_set=bool(password_enc.strip()),
         enable_password_set=bool(enable_enc.strip()),
         device_count=device_count,

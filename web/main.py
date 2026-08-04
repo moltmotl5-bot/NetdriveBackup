@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import sqlite3
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
@@ -749,10 +750,25 @@ async def schedules_page(
     message: str = "",
     error: str = "",
 ):
+    try:
+        ctx = _schedules_ctx(request, message=message or None, error=error or None)
+    except sqlite3.OperationalError:
+        ctx = _ctx(
+            request,
+            "schedules",
+            schedules=[],
+            schedule_runs=[],
+            can_operate=role_can_operate(session_role(request)),
+            secrets_configured=False,
+            secrets_key_source=None,
+            message=message or None,
+            error=error
+            or "無法存取排程資料庫；請執行 sudo chown -R 1000:1000 store 後重建 Portal",
+        )
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _schedules_ctx(request, message=message or None, error=error or None),
+        ctx,
     )
 
 
