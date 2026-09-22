@@ -11,9 +11,13 @@
 ```bash
 git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
-cp .env.example .env    # 設定 NCCM_ADMIN_PASS（≥12 字元）
+cp .env.example .env
+python3 -c "import secrets; print('NCCM_AGENT_HMAC_SECRET=' + secrets.token_hex(32)); print('NCCM_SESSION_SECRET=' + secrets.token_hex(32))" >> .env
+# 編輯 .env：設定 NCCM_ADMIN_PASS（≥12 字元）
 chmod 600 .env
 mkdir -p store
+# Portal 容器以 uid 1000 執行，store 須可寫入
+sudo chown -R 1000:1000 store
 docker compose up -d --build
 ```
 
@@ -21,11 +25,35 @@ docker compose up -d --build
 |------|------|
 | http://localhost:8501/login | Portal 登入 |
 | http://localhost:8501/help | **使用手冊**（登入後側欄也可進入） |
-| http://localhost:8000/docs | Agent API（除錯） |
 
 檢查：`docker compose ps` · `curl -s http://localhost:8501/health`
 
-更新：`git pull && docker compose up -d --build`（重大變更前請備份 `./store`）
+首次登入以 `.env` 帳密；成功後須立即變更密碼。側欄 Agent 狀態為 **Online** 表示 Portal 可連 Agent。
+
+> **`store/` 權限：** Compose 將主機 `./store` 掛載至容器 `/data/store`。Portal 以 **uid 1000** 讀寫此目錄（含 `portal_auth.db`、備份快照、索引）。新安裝或 clone 後請先 `chown -R 1000:1000 store`，否則可能無法登入或 Portal 異常。
+
+---
+
+## 更新
+
+```bash
+# 1. 備份資料
+tar -czf store-backup-$(date +%Y%m%d).tar.gz store/
+
+# 2. 拉程式並重建
+git pull origin main
+docker compose build --no-cache portal
+docker compose up -d --build
+
+# 3. 修正 store 擁有者（自舊版升級時必做；若已是 1000:1000 可略過）
+sudo chown -R 1000:1000 store
+
+# 4. 確認
+docker compose ps
+curl -s http://localhost:8501/health
+```
+
+自舊版升級時，若 `./store` 仍為 **root** 擁有，Portal 可能登入失敗或容器反覆重啟；執行上述 `chown` 後再 `docker compose up -d portal` 即可。
 
 ---
 
