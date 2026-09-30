@@ -20,25 +20,27 @@
     </form>
 
     <div class="switchmap-picker">
-      <label for="switchmap-device">Cisco 設備</label>
-      <select id="switchmap-device" name="device_id">
-        <option value="">— 選擇 —</option>
-        {% for r in rows %}
-        <option value="{{ r.device_id }}"
-                data-site="{{ r.site }}"
-                data-vendor="{{ r.vendor }}"
-                {% if device_id == r.device_id %}selected{% endif %}>
-          {{ r.site }} · {{ r.hostname }} ({{ r.ip }})
-        </option>
-        {% endfor %}
-      </select>
+      <label for="switchmap-device">Cisco 設備
+        <select id="switchmap-device" name="device_id">
+          <option value="">— 選擇 —</option>
+          {% for r in rows %}
+          <option value="{{ r.device_id }}"
+                  data-site="{{ r.site }}"
+                  data-vendor="{{ r.vendor }}"
+                  {% if device_id == r.device_id %}selected{% endif %}>
+            {{ r.site }} · {{ r.hostname }} ({{ r.ip }})
+          </option>
+          {% endfor %}
+        </select>
+      </label>
 
-      <label for="switchmap-snapshot">快照</label>
-      <select id="switchmap-snapshot" name="snapshot_ts">
-        {% for v in snapshot_versions %}
-        <option value="{{ v }}" {% if snapshot_ts == v %}selected{% endif %}>{{ v }}</option>
-        {% endfor %}
-      </select>
+      <label for="switchmap-snapshot">快照
+        <select id="switchmap-snapshot" name="snapshot_ts">
+          {% for v in snapshot_versions %}
+          <option value="{{ v }}" {% if snapshot_ts == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </label>
 
       <button type="button" id="switchmap-load" class="btn-primary">載入前面板</button>
       <button type="button" id="switchmap-download" class="btn-secondary" disabled>下載 Excel 埠位圖（.xlsx）</button>
@@ -61,9 +63,9 @@
     <div id="switchmap-preview"></div>
   </section>
 
-  <footer class="switchmap-footer muted">
+  <p class="switchmap-footer muted">
     輸出為標準 .xlsx（無 VBA 巨集、無公式、無外部連結）。解析在本機瀏覽器完成。
-  </footer>
+  </p>
 </div>
 {% endblock %}
 {% block scripts %}

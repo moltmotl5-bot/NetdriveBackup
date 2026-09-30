@@ -63,7 +63,9 @@ def test_switchmap_page_loads(tmp_path, monkeypatch):
     r = client.get("/switchmap")
     assert r.status_code == 200
     assert "SwitchMap" in r.text
+    assert "SwitchMap — NCCM v3" in r.text
     assert "/static/switchmap/parse.js" in r.text
+    assert "/static/nccm.css" in r.text
 
 
 def test_switchmap_page_with_cisco_inventory_rows(tmp_path, monkeypatch):
@@ -106,3 +108,7 @@ def test_vlan_colors_api(tmp_path, monkeypatch):
     data = r.json()
     assert "colors" in data
     assert "1" in data["colors"]
+    from nccm.switchmap import vlan_colors as vc
+
+    for entry in data["colors"].values():
+        assert vc.pair_meets_wcag_aa(entry["fill"], entry["text"])

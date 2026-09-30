@@ -28,6 +28,57 @@ var SwitchDraw = (typeof globalThis !== 'undefined' ? globalThis : this).SwitchD
   var STATUS_UNKNOWN_FILL = '#F2F3F4';
   var STATUS_UNKNOWN_TEXT = '#566573';
 
+  function hexToRgb(hex) {
+    var h = String(hex || '').replace('#', '');
+    if (h.length !== 6) {
+      return { r: 0, g: 0, b: 0 };
+    }
+    return {
+      r: parseInt(h.slice(0, 2), 16) / 255,
+      g: parseInt(h.slice(2, 4), 16) / 255,
+      b: parseInt(h.slice(4, 6), 16) / 255
+    };
+  }
+
+  function relativeLuminance(rgb) {
+    function channel(c) {
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    var r = channel(rgb.r);
+    var g = channel(rgb.g);
+    var b = channel(rgb.b);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  function contrastRatio(fillHex, textHex) {
+    var l1 = relativeLuminance(hexToRgb(fillHex));
+    var l2 = relativeLuminance(hexToRgb(textHex));
+    var lighter = Math.max(l1, l2);
+    var darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  function pairMeetsWcagAa(fillHex, textHex) {
+    return contrastRatio(fillHex, textHex) >= 4.5;
+  }
+
+  function bestTextColorForFill(fillHex) {
+    var candidates = ['#FFFFFF', '#1A1A1A', '#000000'];
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (pairMeetsWcagAa(fillHex, candidates[i])) {
+        return candidates[i];
+      }
+    }
+    return '#1A1A1A';
+  }
+
+  function textColorForBackground(fillHex, preferred) {
+    if (preferred && pairMeetsWcagAa(fillHex, preferred)) {
+      return preferred;
+    }
+    return bestTextColorForFill(fillHex);
+  }
+
   function createColorRegistry(device) {
     var vlanIds = {};
     Object.keys(device.vlans || {}).forEach(function (id) {
@@ -80,7 +131,7 @@ var SwitchDraw = (typeof globalThis !== 'undefined' ? globalThis : this).SwitchD
         var entry = serverMap[id];
         if (entry && entry.fill) {
           base.vlan[id] = entry.fill;
-          base.vlanText[id] = entry.text || '#1A1A1A';
+          base.vlanText[id] = textColorForBackground(entry.fill, entry.text);
         }
       });
     }
@@ -146,10 +197,9 @@ var SwitchDraw = (typeof globalThis !== 'undefined' ? globalThis : this).SwitchD
     var reg = registry || { vlan: {}, special: { unknown: '#D5D8DC', trunk: TRUNK_COLOR, shutdown: SHUTDOWN_COLOR } };
     var fill = portVlanColor(port, reg);
     var status = portStatusDisplay(port);
-    var vlanText = '#1A1A1A';
-    if (port.accessVlan && reg.vlanText && reg.vlanText[port.accessVlan]) {
-      vlanText = reg.vlanText[port.accessVlan];
-    }
+    var preferredVlanText =
+      port.accessVlan && reg.vlanText ? reg.vlanText[port.accessVlan] : null;
+    var vlanText = textColorForBackground(fill, preferredVlanText);
     return {
       fill: fill,
       text: status.textColor,
@@ -238,7 +288,10 @@ var SwitchDraw = (typeof globalThis !== 'undefined' ? globalThis : this).SwitchD
         id: id,
         name: device.vlans[id] ? device.vlans[id].name : ('VLAN' + id),
         color: registry.vlan[id],
-        textColor: (registry.vlanText && registry.vlanText[id]) || '#1A1A1A',
+        textColor: textColorForBackground(
+          registry.vlan[id],
+          registry.vlanText && registry.vlanText[id]
+        ),
         portCount: counts[id] || 0
       };
     });
@@ -248,6 +301,7 @@ var SwitchDraw = (typeof globalThis !== 'undefined' ? globalThis : this).SwitchD
         id: 'trunk',
         name: 'Trunk',
         color: registry.special.trunk,
+        textColor: textColorForBackground(registry.special.trunk, '#FFFFFF'),
         portCount: counts.trunk
       });
     }
@@ -265,6 +319,9 @@ var SwitchDraw = (typeof globalThis !== 'undefined' ? globalThis : this).SwitchD
   SD.portLabel = portLabel;
   SD.buildFaceplateGroups = buildFaceplateGroups;
   SD.buildVlanSummary = buildVlanSummary;
+  SD.bestTextColorForFill = bestTextColorForFill;
+  SD.textColorForBackground = textColorForBackground;
+  SD.pairMeetsWcagAa = pairMeetsWcagAa;
   SD.TRUNK_COLOR = TRUNK_COLOR;
   SD.SHUTDOWN_COLOR = SHUTDOWN_COLOR;
 })(SwitchDraw);

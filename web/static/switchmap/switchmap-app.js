@@ -137,6 +137,28 @@
       return;
     }
     summaryEl.innerHTML = devices.map(function (device) {
+      var legend = SwitchDraw.buildVlanSummary(device);
+      var legendHtml = legend.length
+        ? [
+            '<ul class="vlan-legend">',
+            legend.map(function (item) {
+              var label = item.id === 'trunk' ? 'Trunk' : ('VLAN ' + item.id);
+              var textColor = item.textColor || SwitchDraw.bestTextColorForFill(item.color);
+              return [
+                '<li class="vlan-swatch" style="background:',
+                item.color,
+                ';color:',
+                textColor,
+                '">',
+                escapeHtml(label),
+                ' (',
+                item.portCount,
+                ')</li>'
+              ].join('');
+            }).join(''),
+            '</ul>'
+          ].join('')
+        : '';
       return [
         '<article class="summary-card">',
         '<h2>' + escapeHtml(device.hostname) + '</h2>',
@@ -147,6 +169,7 @@
         '<li>Shutdown：' + device.counts.shutdown + '</li>',
         '<li>VLAN 數：' + Object.keys(device.vlans).length + '</li>',
         '</ul>',
+        legendHtml,
         '</article>'
       ].join('');
     }).join('');

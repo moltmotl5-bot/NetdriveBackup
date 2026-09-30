@@ -106,6 +106,19 @@ def best_text_color_for_fill(fill_hex: str) -> str:
     return "#1A1A1A"
 
 
+def ensure_wcag_pair(fill_hex: str, text_hex: str | None = None) -> tuple[str, str]:
+    """Return fill + text with WCAG AA contrast (dark fill → light text, etc.)."""
+    fill = (fill_hex or "").strip() or "#79706E"
+    if not fill.startswith("#"):
+        fill = f"#{fill}"
+    text = (text_hex or "").strip() or best_text_color_for_fill(fill)
+    if not text.startswith("#"):
+        text = f"#{text}"
+    if pair_meets_wcag_aa(fill, text):
+        return fill, text
+    return fill, best_text_color_for_fill(fill)
+
+
 def init_vlan_color_db() -> None:
     path = auth_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -180,6 +193,16 @@ def assign_vlan_colors(site: str, vlan_ids: list[int | str]) -> dict[str, dict[s
 
         for vid in normalized:
             if vid in existing:
+                fill, text = ensure_wcag_pair(
+                    existing[vid]["fill"], existing[vid]["text"]
+                )
+                if fill != existing[vid]["fill"] or text != existing[vid]["text"]:
+                    conn.execute(
+                        "UPDATE vlan_color_assignments SET fill_hex = ?, text_hex = ? "
+                        "WHERE site = ? AND vlan_id = ?",
+                        (fill, text, site_key, vid),
+                    )
+                    existing[vid] = {"fill": fill, "text": text}
                 result[str(vid)] = existing[vid]
                 continue
             pair = _next_free_pair(used)
