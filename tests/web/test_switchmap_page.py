@@ -66,6 +66,38 @@ def test_switchmap_page_loads(tmp_path, monkeypatch):
     assert "/static/switchmap/parse.js" in r.text
 
 
+def test_switchmap_page_with_cisco_inventory_rows(tmp_path, monkeypatch):
+    """Regression: neighbor_device_rows returns dicts; attribute access caused HTTP 500."""
+    client = _reload_app(tmp_path, monkeypatch)
+    _login(client)
+    cisco_row = {
+        "device_key": "lab|10.0.0.1|sw1|22",
+        "device_id": "lab::10.0.0.1::22::sw1",
+        "site": "lab",
+        "ip": "10.0.0.1",
+        "port": 22,
+        "hostname": "sw1",
+        "vendor": "cisco",
+        "sw_version": "",
+        "model_summary": "",
+        "serial_summary": "",
+        "stack_switch": False,
+        "stack_role": "",
+        "cluster_type": "",
+        "is_config_anchor": True,
+        "neighbor_count": 0,
+        "cdp_status": "",
+        "lldp_status": "",
+    }
+    with mock.patch(
+        "nccm.inventory.neighbors.neighbor_device_rows",
+        return_value=([cisco_row], {}),
+    ):
+        r = client.get("/switchmap")
+    assert r.status_code == 200
+    assert "sw1" in r.text
+
+
 def test_vlan_colors_api(tmp_path, monkeypatch):
     client = _reload_app(tmp_path, monkeypatch)
     _login(client)

@@ -1332,7 +1332,7 @@ async def switchmap_page(
     from nccm.switchmap.device import switchmap_context_for_device
 
     rows, _ = neighbor_device_rows(query=q, site=site, vendor=vendor or "cisco")
-    rows = [r for r in rows if normalize_vendor(r.vendor) == "cisco"]
+    rows = [r for r in rows if normalize_vendor(r["vendor"]) == "cisco"]
     sites = list_sites()
     vendors = list_vendors()
     snapshot_versions: list[str] = []
