@@ -61,6 +61,7 @@
 - SwitchDraw：https://github.com/moltmotl5-bot/switchdraw  
 - NCCM Interface Map 程式：`nccm/parsers/interface_map.py`、`web/templates/interfaces.html`  
 - Cisco 備份指令定義：`nccm/profiles/__init__.py`
+- **SwitchMap 分階段整合計畫：** [switchmap-integration-plan.md](./switchmap-integration-plan.md)
 
 ---
 
