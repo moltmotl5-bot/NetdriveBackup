@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from nccm.storage.index_db import get_snapshot, list_snapshots_for_device
+from nccm.storage.store_paths import resolve_snapshot_file
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,10 @@ def read_snapshot_config(snapshot_id: int) -> tuple[str, str]:
     snap = get_snapshot(snapshot_id)
     if not snap:
         return "", ""
-    path = Path(snap.snapshot_path) / "config.txt"
+    try:
+        path = resolve_snapshot_file(snap.snapshot_path, "config.txt")
+    except Exception:
+        return "", f"{snap.created_at} (#{snap.id})"
     label = f"{snap.created_at} (#{snap.id})"
     if not path.is_file():
         return "", label

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from nccm.config import store_dir
+from nccm.storage.store_paths import resolve_inside_store
 
 
 def snapshot_timestamp() -> str:
@@ -18,7 +19,8 @@ def safe_hostname(name: str) -> str:
 
 
 def device_base(site: str, ip: str, hostname: str) -> Path:
-    return store_dir() / site / f"{ip}__{safe_hostname(hostname)}"
+    base = store_dir() / site / f"{ip}__{safe_hostname(hostname)}"
+    return resolve_inside_store(base, strict_exists=False)
 
 
 def write_snapshot(
@@ -36,6 +38,7 @@ def write_snapshot(
 ) -> Path:
     ts = snapshot_timestamp()
     snap = device_base(site, ip, hostname) / "snapshots" / ts
+    snap = resolve_inside_store(snap, strict_exists=False)
     snap.mkdir(parents=True, exist_ok=True)
     manifest_artifacts = []
     for name, content in artifacts.items():

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from nccm.backup.runner import _enable_password_for_vendor
 from nccm.models import NetDriverProfile
 from nccm.netdriver.client import NetDriverClient
@@ -52,11 +54,13 @@ def test_command_entry_shape():
     assert "login" not in huawei_entry
 
 
-def test_client_cmd_payload_huawei():
+def test_client_cmd_payload_huawei(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("NCCM_AGENT_HMAC_SECRET", "test-hmac-secret")
     captured: dict = {}
 
-    def fake_post(url, json=None, timeout=None):
-        captured["body"] = json
+    def fake_post(url, *, path, body, timeout):
+        captured["body"] = body
+        captured["path"] = path
 
         class R:
             status_code = 200
@@ -68,7 +72,7 @@ def test_client_cmd_payload_huawei():
 
     profile = NetDriverProfile("huawei", "ce", "8.0")
     client = NetDriverClient(base_url="http://127.0.0.1:8000")
-    with patch("nccm.netdriver.client.httpx.post", side_effect=fake_post):
+    with patch("nccm.netdriver.client.signed_post", side_effect=fake_post):
         client.cmd(
             ip="10.0.0.1",
             port=22,
@@ -81,3 +85,4 @@ def test_client_cmd_payload_huawei():
     cmd0 = captured["body"]["commands"][0]
     assert cmd0.get("mode") == "enable"
     assert "login" not in cmd0
+    assert captured["path"] == "/api/v1/cmd"

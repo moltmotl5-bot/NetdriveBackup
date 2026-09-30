@@ -32,14 +32,15 @@ def test_plan_keeps_newest(store_env):
     assert len(plan.candidates) == 3
     dry = ret.apply_retention(plan, dry_run=True)
     assert dry["would_delete"] == 3
-    out = ret.apply_retention(plan, dry_run=False)
+    token = ret.issue_retention_token(plan, device_id=None)
+    out = ret.apply_retention(plan, dry_run=False, confirm_token=token, device_id=None)
     assert out["deleted"] == 3
     snaps = idx.list_snapshots_for_device(did)
     assert len(snaps) == 2
 
 
 def _seed_snaps(idx, store: Path, device_id: str, n: int):
-    site_dir = store / "lab" / "10.0.0.1"
+    site_dir = store / "lab" / "10.0.0.1__LAB-SW1" / "snapshots"
     for i in range(n):
         snap = site_dir / f"2026-01-{i+1:02d}T00-00-00Z"
         snap.mkdir(parents=True)
@@ -51,7 +52,7 @@ def _seed_snaps(idx, store: Path, device_id: str, n: int):
             "hostname": "LAB-SW1",
             "vendor": "huawei",
             "status": "ok",
-            "ssh_port": 22,
+            "port": 22,
             "created_at": f"2026-01-{i+1:02d}T00:00:00Z",
         }
         idx.index_manifest(manifest, snap)

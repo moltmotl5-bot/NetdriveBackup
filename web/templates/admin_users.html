@@ -11,6 +11,7 @@
 <section class="panel">
   <h2>新增使用者</h2>
   <form method="post" action="/admin/users" class="admin-user-form">
+    {% include "_csrf.html" %}
     <label>帳號 <input name="username" required autocomplete="username" /></label>
     <label>密碼 <input name="password" type="password" required autocomplete="new-password" minlength="12" /></label>
     <label>角色

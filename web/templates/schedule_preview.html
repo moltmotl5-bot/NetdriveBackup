@@ -37,7 +37,8 @@
   <p><a href="/schedules" class="btn-secondary">返回</a></p>
   {% else %}
   <form method="post" action="/schedules/preview/{{ draft.id }}/confirm" class="inline-form"
-        onsubmit="return confirm('確認建立排程？將納入 {{ draft.ok_count }} 台設備（排除 {{ draft.fail_count }} 台失敗）。');">
+        data-confirm="確認建立排程？將納入 {{ draft.ok_count }} 台設備（排除 {{ draft.fail_count }} 台失敗）。">
+    {% include "_csrf.html" %}
     <button type="submit" class="btn-primary">確認建立排程</button>
   </form>
   <a href="/schedules" class="btn-secondary">取消</a>

@@ -12,7 +12,8 @@
         hx-get="/neighbors/partial/detail?device_key={{ r.device_key | urlencode }}"
         hx-target="#nb-detail"
         hx-swap="innerHTML"
-        onclick="document.getElementById('device_key_field').value='{{ r.device_key }}'">
+        data-pick-field="device_key_field"
+        data-pick-value="{{ r.device_key }}">
       <td>{{ r.site }}</td>
       <td>{{ r.ip }}</td>
       <td>{{ r.port }}</td>

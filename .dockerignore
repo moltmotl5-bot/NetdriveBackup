@@ -9,7 +9,7 @@ __pycache__/
 .env.*
 store/
 output/
-docs/
+# docs/Handbook.html is copied into portal image for GET /help
 netdrive-agent/
 scripts/
 app.py

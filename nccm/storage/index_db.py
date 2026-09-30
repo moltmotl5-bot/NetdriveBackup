@@ -16,6 +16,7 @@ from nccm.parsers.stack import (
 )
 from nccm.parsers.version import huawei_inventory_fields_from_snapshot, parse_version_info
 from nccm.storage.writer import safe_hostname
+from nccm.storage.store_paths import resolve_inside_store, resolve_snapshot_file
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS devices (
@@ -685,7 +686,10 @@ def read_config_text(snapshot_id: int, max_chars: int = 200_000) -> str:
     snap = get_snapshot(snapshot_id)
     if not snap:
         return ""
-    path = Path(snap.snapshot_path) / "config.txt"
+    try:
+        path = resolve_snapshot_file(snap.snapshot_path, "config.txt")
+    except Exception:
+        return "(無法讀取 config.txt)"
     if not path.is_file():
         return "(此版本無 config.txt)"
     text = path.read_text(encoding="utf-8", errors="replace")

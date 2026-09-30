@@ -8,6 +8,8 @@
 
 ## 快速開始
 
+營運值班請見 **[docs/quickstart.md](docs/quickstart.md)**（安裝、設備帳號、排程、還原）。
+
 ```bash
 git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
@@ -68,14 +70,21 @@ curl -s http://localhost:8501/health
 | 元件 | 說明 |
 |------|------|
 | **portal** | Web UI：備份、庫存、鄰居、介面、排程 |
-| **netdriver-agent** | SSH 連線與廠牌 plugin |
-| **store/** | 持久化 volume（務必備份） |
+| **netdriver-agent** | SSH 連線與廠牌 plugin（預設僅 Docker 內部網路可連） |
+| **store/** | 持久化 volume（務必備份）；主機目錄須為 **uid 1000** 可寫（見「快速開始」） |
 
 ---
 
 ## 設備 CSV
 
 必填：**`Site,IP,Vendor,Port`**
+
+| 欄位 | 規則 |
+|------|------|
+| **Site** | `A–Z` / `a–z` / `0–9` / `.` / `_` / `-` 開頭，最長 64；不可含 `/`、`\`、`..` |
+| **IP** | 合法 IPv4 或 IPv6 |
+| **Port** | 1–65535；預設允許 **22**、**2222**（可選 `NCCM_ALLOWED_SSH_PORTS=22,2222,830`） |
+| **Vendor** | 見下表；WLC 不支援 |
 
 | Vendor | 說明 |
 |--------|------|
@@ -90,7 +99,7 @@ curl -s http://localhost:8501/health
 ## Web 功能
 
 1. **批次備份** — CSV + SSH，SSE 即時 log  
-2. **設備總表** — 版控、Config Diff、快照保留（admin/operator）  
+2. **設備總表** — 版控、Config Diff、快照保留（admin/operator；保留需先 dry-run 再確認）  
 3. **CDP/LLDP 鄰居** · **Interface Map**  
 4. **排程備份** — CSV 上傳 → Agent 探測 → 以**日**為週期自動備份  
 
@@ -101,7 +110,7 @@ curl -s http://localhost:8501/health
 | 排程（唯讀）／總表／鄰居／介面 | ✓ | ✓ | ✓ |
 | 使用者／API Token／審計 | ✓ | ✗ | ✗ |
 
-首次 bootstrap 登入後須變更密碼。API 以 admin 建立 Token，標頭 `X-API-Key`。
+首次以 `.env` bootstrap 登入後須變更密碼。REST API 以 admin 建立 Token，標頭 `X-API-Key`。
 
 ---
 
@@ -109,11 +118,32 @@ curl -s http://localhost:8501/health
 
 | 變數 | 說明 |
 |------|------|
-| `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS` | Web 登入 |
+| `NCCM_ADMIN_USER` / `NCCM_ADMIN_PASS` | Web 首次登入（bootstrap） |
+| **`NCCM_AGENT_HMAC_SECRET`** | **必填** — Portal 與 Agent 通訊 |
+| **`NCCM_SESSION_SECRET`** | **必填** — Web Session |
 | `NCCM_NETDRIVER_URL` | Portal → Agent（Compose 預設 `http://netdriver-agent:8000`） |
 | `NCCM_STORE_DIR` | 備份根目錄（容器內 `/data/store` → `./store`） |
+| `NCCM_PORT` | Portal 對外埠（預設 8501） |
+| `NCCM_ALLOWED_SSH_PORTS` | 可選 — CSV Port allowlist（預設 `22,2222`） |
+| `NCCM_RETENTION_MAX_DELETE` | 可選 — 單次 retention 最多刪除筆數（預設 500） |
 
 完整列表見 `.env.example`。
+
+---
+
+## 災難還原（摘要）
+
+營運請**同時備份** `store/`（含 `portal_auth.db`、`schedules.db`、`.secrets/fernet.key`、快照）與 `.env`（至少 `NCCM_SESSION_SECRET`、`NCCM_AGENT_HMAC_SECRET`）。還原後：
+
+```bash
+sudo chown -R 1000:1000 store
+docker compose up -d --build
+curl -s http://localhost:8501/health
+```
+
+確認 `secrets_key_source`／`secrets_key_fingerprint` 與 `secrets_store_key_shadowed`（不應為 true）。**Production**（`NCCM_ENV=production` 或 `NCCM_PRODUCTION=1`）**禁止**在環境變數設定 `NCCM_SECRETS_KEY`；僅允許 `store/.secrets/fernet.key` 或 `NCCM_SECRETS_KEY_FILE`／Docker secret。
+
+完整情境 A–G、機密對照表與 break-glass 說明見 Portal **`/help`** →「災難還原」。
 
 ---
 
@@ -121,7 +151,7 @@ curl -s http://localhost:8501/health
 
 | 文件 | 說明 |
 |------|------|
-| Portal **`/help`** | 使用手冊（安裝、操作、疑難排解） |
+| Portal **`/help`** | 使用手冊（安裝、操作、**災難還原**、疑難排解） |
 | [docs/NCCM-v3-spec.md](docs/NCCM-v3-spec.md) | 技術規格（開發者） |
 
 ---
@@ -129,7 +159,8 @@ curl -s http://localhost:8501/health
 ## 測試
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -r requirements-v3.txt -r requirements-dev.txt
+export NCCM_AGENT_HMAC_SECRET=test-hmac-secret
 pytest
 ```
 
@@ -139,10 +170,31 @@ pytest
 
 | 現象 | 處理 |
 |------|------|
-| Agent 離線 | `docker compose logs netdriver-agent` |
+| `Set NCCM_AGENT_HMAC_SECRET in .env` | 在 `.env` 產生並設定，重啟 compose |
+| `Set NCCM_SESSION_SECRET in .env` | 在 `.env` 產生並設定，重啟 compose |
+| **CSRF validation failed** | 硬重新整理頁面；若經 HTTPS 反向代理請設 `NCCM_HTTPS=1`；本機 HTTP 請勿設 `NCCM_HTTPS=1` |
+| 登入 **Internal Server Error** | `sudo chown -R 1000:1000 store` 後 `docker compose up -d --build` |
+| 排程頁 **Internal Server Error** | 同上；多為 `store/schedules.db` 無寫入權限 |
+| 排程無法解密／金鑰不匹配 | 見 `/help` 災難還原；檢查 `/health` 的 `secrets_store_key_shadowed` |
+| Production 啟動失敗（`NCCM_SECRETS_KEY`） | 移除 env 金鑰，改用 store 或 `NCCM_SECRETS_KEY_FILE` |
+| Portal 反覆重啟 | `docker compose logs portal --tail 50`；常見為映像未重建或 `.env` 缺 `NCCM_SESSION_SECRET`／`NCCM_AGENT_HMAC_SECRET` |
+| 使用手冊排版異常 | 重建 Portal 映像以取得 `/static/handbook.css` |
+| Agent 離線 | `docker compose logs netdriver-agent`；確認 Agent 容器 healthy |
+| 主機連不上 `:8000` | 預期行為；本機除錯 Agent 見下方 |
+| CSV 匯入被拒 | 檢查 Site 字元、IP 格式、Port 是否在 allowlist |
 | 備份失敗 | 確認 Agent 容器可 SSH 至設備；看 Portal SSE log |
 | Agent unhealthy | `docker compose down -v && docker compose up -d --build` |
 | 庫存不對 | Web「重建索引」；Stack/HA 異常時重新備份 |
+| Retention 無法執行 | 須先按「預覽刪除」再按「確認執行清理」；token 5 分鐘有效 |
+
+### Agent 本機除錯
+
+僅在本機需要直接連 Agent API 時使用（綁定 `127.0.0.1`）：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+curl -s http://127.0.0.1:8000/health
+```
 
 ---
 

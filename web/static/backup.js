@@ -1,16 +1,41 @@
 (function () {
-  const jobId =
+  var panel = document.getElementById("live-panel");
+  var jobId =
+    (panel && panel.getAttribute("data-job-id")) ||
     window.NCCM_BACKUP_JOB_ID ||
     new URLSearchParams(location.search).get("run_id");
-  if (!jobId) return;
+  if (!jobId) {
+    var fileInput = document.getElementById("csv-file-input");
+    if (fileInput) {
+      fileInput.addEventListener("change", function (ev) {
+        var f = ev.target.files && ev.target.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          var ta = document.getElementById("csv-text");
+          if (ta) ta.value = String(reader.result || "");
+        };
+        reader.readAsText(f, "UTF-8");
+      });
+    }
+    var form = document.getElementById("backup-form");
+    if (form) {
+      form.addEventListener("submit", function () {
+        var btn = document.getElementById("backup-submit");
+        var hint = document.getElementById("submit-hint");
+        if (btn) btn.disabled = true;
+        if (hint) hint.hidden = false;
+      });
+    }
+    return;
+  }
 
-  const panel = document.getElementById("live-panel");
-  const logEl = document.getElementById("live-log");
-  const badge = document.getElementById("job-badge");
-  const table = document.getElementById("results-table");
-  const tbody = document.getElementById("results-body");
-  const empty = document.getElementById("results-empty");
-  const submit = document.getElementById("backup-submit");
+  var logEl = document.getElementById("live-log");
+  var badge = document.getElementById("job-badge");
+  var table = document.getElementById("results-table");
+  var tbody = document.getElementById("results-body");
+  var empty = document.getElementById("results-empty");
+  var submit = document.getElementById("backup-submit");
 
   if (panel) panel.hidden = false;
   if (badge) badge.textContent = "job: " + jobId;
@@ -34,8 +59,8 @@
     }
     tbody.innerHTML = "";
     msg.results.forEach(function (r) {
-      const tr = document.createElement("tr");
-      const detail = r.error || r.snapshot_dir || "";
+      var tr = document.createElement("tr");
+      var detail = r.error || r.snapshot_dir || "";
       tr.innerHTML =
         "<td>" +
         escapeHtml(r.site) +
@@ -65,9 +90,9 @@
       .replace(/>/g, "&gt;");
   }
 
-  const es = new EventSource("/backup/events/" + encodeURIComponent(jobId));
+  var es = new EventSource("/backup/events/" + encodeURIComponent(jobId));
   es.onmessage = function (ev) {
-    let msg;
+    var msg;
     try {
       msg = JSON.parse(ev.data);
     } catch (e) {

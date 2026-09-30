@@ -21,3 +21,9 @@ netdrive-agent/.git/
 netdrive-agent/.venv/
 netdrive-agent/logs/
 netdrive-agent/.pytest_cache/
+
+# Local manual security / ad-hoc test scripts (not committed)
+scripts/security-local/
+scripts/*-local.sh
+scripts/test-security-*.sh
+tests/manual/

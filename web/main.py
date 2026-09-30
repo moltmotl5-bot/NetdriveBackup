@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import re
-import secrets
+import sqlite3
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from nccm.backup.job_manager import get_job, start_backup_job_async
+from nccm.backup.job_manager import get_job, job_accessible, start_backup_job_async
 from nccm.config import netdriver_url, store_dir
 from nccm.netdriver.client import NetDriverClient
 from nccm.registry.csv import load_devices_csv
@@ -36,7 +36,15 @@ from web.deps import (
     session_username,
     set_session_user,
 )
-from nccm.auth.audit import audit_portal_login, write_audit
+from nccm.auth.audit import audit_portal_login, client_ip, write_audit
+from nccm.auth.login_limit import LoginRateLimited, check_login_allowed, record_login_failure, record_login_success
+from web.security import production_mode, session_secret, https_only_cookies
+from web.csrf import (
+    CsrfMiddleware,
+    SecurityHeadersMiddleware,
+    get_or_create_csrf_token,
+    rotate_csrf_token,
+)
 
 load_dotenv()
 
@@ -44,8 +52,13 @@ _WEB_DIR = Path(__file__).resolve().parent
 _ROOT = _WEB_DIR.parent
 _HANDBOOK = _ROOT / "docs" / "Handbook.html"
 
-app = FastAPI(title="NetdriverBackup NCCM v3")
-_secret = os.environ.get("NCCM_SESSION_SECRET") or secrets.token_hex(32)
+app = FastAPI(
+    title="NetdriverBackup NCCM v3",
+    docs_url=None if production_mode() else "/docs",
+    redoc_url=None if production_mode() else "/redoc",
+    openapi_url=None if production_mode() else "/openapi.json",
+)
+_secret = session_secret()
 app.include_router(api_router, prefix="/api/v1")
 
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
@@ -78,7 +91,9 @@ def _nav_for_role(role: str) -> list[tuple[str, str, str]]:
     return items
 
 
-_PUBLIC_PATHS = {"/login", "/health", "/openapi.json", "/docs", "/redoc"}
+_PUBLIC_PATHS = {"/login", "/health"}
+if not production_mode():
+    _PUBLIC_PATHS |= {"/openapi.json", "/docs", "/redoc"}
 _MUST_CHANGE_PASSWORD_ALLOW = {"/account/change-password", "/logout"}
 
 
@@ -113,13 +128,44 @@ class SessionGateMiddleware:
         await self.app(scope, receive, send)
 
 
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CsrfMiddleware)
 app.add_middleware(SessionGateMiddleware)
-app.add_middleware(SessionMiddleware, secret_key=_secret)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_secret,
+    session_cookie="nccm_session",
+    max_age=60 * 60 * 24 * 7,
+    same_site="strict",
+    https_only=https_only_cookies(),
+)
 
 
 @app.on_event("startup")
 async def _check_portal_env() -> None:
+    import logging
+
     ensure_portal_can_start()
+    from nccm.backup.secrets import (
+        ensure_production_secrets_policy,
+        secrets_key_fingerprint,
+        secrets_key_source,
+        secrets_store_key_shadowed,
+    )
+
+    ensure_production_secrets_policy()
+    try:
+        if secrets_store_key_shadowed():
+            src = secrets_key_source() or "unknown"
+            fp = secrets_key_fingerprint() or "?"
+            logging.getLogger(__name__).warning(
+                "NCCM secrets: active key source=%s shadows store/.secrets/fernet.key "
+                "(fingerprint=%s). Restored store backups need matching key or unset env override.",
+                src,
+                fp,
+            )
+    except Exception:
+        pass
     try:
         from nccm.backup.schedule import start_schedule_watcher
 
@@ -133,7 +179,11 @@ async def login_page(request: Request):
     return templates.TemplateResponse(
         request,
         "login.html",
-        {"title": "登入", "error": None},
+        {
+            "title": "登入",
+            "error": None,
+            "csrf_token": get_or_create_csrf_token(request),
+        },
     )
 
 
@@ -143,8 +193,33 @@ async def login_submit(
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
 ):
+    ip = client_ip(request)
+    try:
+        check_login_allowed(username=username, ip=ip)
+    except LoginRateLimited as exc:
+        audit_portal_login(request, username, False)
+        write_audit(
+            request=request,
+            event="portal_login_locked",
+            success=False,
+            actor=username,
+            detail=f"retry_after={exc.retry_after}",
+        )
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "title": "登入",
+                "error": f"登入嘗試過多，請 {exc.retry_after} 秒後再試",
+                "csrf_token": get_or_create_csrf_token(request),
+            },
+            status_code=429,
+        )
+
     portal_user = authenticate(username, password)
     if portal_user:
+        record_login_success(username=username, ip=ip)
+        request.session.clear()
         set_session_user(
             request,
             username=portal_user.username,
@@ -152,21 +227,35 @@ async def login_submit(
             user_id=portal_user.id,
             must_change_password=portal_user.must_change_password,
         )
+        rotate_csrf_token(request)
         audit_portal_login(request, portal_user.username, True)
+        if portal_user.id == 0:
+            write_audit(
+                request=request,
+                event="break_glass_login",
+                success=True,
+                actor=portal_user.username,
+                detail="env admin session",
+            )
         if portal_user.must_change_password:
             return RedirectResponse(url="/account/change-password", status_code=303)
         dest = "/inventory" if portal_user.role == "viewer" else "/backup"
         return RedirectResponse(url=dest, status_code=303)
+    record_login_failure(username=username, ip=ip)
     audit_portal_login(request, username, False)
     return templates.TemplateResponse(
         request,
         "login.html",
-        {"title": "登入", "error": "帳號或密碼錯誤"},
+        {
+            "title": "登入",
+            "error": "帳號或密碼錯誤",
+            "csrf_token": get_or_create_csrf_token(request),
+        },
         status_code=401,
     )
 
 
-@app.get("/logout")
+@app.post("/logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
@@ -179,13 +268,32 @@ async def root():
 
 @app.get("/health")
 async def health():
+    from nccm.backup.secrets import (
+        secrets_configured,
+        secrets_key_fingerprint,
+        secrets_key_source,
+        secrets_store_key_shadowed,
+    )
+
     agent_ok = NetDriverClient().health()
-    return {
+    payload: dict[str, object] = {
         "status": "ok" if agent_ok else "degraded",
         "portal": "nccm-v3",
         "netdriver_agent": agent_ok,
         "store_dir": str(store_dir()),
+        "secrets_configured": secrets_configured(),
     }
+    src = secrets_key_source()
+    if src:
+        payload["secrets_key_source"] = src
+        fp = secrets_key_fingerprint()
+        if fp:
+            payload["secrets_key_fingerprint"] = fp
+        if secrets_store_key_shadowed():
+            payload["secrets_store_key_shadowed"] = True
+            if payload["status"] == "ok":
+                payload["status"] = "degraded"
+    return payload
 
 
 @app.get("/help")
@@ -213,6 +321,7 @@ def _ctx(request: Request, page: str, **extra):
         "portal_user": session_username(request),
         "portal_role": role,
         "current_uid": session_user_id(request),
+        "csrf_token": get_or_create_csrf_token(request),
     }
     base.update(extra)
     return base
@@ -282,6 +391,8 @@ async def backup_start(
             username=ssh_user,
             password=ssh_password,
             agent_url=netdriver_url(),
+            owner_uid=session_user_id(request),
+            owner_username=user,
         )
         write_audit(
             request=request,
@@ -312,6 +423,19 @@ async def backup_events(
             yield f"data: {json.dumps({'type': 'error', 'message': 'unknown job'})}\n\n"
 
         return StreamingResponse(_err(), media_type="text/event-stream")
+
+    if not job_accessible(job, uid=session_user_id(request), role=session_role(request)):
+        async def _deny():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'forbidden'})}\n\n"
+
+        write_audit(
+            request=request,
+            event="backup_job_access_denied",
+            success=False,
+            actor=user,
+            detail=f"job_id={job_id}",
+        )
+        return StreamingResponse(_deny(), media_type="text/event-stream")
 
     async def _stream():
         idx = 0
@@ -426,6 +550,7 @@ async def inventory_page(
             diff_text=diff_text,
             diff_meta=diff_meta,
             rebuild_msg=None,
+            retention_confirm=request.session.get("retention_confirm"),
         ),
     )
 
@@ -539,7 +664,12 @@ async def inventory_download_config(
         raise HTTPException(status_code=404, detail="snapshot not found")
     if device_id and snap.device_id != device_id:
         raise HTTPException(status_code=403, detail="snapshot does not belong to device")
-    path = Path(snap.snapshot_path) / "config.txt"
+    from nccm.storage.store_paths import SecurityError, resolve_snapshot_file
+
+    try:
+        path = resolve_snapshot_file(snap.snapshot_path, "config.txt")
+    except SecurityError:
+        raise HTTPException(status_code=403, detail="invalid snapshot path")
     if not path.is_file():
         raise HTTPException(status_code=404, detail="config.txt not found")
     _site, ip, _port, host = parse_device_id(snap.device_id)
@@ -567,30 +697,82 @@ async def inventory_retention(
     keep_last: Annotated[int, Form()] = 10,
     dry_run: Annotated[str, Form()] = "1",
     device_id: Annotated[str, Form()] = "",
+    confirm_token: Annotated[str, Form()] = "",
 ):
-    from nccm.storage.retention import apply_retention, plan_retention
+    from nccm.storage.retention import (
+        RetentionError,
+        apply_retention,
+        issue_retention_token,
+        plan_retention,
+    )
 
-    plan = plan_retention(keep_last=keep_last, device_id=device_id or None)
+    did = device_id or None
+    try:
+        plan = plan_retention(keep_last=keep_last, device_id=did)
+    except RetentionError as e:
+        return RedirectResponse(
+            url=f"/inventory?retention=error&msg={str(e)[:120]}",
+            status_code=303,
+        )
     is_dry = dry_run != "0"
-    result = apply_retention(plan, dry_run=is_dry)
-    q = "dry" if is_dry else "done"
-    n = result.get("would_delete") if is_dry else result.get("deleted")
+    if is_dry:
+        token = issue_retention_token(plan, device_id=did)
+        request.session["retention_confirm"] = {
+            "token": token,
+            "keep_last": plan.keep_last,
+            "device_id": did or "",
+            "n": len(plan.candidates),
+        }
+        result = apply_retention(plan, dry_run=True)
+        n = result.get("would_delete")
+        write_audit(
+            request=request,
+            event="snapshot_retention",
+            success=True,
+            actor=user,
+            detail=f"dry_run=True;keep_last={plan.keep_last};n={n};device_id={did or '*'}",
+        )
+        return RedirectResponse(
+            url=f"/inventory?retention=preview&n={n}&keep={plan.keep_last}",
+            status_code=303,
+        )
+    token = (confirm_token or "").strip() or str(
+        (request.session.get("retention_confirm") or {}).get("token") or ""
+    )
+    try:
+        result = apply_retention(
+            plan,
+            dry_run=False,
+            confirm_token=token,
+            device_id=did,
+        )
+    except RetentionError as e:
+        return RedirectResponse(
+            url=f"/inventory?retention=error&msg={str(e)[:120]}",
+            status_code=303,
+        )
+    request.session.pop("retention_confirm", None)
+    n = result.get("deleted")
     write_audit(
         request=request,
         event="snapshot_retention",
         success=True,
         actor=user,
-        detail=f"dry_run={is_dry};keep_last={plan.keep_last};n={n};device_id={device_id or '*'}",
+        detail=f"dry_run=False;keep_last={plan.keep_last};n={n};device_id={did or '*'}",
     )
     return RedirectResponse(
-        url=f"/inventory?retention={q}&n={n}&keep={plan.keep_last}",
+        url=f"/inventory?retention=done&n={n}&keep={plan.keep_last}",
         status_code=303,
     )
 
 
 def _schedules_ctx(request: Request, **extra):
     from nccm.backup.schedule import list_schedule_runs, list_schedules
-    from nccm.backup.secrets import secrets_configured, secrets_key_source
+    from nccm.backup.secrets import (
+        secrets_configured,
+        secrets_key_source,
+        secrets_store_key_shadowed,
+    )
 
     role = session_role(request)
     base = _ctx(
@@ -601,6 +783,7 @@ def _schedules_ctx(request: Request, **extra):
         can_operate=role_can_operate(role),
         secrets_configured=secrets_configured(),
         secrets_key_source=secrets_key_source(),
+        secrets_store_key_shadowed=secrets_store_key_shadowed(),
     )
     base.update(extra)
     return base
@@ -613,10 +796,26 @@ async def schedules_page(
     message: str = "",
     error: str = "",
 ):
+    try:
+        ctx = _schedules_ctx(request, message=message or None, error=error or None)
+    except sqlite3.OperationalError:
+        ctx = _ctx(
+            request,
+            "schedules",
+            schedules=[],
+            schedule_runs=[],
+            can_operate=role_can_operate(session_role(request)),
+            secrets_configured=False,
+            secrets_key_source=None,
+            secrets_store_key_shadowed=False,
+            message=message or None,
+            error=error
+            or "無法存取排程資料庫；請執行 sudo chown -R 1000:1000 store 後重建 Portal",
+        )
     return templates.TemplateResponse(
         request,
         "schedules.html",
-        _schedules_ctx(request, message=message or None, error=error or None),
+        ctx,
     )
 
 

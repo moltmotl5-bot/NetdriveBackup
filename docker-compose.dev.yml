@@ -1,0 +1,5 @@
+# Development override — publish Agent on localhost only (never use in production).
+services:
+  netdriver-agent:
+    ports:
+      - "127.0.0.1:${NETDRIVER_AGENT_PORT:-8000}:8000"

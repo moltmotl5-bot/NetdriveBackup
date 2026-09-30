@@ -12,10 +12,32 @@ from typing import Iterator
 
 from nccm.backup.reachability import ProbeResult, probe_devices
 from nccm.backup.schedule import ScheduleWriteResult, create_schedule, get_schedule, update_schedule
+from nccm.backup.secrets import SecretsDecryptError, decrypt, encrypt, ensure_master_key
 from nccm.config import store_dir
 from nccm.registry.csv import devices_to_csv, load_devices_csv_text
 
 _DRAFT_TTL_HOURS = 2
+_ENC_PREFIX = "fernet:"
+
+
+def _encrypt_field(value: str) -> str:
+    text = value or ""
+    if not text:
+        return ""
+    ensure_master_key()
+    return _ENC_PREFIX + encrypt(text)
+
+
+def _decrypt_field(value: str) -> str:
+    blob = value or ""
+    if not blob:
+        return ""
+    if blob.startswith(_ENC_PREFIX):
+        try:
+            return decrypt(blob[len(_ENC_PREFIX) :])
+        except SecretsDecryptError as exc:
+            raise ValueError(str(exc)) from None
+    return blob
 
 
 def _utc_now() -> str:
@@ -26,34 +48,63 @@ def _drafts_db_path() -> Path:
     return store_dir() / "schedules.db"
 
 
+def _draft_table_ready(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='schedule_drafts'"
+    ).fetchone()
+    return row is not None
+
+
+def _ensure_draft_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schedule_drafts (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            interval_days INTEGER NOT NULL DEFAULT 1,
+            username TEXT NOT NULL DEFAULT '',
+            password TEXT NOT NULL DEFAULT '',
+            enable_password TEXT NOT NULL DEFAULT '',
+            csv_filename TEXT NOT NULL DEFAULT '',
+            csv_original TEXT NOT NULL,
+            probe_json TEXT NOT NULL,
+            edit_schedule_id INTEGER,
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
+
 @contextmanager
 def _connect() -> Iterator[sqlite3.Connection]:
     path = _drafts_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise sqlite3.OperationalError(str(exc)) from exc
     conn = sqlite3.connect(str(path), timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS schedule_drafts (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                interval_days INTEGER NOT NULL DEFAULT 1,
-                username TEXT NOT NULL DEFAULT '',
-                password TEXT NOT NULL DEFAULT '',
-                enable_password TEXT NOT NULL DEFAULT '',
-                csv_filename TEXT NOT NULL DEFAULT '',
-                csv_original TEXT NOT NULL,
-                probe_json TEXT NOT NULL,
-                edit_schedule_id INTEGER,
-                created_by TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.commit()
+        try:
+            _ensure_draft_schema(conn)
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            readonly = "readonly" in msg or "read-only" in msg or "unable to open database" in msg
+            if readonly and _draft_table_ready(conn):
+                pass
+            else:
+                raise ValueError(
+                    "排程資料庫無法寫入；請確認 store 目錄為 uid 1000 可寫（sudo chown -R 1000:1000 store）"
+                ) from exc
         yield conn
-        conn.commit()
+        try:
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "readonly" not in msg and "read-only" not in msg:
+                raise
     finally:
         conn.close()
 
@@ -193,8 +244,8 @@ def create_draft_from_upload(
                 (name or "").strip() or "schedule",
                 max(1, int(interval_days)),
                 (username or "").strip(),
-                password,
-                enable_password or "",
+                _encrypt_field(password),
+                _encrypt_field(enable_password or ""),
                 (csv_filename or "upload.csv").strip()[:200],
                 body,
                 _serialize_probe(results),
@@ -245,6 +296,8 @@ def confirm_draft(draft_id: str) -> ScheduleWriteResult:
             raise ValueError("無任何設備通過連線測試，無法建立排程")
         csv_text = devices_to_csv(ok_devices)
         edit_id = int(row["edit_schedule_id"]) if row["edit_schedule_id"] else None
+        pwd = _decrypt_field(str(row["password"] or ""))
+        enable_pwd = _decrypt_field(str(row["enable_password"] or ""))
         conn.execute("DELETE FROM schedule_drafts WHERE id = ?", (draft_id,))
 
     if edit_id:
@@ -254,8 +307,8 @@ def confirm_draft(draft_id: str) -> ScheduleWriteResult:
             csv_text=csv_text,
             interval_days=int(row["interval_days"] or 1),
             username=str(row["username"] or ""),
-            password=str(row["password"] or ""),
-            enable_password=str(row["enable_password"] or "") or None,
+            password=pwd,
+            enable_password=enable_pwd or None,
             csv_filename=str(row["csv_filename"] or ""),
         )
     else:
@@ -264,8 +317,8 @@ def confirm_draft(draft_id: str) -> ScheduleWriteResult:
             csv_text,
             interval_days=int(row["interval_days"] or 1),
             username=str(row["username"] or ""),
-            password=str(row["password"] or ""),
-            enable_password=str(row["enable_password"] or ""),
+            password=pwd,
+            enable_password=enable_pwd,
             created_by=str(row["created_by"] or ""),
             csv_filename=str(row["csv_filename"] or ""),
         )

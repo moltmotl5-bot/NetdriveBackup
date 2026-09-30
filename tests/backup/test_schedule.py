@@ -294,3 +294,13 @@ def test_list_schedule_runs(sched_env):
     assert len(filtered) == 1
     assert filtered[0].schedule_id == sid
     assert sch.list_schedule_runs(schedule_id=999) == []
+
+
+def test_list_schedules_readonly_db(sched_env):
+    sch = sched_env
+    result = sch.create_schedule("daily", CSV_OK, interval_days=1, username="u", password="p")
+    db_path = sch.schedules_db_path()
+    db_path.chmod(0o444)
+    schedules = sch.list_schedules()
+    assert len(schedules) == 1
+    assert schedules[0].id == result.schedule.id
