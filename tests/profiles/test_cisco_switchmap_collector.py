@@ -31,6 +31,7 @@ SWITCHMAP_COMMANDS = {
 
 def test_cisco_ios_backup_includes_switchmap_commands():
     arts = {s.artifact: s.command for s in cisco_backup_commands("catalyst")}
+    assert arts["interfaces"] == "show interface status"
     for name in SWITCHMAP_ARTIFACTS:
         assert name in arts
         assert arts[name] == SWITCHMAP_COMMANDS[name]

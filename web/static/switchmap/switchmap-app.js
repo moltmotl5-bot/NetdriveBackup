@@ -239,6 +239,9 @@
           var parts = [];
           if (missing) {
             parts.push('缺少 artifact：' + missing);
+            if (missing.split(',').indexOf('interfaces') !== -1) {
+              parts.push('連線狀態需 interfaces.txt；Phase 1 前快照請重新備份');
+            }
           }
           if (warn) {
             parts.push(warn);

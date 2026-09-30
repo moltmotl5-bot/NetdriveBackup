@@ -106,6 +106,7 @@ gantt
 |------|------|
 | 備份時間變長（detail + 多指令） | 個別 `CommandSpec.timeout`；soft-skip |
 | 舊快照無新 artifact | 合成 API 降級提示「請重新備份」；Interface Map 仍可用 |
+| 前面板連線狀態空白 | **優先** `interfaces.txt`（`show interface status`）→ **其次** `interfaces_description.txt` 的 Status/Protocol；Phase 1 前若缺 `interfaces_description` 仍可用既有 `interfaces.txt`；兩者皆缺或為空時 UI 顯示「—」並提示重新備份 |
 | CDP/LLDP 解析 regression | pytest 加 brief + detail golden fixtures |
 
 ### 主要程式觸點

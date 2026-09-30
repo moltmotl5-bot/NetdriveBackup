@@ -42,6 +42,18 @@ def test_build_switchdraw_log_command_order(store_root: Path) -> None:
     assert idx_cfg < idx_vlan < idx_cdp
 
 
+def test_build_switchdraw_log_empty_interfaces_warns(store_root: Path) -> None:
+    from nccm.switchmap.log_builder import build_switchdraw_log
+
+    snap = store_root / "lab/10.0.0.3__sw/snapshots/2026-09-30T120000Z"
+    snap.mkdir(parents=True)
+    (snap / "config.txt").write_text("hostname X\n", encoding="utf-8")
+    (snap / "interfaces.txt").write_text("", encoding="utf-8")
+    result = build_switchdraw_log(snap)
+    assert "interfaces" not in result.missing_artifacts
+    assert any("interfaces.txt 為空" in w for w in result.warnings)
+
+
 def test_build_switchdraw_log_missing_artifacts(store_root: Path) -> None:
     from nccm.switchmap.log_builder import build_switchdraw_log
 

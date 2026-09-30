@@ -112,7 +112,14 @@ var SwitchDraw = SwitchDraw || {};
     if (s.indexOf('connected') === 0 || s === 'up') {
       return 'connected';
     }
-    if (s === 'notconnect' || s === 'not connected' || s === 'down' || p === 'down') {
+    if (
+      s === 'notconnect' ||
+      s === 'not connected' ||
+      s === 'notconn' ||
+      s.indexOf('notconnect') === 0 ||
+      s === 'down' ||
+      p === 'down'
+    ) {
       return 'notconnect';
     }
     if (p === 'up' && s !== 'down') {
@@ -489,6 +496,13 @@ var SwitchDraw = SwitchDraw || {};
     Object.keys(secondary).forEach(function (port) {
       if (!merged[port]) {
         merged[port] = Object.assign({}, secondary[port]);
+        return;
+      }
+      if (!merged[port].status && secondary[port].status) {
+        merged[port].status = secondary[port].status;
+      }
+      if (!merged[port].adminDown && secondary[port].adminDown) {
+        merged[port].adminDown = secondary[port].adminDown;
       }
     });
     return merged;
@@ -736,8 +750,23 @@ var SwitchDraw = SwitchDraw || {};
       var n = neighbors[name] || {};
       var accessVlan = cfg.accessVlan || (cfg.mode !== 'trunk' && st.vlan && st.vlan !== 'trunk' ? st.vlan : '');
       var vlanName = accessVlan && vlans[accessVlan] ? vlans[accessVlan].name : '';
-      var adminStatus = cfg.adminStatus || (st.adminDown || desc.adminDown ? 'disabled' : 'enabled');
-      var linkStatus = normalizeLinkStatus(st.status || desc.status || '');
+      var statusFromTable = st.status || '';
+      var statusFromDesc = desc.status || '';
+      var linkStatus = normalizeLinkStatus(
+        statusFromTable || statusFromDesc,
+        statusFromTable ? '' : (desc.protocol || '')
+      );
+      var adminFromOper =
+        st.adminDown ||
+        desc.adminDown ||
+        linkStatus === 'disabled' ||
+        String(statusFromTable || statusFromDesc).toLowerCase().indexOf('admin') !== -1;
+      var adminStatus =
+        cfg.adminStatus === 'disabled'
+          ? 'disabled'
+          : adminFromOper
+            ? 'disabled'
+            : cfg.adminStatus || 'enabled';
       var bestDescription = cfg.description || desc.description || st.description || '';
 
       ports.push({

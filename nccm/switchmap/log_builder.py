@@ -78,7 +78,13 @@ def build_switchdraw_log(
                 warnings.append(f"缺少 {artifact}.txt，部分欄位可能不完整。")
             continue
         if not body.strip():
-            warnings.append(f"{artifact}.txt 為空。")
+            if artifact == "interfaces":
+                warnings.append(
+                    "interfaces.txt 為空（show interfaces status 未成功收集），"
+                    "前面板連線狀態可能無法顯示；請重新備份。"
+                )
+            else:
+                warnings.append(f"{artifact}.txt 為空。")
         chunks.append(f"{hostname}#{command}")
         chunks.append(body.rstrip())
 

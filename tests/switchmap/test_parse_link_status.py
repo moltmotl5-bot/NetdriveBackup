@@ -60,6 +60,42 @@ Gi1/0/1                        notconnect     down
     assert port["statusText"] != "unknown"
 
 
+def test_interfaces_status_table_beats_description() -> None:
+    """show interfaces status Status column wins over show int desc."""
+    log = """SW1#show running-config
+interface GigabitEthernet1/0/1
+ switchport access vlan 10
+!
+SW1#show interfaces status
+Port      Name               Status       Vlan
+Gi1/0/1   UPLINK             connected    10
+SW1#show interfaces description
+Interface                      Status         Protocol Description
+Gi1/0/1                        down           down     stale
+"""
+    data = _run_parse(log)
+    port = data[0]["ports"][0]
+    assert port["linkStatus"] == "connected"
+    assert port["statusText"] == "connected"
+
+
+def test_ip_brief_fills_missing_status_table_row() -> None:
+    log = """SW1#show running-config
+interface GigabitEthernet1/0/1
+ switchport access vlan 10
+!
+SW1#show interfaces status
+Port      Name               Status       Vlan
+SW1#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Gi1/0/1                unassigned      YES unset  up                    up
+"""
+    data = _run_parse(log)
+    port = data[0]["ports"][0]
+    assert port["linkStatus"] == "connected"
+    assert port["statusText"] == "connected"
+
+
 def test_missing_status_shows_em_dash_not_unknown() -> None:
     log = """SW1#show running-config
 interface GigabitEthernet1/0/5
