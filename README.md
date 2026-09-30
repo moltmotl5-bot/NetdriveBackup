@@ -8,6 +8,8 @@
 
 ## 快速開始
 
+營運值班請見 **[docs/quickstart.md](docs/quickstart.md)**（安裝、設備帳號、排程、還原）。
+
 ```bash
 git clone https://github.com/moltmotl5-bot/NetdriveBackup.git
 cd NetdriveBackup
