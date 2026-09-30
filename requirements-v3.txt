@@ -6,4 +6,4 @@ python-multipart==0.0.32
 python-dotenv==1.2.2
 itsdangerous==2.2.0
 pandas==3.0.5
-cryptography==49.0.0
+cryptography==50.0.1
