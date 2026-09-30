@@ -69,7 +69,12 @@ def build_switchdraw_log(
         body = _read_artifact(snap, artifact)
         if body is None:
             missing.append(artifact)
-            if artifact in ("vlan_brief", "interfaces_description", "ip_interface_brief"):
+            if artifact == "interfaces":
+                warnings.append(
+                    "缺少 interfaces.txt（show interfaces status），"
+                    "前面板連線狀態可能無法顯示；請重新備份。"
+                )
+            elif artifact in ("vlan_brief", "interfaces_description", "ip_interface_brief"):
                 warnings.append(f"缺少 {artifact}.txt，部分欄位可能不完整。")
             continue
         if not body.strip():

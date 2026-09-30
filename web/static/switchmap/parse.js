@@ -118,7 +118,7 @@ var SwitchDraw = SwitchDraw || {};
     if (p === 'up' && s !== 'down') {
       return 'connected';
     }
-    return s || 'unknown';
+    return s || '';
   }
 
   function isLinkUp(linkStatus) {
@@ -558,9 +558,7 @@ var SwitchDraw = SwitchDraw || {};
         entry.description = restMatch[3].trim();
       }
 
-      if (entry.description) {
-        result[port] = entry;
-      }
+      result[port] = entry;
     });
 
     return result;
@@ -739,7 +737,7 @@ var SwitchDraw = SwitchDraw || {};
       var accessVlan = cfg.accessVlan || (cfg.mode !== 'trunk' && st.vlan && st.vlan !== 'trunk' ? st.vlan : '');
       var vlanName = accessVlan && vlans[accessVlan] ? vlans[accessVlan].name : '';
       var adminStatus = cfg.adminStatus || (st.adminDown || desc.adminDown ? 'disabled' : 'enabled');
-      var linkStatus = st.status || desc.status || 'unknown';
+      var linkStatus = normalizeLinkStatus(st.status || desc.status || '');
       var bestDescription = cfg.description || desc.description || st.description || '';
 
       ports.push({

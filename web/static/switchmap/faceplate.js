@@ -186,8 +186,11 @@ var SwitchDraw = (typeof globalThis !== 'undefined' ? globalThis : this).SwitchD
     if (port.linkStatus === 'notconnect') {
       return { text: 'notconnect', fill: STATUS_DOWN_FILL, textColor: STATUS_DOWN_TEXT };
     }
+    if (!port.linkStatus || port.linkStatus === 'unknown') {
+      return { text: '—', fill: STATUS_UNKNOWN_FILL, textColor: STATUS_UNKNOWN_TEXT };
+    }
     return {
-      text: port.linkStatus || 'unknown',
+      text: port.linkStatus,
       fill: STATUS_UNKNOWN_FILL,
       textColor: STATUS_UNKNOWN_TEXT
     };

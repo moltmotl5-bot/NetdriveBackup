@@ -51,3 +51,5 @@ def test_build_switchdraw_log_missing_artifacts(store_root: Path) -> None:
     result = build_switchdraw_log(snap)
     assert "config" not in result.missing_artifacts
     assert "vlan_brief" in result.missing_artifacts
+    assert "interfaces" in result.missing_artifacts
+    assert any("interfaces.txt" in w for w in result.warnings)
