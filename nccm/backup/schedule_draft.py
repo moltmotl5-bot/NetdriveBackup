@@ -35,8 +35,8 @@ def _decrypt_field(value: str) -> str:
     if blob.startswith(_ENC_PREFIX):
         try:
             return decrypt(blob[len(_ENC_PREFIX) :])
-        except SecretsDecryptError:
-            raise ValueError("draft credential decrypt failed") from None
+        except SecretsDecryptError as exc:
+            raise ValueError(str(exc)) from None
     return blob
 
 

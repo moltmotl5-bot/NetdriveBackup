@@ -146,13 +146,15 @@ async def _check_portal_env() -> None:
     import logging
 
     ensure_portal_can_start()
-    try:
-        from nccm.backup.secrets import (
-            secrets_key_fingerprint,
-            secrets_key_source,
-            secrets_store_key_shadowed,
-        )
+    from nccm.backup.secrets import (
+        ensure_production_secrets_policy,
+        secrets_key_fingerprint,
+        secrets_key_source,
+        secrets_store_key_shadowed,
+    )
 
+    ensure_production_secrets_policy()
+    try:
         if secrets_store_key_shadowed():
             src = secrets_key_source() or "unknown"
             fp = secrets_key_fingerprint() or "?"

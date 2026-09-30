@@ -14,6 +14,7 @@ from nccm.backup.secrets import (
     KeyEnsureResult,
     SecretsKeyWriteError,
     SecretsNotConfiguredError,
+    SecretsDecryptError,
     decrypt,
     encrypt,
     ensure_master_key,
@@ -452,7 +453,7 @@ def resolve_schedule_credentials(schedule_id: int) -> ScheduleCredentials:
         try:
             password = decrypt(password_enc)
             enable_password = decrypt(enable_enc) if enable_enc.strip() else ""
-        except SecretsNotConfiguredError as exc:
+        except (SecretsNotConfiguredError, SecretsDecryptError) as exc:
             raise ValueError(str(exc)) from exc
         return ScheduleCredentials(
             username=user,

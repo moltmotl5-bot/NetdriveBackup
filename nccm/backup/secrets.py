@@ -31,6 +31,14 @@ class SecretsNotConfiguredError(RuntimeError):
     """Raised when encryption is required but no master key is available."""
 
 
+# Shown in Portal when Fernet ciphertext does not match the active master key (common after DR).
+SECRETS_DECRYPT_USER_MESSAGE = (
+    "無法解密排程 SSH 憑證：目前加密主金鑰與儲存資料不一致（常見於還原 store 後 .env 仍設定不同的 "
+    "NCCM_SECRETS_KEY）。請移除環境變數覆寫、改用 store/.secrets/fernet.key，或改為與備份相同的金鑰；"
+    "詳見使用手冊「災難還原」。"
+)
+
+
 class SecretsDecryptError(ValueError):
     """Raised when ciphertext cannot be decrypted with the current master key."""
 
@@ -128,6 +136,27 @@ def secrets_store_key_shadowed() -> bool:
     if secrets_key_source() == "store":
         return False
     return active != disk
+
+
+def _production_env() -> bool:
+    env = (os.environ.get("NCCM_ENV") or "").strip().lower()
+    return env in {"production", "prod"} or os.environ.get("NCCM_PRODUCTION") == "1"
+
+
+def ensure_production_secrets_policy() -> None:
+    """Fail fast in production when NCCM_SECRETS_KEY is set (env override policy).
+
+    Production may use ``store/.secrets/fernet.key`` or ``NCCM_SECRETS_KEY_FILE`` /
+    Docker secret file — not the raw ``NCCM_SECRETS_KEY`` environment variable.
+    """
+    if not _production_env():
+        return
+    if _env_master_key() is not None:
+        raise RuntimeError(
+            "Production 禁止在環境變數設定 NCCM_SECRETS_KEY。"
+            "請改用 store/.secrets/fernet.key，或 NCCM_SECRETS_KEY_FILE／Docker secret 檔；"
+            "詳見 .env.example 與使用手冊「災難還原」。"
+        )
 
 
 def secrets_key_fingerprint() -> str | None:
@@ -244,5 +273,5 @@ def decrypt(ciphertext: str) -> str:
     try:
         plain = _fernet().decrypt(blob.encode("ascii"))
     except InvalidToken as exc:
-        raise SecretsDecryptError("credential decrypt failed") from exc
+        raise SecretsDecryptError(SECRETS_DECRYPT_USER_MESSAGE) from exc
     return plain.decode("utf-8")
