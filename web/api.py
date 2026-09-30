@@ -15,11 +15,32 @@ from fastapi import APIRouter
 router = APIRouter(tags=["API"])
 
 INVENTORY_SCOPE = "inventory:read"
+SWITCHMAP_SCOPE = "switchmap:read"
 
 
 def _get_api_auth(
     request: Request,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> token_service.ApiAuthResult:
+    auth = _authenticate_api_key(request, x_api_key)
+    if not token_service.token_has_scope(auth, INVENTORY_SCOPE):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient API token scope",
+        )
+    audit_api_token_event(
+        request,
+        event="api_request",
+        token_name=auth.token_name,
+        success=True,
+        detail=f"source={auth.source}",
+    )
+    return auth
+
+
+def _authenticate_api_key(
+    request: Request,
+    x_api_key: Optional[str],
 ) -> token_service.ApiAuthResult:
     if not token_service.any_api_auth_configured():
         raise HTTPException(
@@ -45,10 +66,20 @@ def _get_api_auth(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=msg,
         )
-    if not token_service.token_has_scope(auth, INVENTORY_SCOPE):
+    return auth
+
+
+def _get_api_auth_switchmap(
+    request: Request,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> token_service.ApiAuthResult:
+    auth = _authenticate_api_key(request, x_api_key)
+    if not token_service.token_has_scope(auth, SWITCHMAP_SCOPE) and not token_service.token_has_scope(
+        auth, INVENTORY_SCOPE
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient API token scope",
+            detail="Insufficient API token scope (need switchmap:read or inventory:read)",
         )
     audit_api_token_event(
         request,
@@ -108,3 +139,32 @@ async def get_inventory(
 @router.get("/health")
 async def api_health():
     return {"status": "ok"}
+
+
+@router.get("/devices/{device_id}/snapshots/latest/switchdraw-log")
+async def get_switchdraw_log(
+    request: Request,
+    device_id: str,
+    _auth: token_service.ApiAuthResult = Depends(_get_api_auth_switchmap),
+    snapshot_ts: Optional[str] = Query(None, description="Snapshot folder name; default latest"),
+):
+    from fastapi.responses import PlainTextResponse
+
+    from nccm.switchmap.device import switchmap_context_for_device
+
+    ctx = switchmap_context_for_device(device_id, snapshot_ts=snapshot_ts or "")
+    if ctx.error:
+        raise HTTPException(status_code=404, detail=ctx.error)
+    if not ctx.log_result:
+        raise HTTPException(status_code=404, detail="無法建立 log")
+    result = ctx.log_result
+    headers = {}
+    if result.missing_artifacts:
+        headers["X-Switchmap-Missing"] = ",".join(result.missing_artifacts)
+    if result.warnings:
+        headers["X-Switchmap-Warnings"] = "; ".join(result.warnings)[:500]
+    return PlainTextResponse(
+        result.log_text,
+        media_type="text/plain; charset=utf-8",
+        headers=headers,
+    )

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}SwitchMap — NCCM v3{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/switchmap/switchmap.css" />
+<h1>SwitchMap</h1>
+<p class="lead">交換器埠位圖：由 NCCM 備份快照合成 SwitchDraw 相容 log，在瀏覽器解析前面板預覽並匯出 Excel。</p>
+
+<div id="switchmap-root" class="switchmap-page" data-site="{{ site_filter }}" data-initial-device="{{ device_id }}">
+  <section class="panel">
+    <form class="filters" method="get" action="/switchmap">
+      <input type="search" name="q" value="{{ q }}" placeholder="搜尋" />
+      <select name="site">
+        <option value="">全部 Site</option>
+        {% for s in sites %}
+        <option value="{{ s }}" {% if site_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      {% include "partials/vendor_select.html" %}
+      <button type="submit" class="btn-secondary">篩選</button>
+    </form>
+
+    <div class="switchmap-picker">
+      <label for="switchmap-device">Cisco 設備</label>
+      <select id="switchmap-device" name="device_id">
+        <option value="">— 選擇 —</option>
+        {% for r in rows %}
+        <option value="{{ r.device_id }}"
+                data-site="{{ r.site }}"
+                data-vendor="{{ r.vendor }}"
+                {% if device_id == r.device_id %}selected{% endif %}>
+          {{ r.site }} · {{ r.hostname }} ({{ r.ip }})
+        </option>
+        {% endfor %}
+      </select>
+
+      <label for="switchmap-snapshot">快照</label>
+      <select id="switchmap-snapshot" name="snapshot_ts">
+        {% for v in snapshot_versions %}
+        <option value="{{ v }}" {% if snapshot_ts == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+
+      <button type="button" id="switchmap-load" class="btn-primary">載入前面板</button>
+      <button type="button" id="switchmap-download" class="btn-secondary" disabled>下載 Excel 埠位圖（.xlsx）</button>
+    </div>
+
+    <p id="switchmap-meta" class="muted"></p>
+    <p id="switchmap-status" class="status" hidden></p>
+    <p id="switchmap-error" class="error-banner" hidden></p>
+  </section>
+
+  <section class="panel">
+    <h2>解析摘要</h2>
+    <div id="switchmap-summary">
+      <p class="muted">選擇設備後按「載入前面板」。</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>前面板預覽</h2>
+    <div id="switchmap-preview"></div>
+  </section>
+
+  <footer class="switchmap-footer muted">
+    輸出為標準 .xlsx（無 VBA 巨集、無公式、無外部連結）。解析在本機瀏覽器完成。
+  </footer>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/switchmap/vendor/exceljs.bare.min.js"></script>
+<script src="/static/switchmap/parse.js"></script>
+<script src="/static/switchmap/faceplate.js"></script>
+<script src="/static/switchmap/workbook.js"></script>
+<script src="/static/switchmap/switchmap-app.js"></script>
+{% endblock %}
