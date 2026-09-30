@@ -63,6 +63,23 @@ store/
 | Vendor | Module | `agent_mode` | `/api/v1/cmd` command key | Notes |
 |--------|--------|--------------|---------------------------|-------|
 | cisco | `cisco_backup_commands(model)` | `login` | `login` | No `enable_password` from NCCM; IOS vs NX-OS config command via `cisco_running_config_command()` |
+
+### Cisco snapshot artifacts (SwitchMap Phase 1)
+
+IOS/XE backups add SwitchDraw-oriented artifacts under `snapshots/{ts}/` (empty file + manifest entry when soft-skipped):
+
+| Artifact file | CLI |
+|---------------|-----|
+| `config.txt` | `show running-config view full` (Nexus: `show running-config`) |
+| `interfaces.txt` | `show interface status` |
+| `stack_info.txt` | `show switch` (IOS/XE only) |
+| `interfaces_description.txt` | `show interfaces description` |
+| `ip_interface_brief.txt` | `show ip interface brief` |
+| `vlan_brief.txt` | `show vlan brief` |
+| `cdp_neighbors.txt` | `show cdp neighbors detail` |
+| `lldp_neighbors.txt` | `show lldp neighbors detail` |
+
+Legacy snapshots may still use `cdp.txt` / `lldp.txt` (brief); parsers accept both filenames.
 | huawei | `huawei_backup_commands()` | `enable` | `mode` | Fixes `Unsupported mode: login` when Cisco-style payload was sent to Huawei plugin |
 | fortinet | `fortinet_backup_commands()` | `enable` | `mode` | Same as Huawei for Agent mode support |
 

@@ -197,8 +197,11 @@ def backup_device(
             except NetDriverError as exc:
                 if spec.artifact in (
                     "interfaces",
-                    "cdp",
-                    "lldp",
+                    "interfaces_description",
+                    "ip_interface_brief",
+                    "vlan_brief",
+                    "cdp_neighbors",
+                    "lldp_neighbors",
                     "manufacture_info",
                     "stack_info",
                     "ha_status",

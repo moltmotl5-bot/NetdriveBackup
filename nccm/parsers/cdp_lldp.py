@@ -85,7 +85,7 @@ def _extract_iface_pair(line: str) -> tuple[str, str] | None:
     return matches[0].strip(), matches[-1].strip()
 
 
-def parse_show_cdp_neighbors(text: str, local_device: str) -> list[NeighborRecord]:
+def _parse_show_cdp_neighbors_brief(text: str, local_device: str) -> list[NeighborRecord]:
     """Parse `show cdp neighbors` brief/table output."""
     if _is_cdp_error(text):
         return []
@@ -144,7 +144,56 @@ def parse_show_cdp_neighbors(text: str, local_device: str) -> list[NeighborRecor
     return records
 
 
-def parse_show_lldp_neighbors(text: str, local_device: str) -> list[NeighborRecord]:
+def _parse_show_cdp_neighbors_detail(text: str, local_device: str) -> list[NeighborRecord]:
+    """Parse `show cdp neighbors detail` block output."""
+    if _is_cdp_error(text):
+        return []
+
+    records: list[NeighborRecord] = []
+    seen: set[tuple[str, str, str]] = set()
+    current_remote = ""
+    for line in text.replace("\r", "").split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        m_dev = re.match(r"^Device ID:\s*(.+)$", stripped, re.I)
+        if m_dev:
+            current_remote = _clean_remote_device_id(m_dev.group(1).strip())
+            continue
+        m_if = re.match(
+            r"^Interface:\s*(.+?),\s*Port ID \(outgoing port\):\s*(.+)$",
+            stripped,
+            re.I,
+        )
+        if m_if and current_remote:
+            local_port = m_if.group(1).strip()
+            remote_port = m_if.group(2).strip()
+            key = (local_port, current_remote, remote_port)
+            if key in seen:
+                continue
+            seen.add(key)
+            records.append(
+                NeighborRecord(
+                    local_interface=local_port,
+                    remote_hostname=current_remote,
+                    remote_port=remote_port,
+                    cable_type=_classify_cable(local_port, remote_port),
+                )
+            )
+    return records
+
+
+def parse_show_cdp_neighbors(text: str, local_device: str) -> list[NeighborRecord]:
+    """Parse CDP neighbor brief or detail CLI output."""
+    body = text or ""
+    if re.search(r"(?m)^Device ID:", body):
+        detail = _parse_show_cdp_neighbors_detail(body, local_device)
+        if detail:
+            return detail
+    return _parse_show_cdp_neighbors_brief(body, local_device)
+
+
+def _parse_show_lldp_neighbors_brief(text: str, local_device: str) -> list[NeighborRecord]:
     """Parse `show lldp neighbors` table output."""
     if not text or not text.strip():
         return []
@@ -199,6 +248,64 @@ def parse_show_lldp_neighbors(text: str, local_device: str) -> list[NeighborReco
             )
 
     return records
+
+
+def _parse_show_lldp_neighbors_detail(text: str, local_device: str) -> list[NeighborRecord]:
+    """Parse `show lldp neighbors detail` block output."""
+    if not text or not text.strip():
+        return []
+    if "% Invalid" in text[:300]:
+        return []
+
+    records: list[NeighborRecord] = []
+    seen: set[tuple[str, str, str]] = set()
+    blocks = re.split(r"\n-{3,}\n", text.replace("\r", ""))
+    for block in blocks:
+        local_m = re.search(
+            r"Local Port id:\s*((?:GigabitEthernet|TenGigabitEthernet|FastEthernet|Ethernet|"
+            r"Gig|Gi|Ten|Te|Eth|Et|Fa)\S*)",
+            block,
+            re.I,
+        )
+        if not local_m:
+            local_m = re.search(r"Local Intf:\s*(\S+)", block, re.I)
+        port_m = re.search(
+            r"Port id:\s*((?:GigabitEthernet|TenGigabitEthernet|FastEthernet|Ethernet|"
+            r"Gig|Gi|Ten|Te|Eth|Et|Fa|\d+)\S*)",
+            block,
+            re.I,
+        )
+        sys_m = re.search(r"System Name:\s*(\S+)", block, re.I)
+        if not (local_m and port_m and sys_m):
+            continue
+        local_port = local_m.group(1).strip()
+        remote_port = port_m.group(1).strip()
+        remote = _clean_remote_device_id(sys_m.group(1).strip())
+        key = (local_port, remote, remote_port)
+        if key in seen:
+            continue
+        seen.add(key)
+        records.append(
+            NeighborRecord(
+                local_interface=local_port,
+                remote_hostname=remote,
+                remote_port=remote_port,
+                cable_type=_classify_cable(local_port, remote_port),
+            )
+        )
+    return records
+
+
+def parse_show_lldp_neighbors(text: str, local_device: str) -> list[NeighborRecord]:
+    """Parse LLDP neighbor brief or detail CLI output."""
+    body = text or ""
+    if re.search(r"(?m)^Local Port id:", body, re.I) or re.search(
+        r"(?m)^Chassis id:", body, re.I
+    ):
+        detail = _parse_show_lldp_neighbors_detail(body, local_device)
+        if detail:
+            return detail
+    return _parse_show_lldp_neighbors_brief(body, local_device)
 
 
 def _strip_huawei_cli_banners(text: str) -> str:
