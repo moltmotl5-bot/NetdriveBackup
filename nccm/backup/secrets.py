@@ -10,6 +10,7 @@ secret file, or the persisted store volume (created from the schedules UI).
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import stat
 from dataclasses import dataclass
@@ -105,6 +106,36 @@ def get_master_key() -> bytes | None:
 
 def secrets_configured() -> bool:
     return get_master_key() is not None
+
+
+def store_master_key_on_disk() -> bytes | None:
+    """Return the persisted store key only (ignores env/file precedence)."""
+    return _file_master_key(store_master_key_path())
+
+
+def secrets_store_key_shadowed() -> bool:
+    """True when env/file overrides an on-disk store key with a different value.
+
+    Common after DR: restored ``store/.secrets/fernet.key`` but ``.env`` still has
+    a stale ``NCCM_SECRETS_KEY`` — schedule credentials decrypt fails silently until fixed.
+    """
+    disk = store_master_key_on_disk()
+    if disk is None:
+        return False
+    active = get_master_key()
+    if active is None:
+        return False
+    if secrets_key_source() == "store":
+        return False
+    return active != disk
+
+
+def secrets_key_fingerprint() -> str | None:
+    """Short SHA-256 prefix of the active master key (for DR bundle verification)."""
+    key = get_master_key()
+    if not key:
+        return None
+    return hashlib.sha256(key).hexdigest()[:16]
 
 
 def _restrict_path_mode(path: Path, mode: int) -> None:
