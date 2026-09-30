@@ -106,25 +106,35 @@ def version_command(vendor: str) -> str:
     raise ValueError(vendor)
 
 
+def _cisco_switchmap_commands(mode: str) -> list[CommandSpec]:
+    """CLI outputs required by SwitchDraw / SwitchMap (Phase 1 collector)."""
+    return [
+        CommandSpec("interfaces_description", "show interfaces description", mode),
+        CommandSpec("ip_interface_brief", "show ip interface brief", mode),
+        CommandSpec("vlan_brief", "show vlan brief", mode),
+        CommandSpec("cdp_neighbors", "show cdp neighbors detail", mode, timeout=180),
+        CommandSpec("lldp_neighbors", "show lldp neighbors detail", mode, timeout=180),
+    ]
+
+
 def cisco_backup_commands(model: str | None) -> list[CommandSpec]:
     m = (model or "").strip().lower()
     mode = "login"
     cfg_cmd = cisco_running_config_command(m)
+    switchmap = _cisco_switchmap_commands(mode)
     if m == "nexus":
         return [
             CommandSpec("version_info", "show version", mode),
             CommandSpec("config", cfg_cmd, mode, timeout=300),
             CommandSpec("interfaces", "show interface status", mode),
-            CommandSpec("cdp", "show cdp neighbors", mode),
-            CommandSpec("lldp", "show lldp neighbors", mode),
+            *switchmap,
         ]
     return [
         CommandSpec("version_info", "show version", mode),
         CommandSpec("stack_info", "show switch", mode),
         CommandSpec("config", cfg_cmd, mode, timeout=300),
         CommandSpec("interfaces", "show interface status", mode),
-        CommandSpec("cdp", "show cdp neighbors", mode),
-        CommandSpec("lldp", "show lldp neighbors", mode),
+        *switchmap,
     ]
 
 

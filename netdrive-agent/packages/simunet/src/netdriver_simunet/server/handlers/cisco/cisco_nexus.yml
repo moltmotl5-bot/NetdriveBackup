@@ -110,6 +110,22 @@ common:
       --------------------------------------------------------------------------------
       Eth1/1        uplink             connected trunk     full    10G     10Gbase-SR
       Eth1/2        server             connected 10        full    10G     10Gbase-SR
+  - cmd: "show interfaces description"
+    output: |
+      Interface      Status         Protocol Description
+      Eth1/1         up             up       uplink
+      Eth1/2         up             up       server
+  - cmd: "show ip interface brief"
+    output: |
+      IP Interface Status for VRF "default"(1)
+      Interface            IP Address      Interface Status
+      mgmt0                192.168.1.10    protocol-up/link-up/admin-up
+  - cmd: "show vlan brief"
+    output: |
+      VLAN Name                             Status    Ports
+      ---- -------------------------------- --------- -------------------------------
+      1    default                          active    Eth1/1
+      10   servers                          active    Eth1/2
   - cmd: "show cdp neighbors"
     output: |
       Capability Codes: R - Router, T - Trans-Bridge, B - Source-Route-Bridge
@@ -120,6 +136,12 @@ common:
 
       Device-ID          Local Intrfce  Hldtme Capability  Platform  Port ID
       nexus-peer         Eth1/1         168    R S I s     N9K-9000v Eth1/1
+  - cmd: "show cdp neighbors detail"
+    output: |
+      Device ID: nexus-peer
+      Platform: cisco N9K-9000v,  Capabilities: Router Switch
+      Interface: Ethernet1/1,  Port ID (outgoing port): Ethernet1/1
+      Holdtime : 168 sec
   - cmd: "show lldp neighbors"
     output: |
       Capability codes:
@@ -128,6 +150,15 @@ common:
 
       Device ID            Local Intf     Hold-time  Capability  Port ID
       nexus-peer           Eth1/1         120        B,R         Eth1/1
+  - cmd: "show lldp neighbors detail"
+    output: |
+      ------------------------------------------------
+      Chassis id: 5254.00ab.cdef
+      Port id: Ethernet1/1
+      Local Port id: Ethernet1/1
+      System Name: nexus-peer
+      System Description:
+      Cisco Nexus Operating System
 welcome: |
   Warning: Permanently added '192.168.60.100' (RSA) to the list of known hosts.
   User Access Verification

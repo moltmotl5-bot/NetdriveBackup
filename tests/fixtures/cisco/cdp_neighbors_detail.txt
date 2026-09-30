@@ -1,0 +1,13 @@
+Device ID: DIST-SW01.example.com
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: cisco WS-C3750X-48,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/48,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 179 sec
+
+Version :
+Cisco IOS Software, C3750E Software (C3750E-UNIVERSALK9-M), Version 15.2(4)E8
+
+Device ID: ACCESS-SW02
+Interface: GigabitEthernet1/0/47,  Port ID (outgoing port): TenGigabitEthernet1/0/1
+Holdtime : 160 sec

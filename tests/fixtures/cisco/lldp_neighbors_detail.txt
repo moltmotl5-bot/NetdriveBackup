@@ -1,0 +1,15 @@
+------------------------------------------------
+Chassis id: 0011.2233.4455
+Port id: GigabitEthernet1/0/24
+Local Port id: GigabitEthernet1/0/1
+System Name: dist-sw01.example.com
+System Description:
+Cisco IOS Software, Catalyst L3 Switch Software
+Enabled Capabilities: B,R
+------------------------------------------------
+Chassis id: aabb.ccdd.eeff
+Port id: TenGigabitEthernet1/0/2
+Local Port id: GigabitEthernet1/0/47
+System Name: ACCESS-SW02
+System Description:
+Cisco IOS Software
