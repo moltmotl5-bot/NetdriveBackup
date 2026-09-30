@@ -101,3 +101,63 @@ def test_ensure_master_key_roundtrip_after_store_init(secrets_store_only):
     secrets.ensure_master_key()
     token = secrets.encrypt("stored")
     assert secrets.decrypt(token) == "stored"
+
+
+def test_store_key_shadowed_when_env_overrides_different_store_key(
+    secrets_store_only, monkeypatch: pytest.MonkeyPatch
+):
+    secrets = secrets_store_only
+    secrets.ensure_master_key()
+    store_fp = secrets.secrets_key_fingerprint()
+    other = Fernet.generate_key().decode()
+    monkeypatch.setenv("NCCM_SECRETS_KEY", other)
+    import importlib
+
+    importlib.reload(secrets)
+    assert secrets.secrets_key_source() == "env"
+    assert secrets.secrets_store_key_shadowed() is True
+    monkeypatch.delenv("NCCM_SECRETS_KEY", raising=False)
+    importlib.reload(secrets)
+    assert secrets.secrets_store_key_shadowed() is False
+    assert secrets.secrets_key_fingerprint() == store_fp
+
+
+def test_fingerprint_stable(secrets_env):
+    secrets = secrets_env
+    assert secrets.secrets_key_fingerprint() == secrets.secrets_key_fingerprint()
+
+
+def test_production_forbids_env_secrets_key(secrets_env, monkeypatch: pytest.MonkeyPatch):
+    secrets = secrets_env
+    monkeypatch.setenv("NCCM_ENV", "production")
+    with pytest.raises(RuntimeError, match="NCCM_SECRETS_KEY"):
+        secrets.ensure_production_secrets_policy()
+
+
+def test_production_allows_store_key_only(secrets_store_only, monkeypatch: pytest.MonkeyPatch):
+    secrets = secrets_store_only
+    monkeypatch.setenv("NCCM_ENV", "production")
+    secrets.ensure_master_key()
+    secrets.ensure_production_secrets_policy()
+
+
+def test_production_allows_secrets_key_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    key = Fernet.generate_key().decode()
+    key_file = tmp_path / "nccm.key"
+    key_file.write_text(key + "\n", encoding="utf-8")
+    monkeypatch.delenv("NCCM_SECRETS_KEY", raising=False)
+    monkeypatch.setenv("NCCM_SECRETS_KEY_FILE", str(key_file))
+    monkeypatch.setenv("NCCM_PRODUCTION", "1")
+    import importlib
+    import nccm.backup.secrets as secrets
+
+    importlib.reload(secrets)
+    secrets.ensure_production_secrets_policy()
+
+
+def test_decrypt_error_user_message(secrets_env):
+    secrets = secrets_env
+    with pytest.raises(secrets.SecretsDecryptError) as exc_info:
+        secrets.decrypt("not-a-valid-token")
+    assert "無法解密" in str(exc_info.value)
+    assert "NCCM_SECRETS_KEY" in str(exc_info.value)

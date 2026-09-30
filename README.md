@@ -127,11 +127,27 @@ curl -s http://localhost:8501/health
 
 ---
 
+## 災難還原（摘要）
+
+營運請**同時備份** `store/`（含 `portal_auth.db`、`schedules.db`、`.secrets/fernet.key`、快照）與 `.env`（至少 `NCCM_SESSION_SECRET`、`NCCM_AGENT_HMAC_SECRET`）。還原後：
+
+```bash
+sudo chown -R 1000:1000 store
+docker compose up -d --build
+curl -s http://localhost:8501/health
+```
+
+確認 `secrets_key_source`／`secrets_key_fingerprint` 與 `secrets_store_key_shadowed`（不應為 true）。**Production**（`NCCM_ENV=production` 或 `NCCM_PRODUCTION=1`）**禁止**在環境變數設定 `NCCM_SECRETS_KEY`；僅允許 `store/.secrets/fernet.key` 或 `NCCM_SECRETS_KEY_FILE`／Docker secret。
+
+完整情境 A–G、機密對照表與 break-glass 說明見 Portal **`/help`** →「災難還原」。
+
+---
+
 ## 文件
 
 | 文件 | 說明 |
 |------|------|
-| Portal **`/help`** | 使用手冊（安裝、操作、疑難排解） |
+| Portal **`/help`** | 使用手冊（安裝、操作、**災難還原**、疑難排解） |
 | [docs/NCCM-v3-spec.md](docs/NCCM-v3-spec.md) | 技術規格（開發者） |
 
 ---
@@ -155,6 +171,8 @@ pytest
 | **CSRF validation failed** | 硬重新整理頁面；若經 HTTPS 反向代理請設 `NCCM_HTTPS=1`；本機 HTTP 請勿設 `NCCM_HTTPS=1` |
 | 登入 **Internal Server Error** | `sudo chown -R 1000:1000 store` 後 `docker compose up -d --build` |
 | 排程頁 **Internal Server Error** | 同上；多為 `store/schedules.db` 無寫入權限 |
+| 排程無法解密／金鑰不匹配 | 見 `/help` 災難還原；檢查 `/health` 的 `secrets_store_key_shadowed` |
+| Production 啟動失敗（`NCCM_SECRETS_KEY`） | 移除 env 金鑰，改用 store 或 `NCCM_SECRETS_KEY_FILE` |
 | Portal 反覆重啟 | `docker compose logs portal --tail 50`；常見為映像未重建或 `.env` 缺 `NCCM_SESSION_SECRET`／`NCCM_AGENT_HMAC_SECRET` |
 | 使用手冊排版異常 | 重建 Portal 映像以取得 `/static/handbook.css` |
 | Agent 離線 | `docker compose logs netdriver-agent`；確認 Agent 容器 healthy |

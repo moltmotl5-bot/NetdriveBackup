@@ -33,6 +33,7 @@
   <div class="group">整合與維運</div>
   <a href="#api">REST API</a>
   <a href="#docker-update">Docker 更新</a>
+  <a href="#disaster-recovery">災難還原</a>
   <a href="#csv">設備 CSV</a>
   <a href="#troubleshoot">疑難排解</a>
 </nav>
@@ -343,6 +344,61 @@ docker compose up -d portal</code></pre>
     <p>若索引結構或 hostname 解析有變，請於 Web「設備總表」按 <strong>重建索引</strong>。</p>
   </section>
 
+  <h2 id="disaster-recovery">災難還原</h2>
+  <section class="block">
+    <p>本節說明<strong>備份什麼</strong>、<strong>還原後檢查</strong>，以及常見故障情境。NCCM v3 <strong>未使用</strong> TPM 或硬體綁定金鑰；還原問題多半來自 <code>store/</code> 與 <code>.env</code> 未一併還原、權限錯誤，或排程加密金鑰不一致。</p>
+
+    <h3>建議一併備份</h3>
+    <ol>
+      <li><strong>整個 <code>store/</code></strong> — 含 <code>portal_auth.db</code>、<code>schedules.db</code>、<code>index.db</code>、<code>.secrets/fernet.key</code>、快照目錄、<code>audit/</code>。</li>
+      <li><strong><code>.env</code>（或密鑰管理系統中的等價項）</strong> — 必填：<code>NCCM_SESSION_SECRET</code>、<code>NCCM_AGENT_HMAC_SECRET</code>。若使用 secret 檔而非 store 金鑰，另備 <code>NCCM_SECRETS_KEY_FILE</code> 內容。</li>
+      <li><strong><code>deploy/config/agent/</code></strong> — 若有自訂 Agent 設定。</li>
+    </ol>
+    <p class="tip">建議定期記錄 <code>curl -s http://localhost:8501/health</code> 的 <code>secrets_key_fingerprint</code>（金鑰 SHA-256 前 16 字 hex，非金鑰本身），還原後可核對。</p>
+
+    <h3>還原後檢查</h3>
+    <pre><code>sudo chown -R 1000:1000 store
+docker compose up -d --build
+curl -s http://localhost:8501/health | jq .</code></pre>
+    <ul>
+      <li><code>secrets_key_source</code> 是否符合預期（僅還原 store 時通常為 <code>store</code>）。</li>
+      <li><code>secrets_store_key_shadowed</code> 不應為 <code>true</code>（表示 env／secret 檔覆寫了磁碟上不同的 <code>fernet.key</code>）。</li>
+      <li><code>netdriver_agent</code> 為 <code>true</code>。</li>
+    </ul>
+
+    <h3>機密與加密（營運摘要）</h3>
+    <table>
+      <tr><th>資料</th><th>位置</th><th>還原依賴</th></tr>
+      <tr><td>Web Session</td><td>Cookie</td><td><code>NCCM_SESSION_SECRET</code>；變更後使用者需重新登入</td></tr>
+      <tr><td>Portal 密碼</td><td><code>store/portal_auth.db</code></td><td>還原 DB；僅改 <code>.env</code> 的 <code>NCCM_ADMIN_*</code> <strong>不會</strong>更新已存在使用者密碼</td></tr>
+      <tr><td>Agent HMAC</td><td><code>.env</code></td><td>Portal 與 Agent <strong>必須相同</strong>；不在 store 內</td></tr>
+      <tr><td>排程 SSH 密碼</td><td><code>schedules.db</code></td><td>與加密時<strong>相同</strong>的 Fernet 主金鑰</td></tr>
+      <tr><td>Fernet 主金鑰</td><td>env／檔案／<code>store/.secrets/fernet.key</code></td><td>見下方優先序；<strong>production 禁止</strong> <code>NCCM_SECRETS_KEY</code> 環境變數</td></tr>
+      <tr><td>設備設定備份</td><td><code>store/.../config.txt</code></td><td>還原 store 即可（明文，不依賴 Fernet）</td></tr>
+    </table>
+    <p>主金鑰解析順序（第一個命中生效）：</p>
+    <ol>
+      <li><code>NCCM_SECRETS_KEY</code>（<strong>production 禁止</strong>；本機開發可選）</li>
+      <li><code>NCCM_SECRETS_KEY_FILE</code> 或 <code>/run/secrets/nccm_secrets_key</code></li>
+      <li><code>store/.secrets/fernet.key</code>（首次確認 live 排程時可自動建立）</li>
+    </ol>
+
+    <h3>情境 A–G</h3>
+    <table>
+      <tr><th>代號</th><th>狀況</th><th>現象</th><th>修復</th></tr>
+      <tr><td><strong>A</strong></td><td>只還原 store、遺失 <code>.env</code></td><td>Compose 失敗，缺 Session／HMAC</td><td>還原 <code>.env</code> 或重新產生兩者並對齊 Portal／Agent；登入用還原的 <code>portal_auth.db</code> 帳密</td></tr>
+      <tr><td><strong>B</strong></td><td>還原 store 但 <code>.env</code> 含<strong>錯誤</strong>的 <code>NCCM_SECRETS_KEY</code></td><td>可登入；排程 decrypt 失敗</td><td>移除 env 覆寫，改用還原的 <code>fernet.key</code>；或 env 改為與備份相同金鑰</td></tr>
+      <tr><td><strong>C</strong></td><td>還原 store 但未含 <code>.secrets/fernet.key</code></td><td>無法解密排程憑證</td><td>自完整 store 備份補回；金鑰永久遺失則重建排程並重填 SSH 密碼</td></tr>
+      <tr><td><strong>D</strong></td><td>只還原 <code>.env</code>、store 為空</td><td>可 bootstrap；無快照與排程</td><td>還原 store 目錄</td></tr>
+      <tr><td><strong>E</strong></td><td>DB 毀損、快照仍在</td><td>需 admin env 重建使用者</td><td>還原 DB 或重建帳號；<code>python -m nccm index rebuild</code> 重建索引</td></tr>
+      <tr><td><strong>F</strong></td><td>Session secret 變更</td><td>全部登出</td><td>重新登入（非資料遺失）</td></tr>
+      <tr><td><strong>G</strong></td><td>Agent HMAC 與 Portal 不一致</td><td>備份／排程 Agent 簽章失敗</td><td>對齊兩服務的 <code>NCCM_AGENT_HMAC_SECRET</code></td></tr>
+    </table>
+
+    <div class="warn"><strong>權限：</strong>Portal 容器以 uid <strong>1000</strong> 讀寫 <code>store/</code>。還原 tarball 後若目錄為 root 擁有，會無法登入或排程頁 500 — 務必 <code>sudo chown -R 1000:1000 store</code>。</div>
+    <p><strong>Break-glass：</strong>DB 已有使用者時，預設不能以 <code>.env</code> 管理員登入；緊急時設 <code>NCCM_BREAK_GLASS=1</code>（仍須知道 .env 密碼）。API Token 明文僅建立時顯示一次，遺失需於 UI 重建。</p>
+  </section>
+
   <h2 id="csv">設備 CSV</h2>
   <section class="block">
     <p>批次備份與排程共用格式。必填：<code>Site,IP,Vendor,Port</code></p>
@@ -379,6 +435,8 @@ dc,10.2.1.5,huawei,22</code></pre>
       <tr><td>排程一直 running</td><td>等 job 完成；更新至最新 main；必要時停用再啟用排程</td></tr>
       <tr><td>登入 <strong>Internal Server Error</strong></td><td><code>sudo chown -R 1000:1000 store</code> 後 <code>docker compose up -d --build portal</code></td></tr>
       <tr><td>排程頁 <strong>Internal Server Error</strong></td><td>同上；多為 <code>store/schedules.db</code> 無寫入權限</td></tr>
+      <tr><td>排程無法解密／金鑰不匹配</td><td>見「<a href="#disaster-recovery">災難還原</a>」情境 B／C；檢查 <code>/health</code> 的 <code>secrets_store_key_shadowed</code>；production 勿設 <code>NCCM_SECRETS_KEY</code></td></tr>
+      <tr><td>Production 啟動失敗（禁止 NCCM_SECRETS_KEY）</td><td>移除 <code>.env</code> 的 <code>NCCM_SECRETS_KEY</code>，改用 store 金鑰或 <code>NCCM_SECRETS_KEY_FILE</code></td></tr>
       <tr><td>Portal 反覆重啟</td><td><code>docker compose logs portal --tail 50</code>；確認 <code>.env</code> 已設 HMAC／Session 密鑰且已 rebuild 映像</td></tr>
       <tr><td>使用手冊無樣式／排版異常</td><td>重建 Portal 映像；確認 <code>/static/handbook.css</code> 可載入</td></tr>
       <tr><td>Agent unhealthy</td><td><code>docker compose down -v</code> 後重建（見 Docker 更新）</td></tr>

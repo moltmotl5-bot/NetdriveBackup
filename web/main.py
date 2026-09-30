@@ -143,7 +143,29 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _check_portal_env() -> None:
+    import logging
+
     ensure_portal_can_start()
+    from nccm.backup.secrets import (
+        ensure_production_secrets_policy,
+        secrets_key_fingerprint,
+        secrets_key_source,
+        secrets_store_key_shadowed,
+    )
+
+    ensure_production_secrets_policy()
+    try:
+        if secrets_store_key_shadowed():
+            src = secrets_key_source() or "unknown"
+            fp = secrets_key_fingerprint() or "?"
+            logging.getLogger(__name__).warning(
+                "NCCM secrets: active key source=%s shadows store/.secrets/fernet.key "
+                "(fingerprint=%s). Restored store backups need matching key or unset env override.",
+                src,
+                fp,
+            )
+    except Exception:
+        pass
     try:
         from nccm.backup.schedule import start_schedule_watcher
 
@@ -246,13 +268,32 @@ async def root():
 
 @app.get("/health")
 async def health():
+    from nccm.backup.secrets import (
+        secrets_configured,
+        secrets_key_fingerprint,
+        secrets_key_source,
+        secrets_store_key_shadowed,
+    )
+
     agent_ok = NetDriverClient().health()
-    return {
+    payload: dict[str, object] = {
         "status": "ok" if agent_ok else "degraded",
         "portal": "nccm-v3",
         "netdriver_agent": agent_ok,
         "store_dir": str(store_dir()),
+        "secrets_configured": secrets_configured(),
     }
+    src = secrets_key_source()
+    if src:
+        payload["secrets_key_source"] = src
+        fp = secrets_key_fingerprint()
+        if fp:
+            payload["secrets_key_fingerprint"] = fp
+        if secrets_store_key_shadowed():
+            payload["secrets_store_key_shadowed"] = True
+            if payload["status"] == "ok":
+                payload["status"] = "degraded"
+    return payload
 
 
 @app.get("/help")
@@ -727,7 +768,11 @@ async def inventory_retention(
 
 def _schedules_ctx(request: Request, **extra):
     from nccm.backup.schedule import list_schedule_runs, list_schedules
-    from nccm.backup.secrets import secrets_configured, secrets_key_source
+    from nccm.backup.secrets import (
+        secrets_configured,
+        secrets_key_source,
+        secrets_store_key_shadowed,
+    )
 
     role = session_role(request)
     base = _ctx(
@@ -738,6 +783,7 @@ def _schedules_ctx(request: Request, **extra):
         can_operate=role_can_operate(role),
         secrets_configured=secrets_configured(),
         secrets_key_source=secrets_key_source(),
+        secrets_store_key_shadowed=secrets_store_key_shadowed(),
     )
     base.update(extra)
     return base
@@ -761,6 +807,7 @@ async def schedules_page(
             can_operate=role_can_operate(session_role(request)),
             secrets_configured=False,
             secrets_key_source=None,
+            secrets_store_key_shadowed=False,
             message=message or None,
             error=error
             or "無法存取排程資料庫；請執行 sudo chown -R 1000:1000 store 後重建 Portal",
