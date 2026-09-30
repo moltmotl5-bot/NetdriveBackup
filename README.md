@@ -100,8 +100,10 @@ curl -s http://localhost:8501/health
 
 1. **批次備份** — CSV + SSH，SSE 即時 log  
 2. **設備總表** — 版控、Config Diff、快照保留（admin/operator；保留需先 dry-run 再確認）  
-3. **CDP/LLDP 鄰居** · **Interface Map**  
+3. **CDP/LLDP 鄰居** · **Interface Map**（表格；尚無 Excel 前面板圖）  
 4. **排程備份** — CSV 上傳 → Agent 探測 → 以**日**為週期自動備份  
+
+**Cisco 埠位圖（SwitchDraw）：** 獨立工具 [switchdraw](https://github.com/moltmotl5-bot/switchdraw) 可從 PuTTY log 產生 Excel 前面板圖。與 NCCM 整合評估見 [docs/drawswitch-merge-assessment.md](docs/drawswitch-merge-assessment.md)（尚未內嵌於 Portal）。
 
 | 能力 | admin | operator | viewer |
 |------|-------|----------|--------|
