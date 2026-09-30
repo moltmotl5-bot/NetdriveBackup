@@ -30,6 +30,8 @@ docker compose up -d --build
 
 檢查：`docker compose ps` · `curl -s http://localhost:8501/health`
 
+首次登入以 `.env` 帳密；成功後須立即變更密碼。側欄 Agent 狀態為 **Online** 表示 Portal 可連 Agent。
+
 > **`store/` 權限：** Compose 將主機 `./store` 掛載至容器 `/data/store`。Portal 以 **uid 1000** 讀寫此目錄（含 `portal_auth.db`、備份快照、索引）。新安裝或 clone 後請先 `chown -R 1000:1000 store`，否則可能無法登入或 Portal 異常。
 
 ---
