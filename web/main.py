@@ -1275,6 +1275,7 @@ async def neighbors_topology_page(
     node_id: str = "",
 ):
     from nccm.inventory.topology_explorer import (
+        TOPOLOGY_EXPLORER_VERSION,
         build_explorer_view,
         list_topology_sites,
         node_detail_rows,
@@ -1284,6 +1285,7 @@ async def neighbors_topology_page(
     site_filter = site or (sites[0] if len(sites) == 1 else "")
     view_mode = "table" if view == "table" else "graph"
     agg = _topology_aggregate_flag(aggregate)
+    graph_zoom_enabled = view_mode == "graph" and not agg
     svg = ""
     stats = None
     neighbor_table: list = []
@@ -1322,6 +1324,8 @@ async def neighbors_topology_page(
             neighbor_table=neighbor_table,
             node=node,
             detail_rows=detail_rows,
+            topology_explorer_version=TOPOLOGY_EXPLORER_VERSION,
+            graph_zoom_enabled=graph_zoom_enabled,
         ),
     )
 

@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# UI / product version shown beside the Portal page title (semver-ish, independent of NCCM v3).
+TOPOLOGY_EXPLORER_VERSION = "0.1"
+
 from nccm.inventory.neighbors import (
     build_hostname_lookup,
     neighbor_device_rows,
     neighbors_for_device,
 )
-from nccm.parsers.cdp_lldp import make_device_key
 from nccm.storage.index_db import list_inventory_display, list_sites
 from nccm.topology.aggregate import apply_access_aggregation, attach_remote_platform
 from nccm.topology.layout_tree import canvas_size, tree_layout
