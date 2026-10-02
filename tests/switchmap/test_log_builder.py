@@ -54,6 +54,20 @@ def test_build_switchdraw_log_empty_interfaces_warns(store_root: Path) -> None:
     assert any("interfaces.txt 為空" in w for w in result.warnings)
 
 
+def test_build_switchdraw_log_strips_interface_command_echo(store_root: Path) -> None:
+    from nccm.switchmap.log_builder import build_switchdraw_log
+
+    snap = store_root / "lab/10.0.0.4__sw/snapshots/2026-09-30T120000Z"
+    snap.mkdir(parents=True)
+    (snap / "config.txt").write_text("hostname LAB-SW\n!\n", encoding="utf-8")
+    (snap / "interfaces.txt").write_text(
+        "LAB-SW#show interface status\n\nPort Name Status Vlan\nGi1/0/1 desc connected 10\n",
+        encoding="utf-8",
+    )
+    result = build_switchdraw_log(snap)
+    assert "LAB-SW#show interface status" not in result.log_text.split("show interfaces status", 1)[1]
+
+
 def test_build_switchdraw_log_missing_artifacts(store_root: Path) -> None:
     from nccm.switchmap.log_builder import build_switchdraw_log
 

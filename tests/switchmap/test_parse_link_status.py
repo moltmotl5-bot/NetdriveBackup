@@ -96,6 +96,24 @@ Gi1/0/1                unassigned      YES unset  up                    up
     assert port["statusText"] == "connected"
 
 
+def test_prompt_echo_in_status_section_still_parses() -> None:
+    """NetDriver captures often repeat ``host#show interface status`` before the table."""
+    log = """SW1#show running-config
+interface GigabitEthernet1/0/1
+ switchport access vlan 10
+!
+SW1#show interfaces status
+LAB-SW#show interface status
+
+Port      Name               Status       Vlan
+Gi1/0/1   UPLINK             connected    10
+"""
+    data = _run_parse(log)
+    port = data[0]["ports"][0]
+    assert port["linkStatus"] == "connected"
+    assert port["statusText"] == "connected"
+
+
 def test_missing_status_shows_em_dash_not_unknown() -> None:
     log = """SW1#show running-config
 interface GigabitEthernet1/0/5

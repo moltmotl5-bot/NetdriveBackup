@@ -255,6 +255,16 @@
         if (!devices.length) {
           throw new Error('無法解析 log，請確認已備份且為 Cisco IOS/XE。');
         }
+        if (metaEl && devices[0] && devices[0].physicalPorts) {
+          var linked = devices[0].physicalPorts.filter(function (p) {
+            return p.linkStatus && p.linkStatus !== 'unknown';
+          }).length;
+          var total = devices[0].physicalPorts.length;
+          var extra = '連線狀態已解析：' + linked + '/' + total;
+          metaEl.textContent = metaEl.textContent
+            ? metaEl.textContent + ' · ' + extra
+            : extra;
+        }
         var site = (deviceSelect.selectedOptions[0] && deviceSelect.selectedOptions[0].dataset.site) || currentSite;
         var vlanIds = onboardedVlanIds(devices[0]);
         if (!vlanIds.length) {

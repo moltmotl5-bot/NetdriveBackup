@@ -145,6 +145,27 @@ var SwitchDraw = SwitchDraw || {};
     return line.replace(/^[A-Za-z0-9_.-]+[#>]\s*/, '').trim();
   }
 
+  function commandMatchesPatterns(cmdLine, patterns) {
+    if (!cmdLine) {
+      return false;
+    }
+    var list = Array.isArray(patterns) ? patterns : [patterns];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].test(cmdLine)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isCommandEchoLine(row, patterns) {
+    var cmdLine = stripPrompt(row);
+    if (!cmdLine || !/^(?:show|sh)\s+/i.test(cmdLine)) {
+      return false;
+    }
+    return commandMatchesPatterns(cmdLine, patterns);
+  }
+
   function extractCommandSection(text, patterns) {
     var lines = text.split('\n');
     var startIdx = -1;
@@ -173,6 +194,9 @@ var SwitchDraw = SwitchDraw || {};
     var sectionLines = [];
     for (var j = startIdx; j < lines.length; j++) {
       var row = lines[j];
+      if (isCommandEchoLine(row, list)) {
+        continue;
+      }
       if (/^[A-Za-z0-9_.-]+[#>]/.test(row)) {
         break;
       }

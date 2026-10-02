@@ -43,6 +43,24 @@ def _read_artifact(snapshot_dir: Path, artifact: str) -> str | None:
     return strip_nccm_header(path.read_text(encoding="utf-8", errors="replace"))
 
 
+def _strip_leading_command_echo(body: str) -> str:
+    """Drop device prompt / bare ``show …`` echoes NetDriver often prepends to CLI output."""
+    lines = (body or "").splitlines()
+    while lines:
+        stripped = lines[0].strip()
+        if not stripped:
+            lines.pop(0)
+            continue
+        if re.match(r"^[A-Za-z0-9_.-]+[#>]\s*(?:show|sh)\s+", stripped, re.I):
+            lines.pop(0)
+            continue
+        if re.match(r"^(?:show|sh)\s+", stripped, re.I):
+            lines.pop(0)
+            continue
+        break
+    return "\n".join(lines)
+
+
 def build_switchdraw_log(
     snapshot_dir: str | Path,
     *,
@@ -86,7 +104,7 @@ def build_switchdraw_log(
             else:
                 warnings.append(f"{artifact}.txt 為空。")
         chunks.append(f"{hostname}#{command}")
-        chunks.append(body.rstrip())
+        chunks.append(_strip_leading_command_echo(body).rstrip())
 
     log_text = "\n".join(chunks).rstrip() + "\n"
     return SwitchdrawLogResult(
