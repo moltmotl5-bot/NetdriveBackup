@@ -73,7 +73,7 @@ IOS/XE backups add SwitchDraw-oriented artifacts under `snapshots/{ts}/` (empty 
 | `config.txt` | `show running-config view full` (Nexus: `show running-config`) |
 | `interfaces.txt` | `show interface status` |
 | `stack_info.txt` | `show switch` (IOS/XE only) |
-| `interfaces_description.txt` | `show interfaces description` |
+| `interfaces_description.txt` | IOS/XE: `show interfaces description`; Nexus: `show interface description` |
 | `ip_interface_brief.txt` | `show ip interface brief` |
 | `vlan_brief.txt` | `show vlan brief` |
 | `cdp_neighbors.txt` | `show cdp neighbors detail` |

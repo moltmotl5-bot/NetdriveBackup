@@ -110,7 +110,7 @@ common:
       --------------------------------------------------------------------------------
       Eth1/1        uplink             connected trunk     full    10G     10Gbase-SR
       Eth1/2        server             connected 10        full    10G     10Gbase-SR
-  - cmd: "show interfaces description"
+  - cmd: "show interface description"
     output: |
       Interface      Status         Protocol Description
       Eth1/1         up             up       uplink

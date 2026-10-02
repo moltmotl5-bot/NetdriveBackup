@@ -73,7 +73,7 @@ gantt
 | `interfaces`（已有） | `show interface status` | 埠 Status / VLAN / Speed / Type |
 | `stack_info`（已有，非 Nexus） | `show switch` | 堆疊 member → 前面板分 sheet |
 | `version_info`（已有） | `show version` | 型號、軟體（輔助） |
-| **`interfaces_description`**（新增） | `show interfaces description` | 埠描述列（與 config 互補） |
+| **`interfaces_description`**（新增） | IOS/XE：`show interfaces description`；Nexus：`show interface description` | 埠描述列（與 config 互補） |
 | **`ip_interface_brief`**（新增） | `show ip interface brief` | L3/routed 埠辨識 |
 | **`vlan_brief`**（新增） | `show vlan brief` | VLAN ID ↔ 名稱、** onboarded VLAN 集合** |
 | **`cdp_neighbors`**（擴充或雙寫） | `show cdp neighbors detail` | 每埠 neighbor（SwitchDraw 可吃 detail；現為 brief） |
