@@ -1285,7 +1285,7 @@ async def neighbors_topology_page(
     site_filter = site or (sites[0] if len(sites) == 1 else "")
     view_mode = "table" if view == "table" else "graph"
     agg = _topology_aggregate_flag(aggregate)
-    graph_zoom_enabled = view_mode == "graph" and not agg
+    graph_zoom_enabled = view_mode == "graph" and bool(site_filter)
     svg = ""
     stats = None
     neighbor_table: list = []

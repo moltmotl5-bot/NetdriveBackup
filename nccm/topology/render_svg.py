@@ -53,7 +53,7 @@ def render_topology_svg(
 ) -> str:
     parts: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" '
-        f'width="100%" role="img" aria-label="CDP LLDP topology">',
+        f'width="{width:.0f}" height="{height:.0f}" role="img" aria-label="CDP LLDP topology">',
         "<defs><style>.topo-node{cursor:pointer}</style></defs>",
     ]
 

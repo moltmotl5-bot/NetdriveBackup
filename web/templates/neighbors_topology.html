@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}CDP/LLDP 拓撲探索器 — NCCM v3{% endblock %}
 {% block content %}
+<div class="topo-explorer-page">
 <h1 class="topo-page-title">
   CDP/LLDP 拓撲探索器
-  <span class="topo-version" title="拓撲探索器 UI 版本">v{{ topology_explorer_version | default('0.1') }}</span>
+  <span class="topo-version" title="拓撲探索器 UI 版本">v{{ topology_explorer_version | default('0.2') }}</span>
 </h1>
 <p class="lead">依備份快照 CDP/LLDP 動態繪製站點拓撲；可聚合同型 Access 交換器，並切換原始協定表除錯。</p>
 
@@ -46,18 +47,15 @@
     {% if view_mode == 'table' %}
       {% include "partials/topology_table.html" %}
     {% elif svg %}
-      <div id="topo-svg-wrap"
-           class="topo-svg-wrap{% if graph_zoom_enabled %} topo-svg-wrap--zoom{% endif %}"
-           data-zoom-enabled="{% if graph_zoom_enabled %}1{% else %}0{% endif %}">
-        {% if graph_zoom_enabled %}
+      <div id="topo-svg-wrap" class="topo-svg-wrap topo-svg-wrap--zoom" data-zoom-enabled="1">
         <div class="topo-zoom-bar" role="toolbar" aria-label="拓撲縮放">
           <button type="button" class="btn-secondary btn-sm topo-zoom-btn" id="topo-zoom-out" title="縮小">−</button>
           <span class="topo-zoom-label" id="topo-zoom-label">100%</span>
           <button type="button" class="btn-secondary btn-sm topo-zoom-btn" id="topo-zoom-in" title="放大">+</button>
-          <button type="button" class="btn-secondary btn-sm topo-zoom-btn" id="topo-zoom-reset" title="重設縮放">重設</button>
-          <span class="muted topo-zoom-hint">滾輪可縮放 · 聚合關閉時可用</span>
+          <button type="button" class="btn-secondary btn-sm topo-zoom-btn" id="topo-zoom-fit" title="適配視窗">適配</button>
+          <button type="button" class="btn-secondary btn-sm topo-zoom-btn" id="topo-zoom-reset" title="100%">1:1</button>
+          <span class="muted topo-zoom-hint">滾輪縮放 · 拖曳平移</span>
         </div>
-        {% endif %}
         <div class="topo-zoom-viewport" id="topo-zoom-viewport">
           <div class="topo-zoom-inner" id="topo-zoom-inner">{{ svg | safe }}</div>
         </div>
@@ -69,6 +67,7 @@
   <aside class="topo-detail panel" id="topo-detail">
     {% include "partials/topology_detail.html" %}
   </aside>
+</div>
 </div>
 {% endblock %}
 {% block scripts %}
