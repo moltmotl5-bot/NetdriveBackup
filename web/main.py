@@ -1179,6 +1179,7 @@ async def neighbors_page(
         _ctx(
             request,
             "neighbors",
+            neighbors_tab="table",
             rows=rows,
             sites=sites,
             vendors=vendors,
@@ -1256,6 +1257,109 @@ async def neighbors_detail_partial(
             cdp_status=cdp,
             lldp_status=lldp,
             device_vendor=device_vendor,
+        ),
+    )
+
+
+def _topology_aggregate_flag(raw: str) -> bool:
+    return (raw or "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+@app.get("/neighbors/topology", response_class=HTMLResponse)
+async def neighbors_topology_page(
+    request: Request,
+    user: str = Depends(current_user),
+    site: str = "",
+    view: str = "graph",
+    aggregate: str = "1",
+    node_id: str = "",
+):
+    from nccm.inventory.topology_explorer import (
+        build_explorer_view,
+        list_topology_sites,
+        node_detail_rows,
+    )
+
+    sites = list_topology_sites()
+    site_filter = site or (sites[0] if len(sites) == 1 else "")
+    view_mode = "table" if view == "table" else "graph"
+    agg = _topology_aggregate_flag(aggregate)
+    svg = ""
+    stats = None
+    neighbor_table: list = []
+    node = None
+    detail_rows: list = []
+
+    if site_filter:
+        explorer = build_explorer_view(
+            site=site_filter,
+            aggregate=agg,
+            selected_node_id=node_id,
+        )
+        svg = explorer.svg if view_mode == "graph" else ""
+        neighbor_table = explorer.neighbor_table
+        stats = {
+            "total_physical": explorer.total_nodes_physical,
+            "current_view": explorer.current_view_nodes,
+        }
+        if node_id:
+            node, detail_rows = node_detail_rows(explorer, node_id)
+
+    return templates.TemplateResponse(
+        request,
+        "neighbors_topology.html",
+        _ctx(
+            request,
+            "neighbors",
+            neighbors_tab="topology",
+            sites=sites,
+            site_filter=site_filter,
+            view_mode=view_mode,
+            aggregate=agg,
+            node_id=node_id,
+            svg=svg,
+            stats=stats,
+            neighbor_table=neighbor_table,
+            node=node,
+            detail_rows=detail_rows,
+        ),
+    )
+
+
+@app.get("/neighbors/topology/partial/detail", response_class=HTMLResponse)
+async def neighbors_topology_detail_partial(
+    request: Request,
+    user: str = Depends(current_user),
+    site: str = "",
+    aggregate: str = "1",
+    node_id: str = "",
+):
+    from nccm.inventory.topology_explorer import (
+        build_explorer_view,
+        list_topology_sites,
+        node_detail_rows,
+    )
+
+    sites = list_topology_sites()
+    site_filter = site or (sites[0] if len(sites) == 1 else "")
+    node = None
+    detail_rows: list = []
+    if site_filter and node_id:
+        explorer = build_explorer_view(
+            site=site_filter,
+            aggregate=_topology_aggregate_flag(aggregate),
+            selected_node_id=node_id,
+        )
+        node, detail_rows = node_detail_rows(explorer, node_id)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/topology_detail.html",
+        _ctx(
+            request,
+            "neighbors",
+            node=node,
+            detail_rows=detail_rows,
         ),
     )
 

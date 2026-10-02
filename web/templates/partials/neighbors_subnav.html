@@ -1,0 +1,6 @@
+<nav class="subnav" aria-label="CDP/LLDP">
+  <a href="/neighbors{% if site_filter %}?site={{ site_filter | urlencode }}{% endif %}"
+     class="{% if neighbors_tab == 'table' %}active{% endif %}">鄰居表</a>
+  <a href="/neighbors/topology{% if site_filter %}?site={{ site_filter | urlencode }}{% endif %}"
+     class="{% if neighbors_tab == 'topology' %}active{% endif %}">拓撲探索器</a>
+</nav>

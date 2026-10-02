@@ -3,6 +3,7 @@
 {% block content %}
 <h1>CDP/LLDP 鄰居</h1>
 <p class="lead">從備份快照的 <code>cdp_neighbors.txt</code> / <code>lldp_neighbors.txt</code> 解析；點選設備列查看介面鄰居。</p>
+{% include "partials/neighbors_subnav.html" %}
 <div class="inv-page-stack">
   <section class="inv-main">
     <form id="nb-filters" class="filters"
