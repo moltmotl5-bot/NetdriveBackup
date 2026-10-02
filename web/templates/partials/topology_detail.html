@@ -1,0 +1,59 @@
+{% if node %}
+{% set role_labels = {
+  'core': '核心 CORE',
+  'dist': '匯聚 DIST',
+  'access': '接入 ACCESS',
+  'stub': '未入庫',
+  'unknown': '未知'
+} %}
+<div class="topo-detail-inner">
+  <header class="topo-detail-head">
+    <div class="topo-detail-head-row">
+      <h2 class="topo-detail-heading">節點詳情</h2>
+      <span class="topo-role-badge topo-role-{{ node.role }}">{{ role_labels.get(node.role, node.role) }}</span>
+    </div>
+    <p class="topo-detail-hostname" title="{{ node.label }}">{{ node.label }}</p>
+    {% if node.node_kind == 'aggregate' %}
+    <p class="muted topo-detail-meta">聚合群 · 父節點 {{ node.parent_dist_node_id }} · {{ node.member_count }} 台</p>
+    {% elif node.ip %}
+    <p class="topo-detail-ip">{{ node.ip }}</p>
+    {% endif %}
+    {% if detail_rows %}
+    <p class="muted topo-detail-meta">{{ detail_rows|length }} 筆 CDP/LLDP 鏈路{% if detail_rows|length >= 40 %}（顯示前 40 筆）{% endif %}</p>
+    {% endif %}
+  </header>
+  {% if detail_rows %}
+  <div class="topo-detail-scroll">
+    <table class="inv-table topo-detail-table">
+      <thead>
+        <tr>
+          <th>本端介面</th>
+          <th>鄰居</th>
+          <th>鄰居介面</th>
+          <th>協定</th>
+          <th>Platform</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in detail_rows %}
+        <tr>
+          <td class="topo-mono">{{ r.local_interface }}</td>
+          <td class="topo-neighbor">{{ r.remote_hostname }}</td>
+          <td class="topo-mono">{{ r.remote_port }}</td>
+          <td><span class="topo-proto">{{ r.protocol }}</span></td>
+          <td>{{ r.platform_model or r.platform_raw or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted topo-detail-empty">無鄰居列可顯示。</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="topo-detail-inner topo-detail-empty-state">
+  <h2 class="topo-detail-heading">節點詳情</h2>
+  <p class="muted">點選拓撲圖上的節點以檢視 CDP/LLDP 紀錄。</p>
+</div>
+{% endif %}

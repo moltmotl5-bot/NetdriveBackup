@@ -15,6 +15,7 @@ def test_cdp_detail_parser():
     assert rows[0].local_interface == "GigabitEthernet1/0/48"
     assert rows[0].remote_hostname == "DIST-SW01"
     assert rows[0].remote_port == "GigabitEthernet1/0/1"
+    assert rows[0].platform_raw.startswith("cisco WS-C3750X")
     assert rows[1].remote_port == "TenGigabitEthernet1/0/1"
 
 
