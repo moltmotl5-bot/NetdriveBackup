@@ -73,7 +73,7 @@ gantt
 | `interfaces`（已有） | `show interface status` | 埠 Status / VLAN / Speed / Type |
 | `stack_info`（已有，非 Nexus） | `show switch` | 堆疊 member → 前面板分 sheet |
 | `version_info`（已有） | `show version` | 型號、軟體（輔助） |
-| **`interfaces_description`**（新增） | `show interfaces description` | 埠描述列（與 config 互補） |
+| **`interfaces_description`**（新增） | IOS/XE：`show interfaces description`；Nexus：`show interface description` | 埠描述列（與 config 互補） |
 | **`ip_interface_brief`**（新增） | `show ip interface brief` | L3/routed 埠辨識 |
 | **`vlan_brief`**（新增） | `show vlan brief` | VLAN ID ↔ 名稱、** onboarded VLAN 集合** |
 | **`cdp_neighbors`**（擴充或雙寫） | `show cdp neighbors detail` | 每埠 neighbor（SwitchDraw 可吃 detail；現為 brief） |
@@ -106,6 +106,7 @@ gantt
 |------|------|
 | 備份時間變長（detail + 多指令） | 個別 `CommandSpec.timeout`；soft-skip |
 | 舊快照無新 artifact | 合成 API 降級提示「請重新備份」；Interface Map 仍可用 |
+| 前面板連線狀態空白 | **優先** `interfaces.txt`（`show interface status`）→ **其次** `interfaces_description.txt` 的 Status/Protocol；Phase 1 前若缺 `interfaces_description` 仍可用既有 `interfaces.txt`；兩者皆缺或為空時 UI 顯示「—」並提示重新備份 |
 | CDP/LLDP 解析 regression | pytest 加 brief + detail golden fixtures |
 
 ### 主要程式觸點

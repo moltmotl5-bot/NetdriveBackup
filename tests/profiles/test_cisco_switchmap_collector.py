@@ -20,7 +20,7 @@ SWITCHMAP_ARTIFACTS = (
     "lldp_neighbors",
 )
 
-SWITCHMAP_COMMANDS = {
+IOS_SWITCHMAP_COMMANDS = {
     "interfaces_description": "show interfaces description",
     "ip_interface_brief": "show ip interface brief",
     "vlan_brief": "show vlan brief",
@@ -28,12 +28,15 @@ SWITCHMAP_COMMANDS = {
     "lldp_neighbors": "show lldp neighbors detail",
 }
 
+NEXUS_INTERFACES_DESCRIPTION = "show interface description"
+
 
 def test_cisco_ios_backup_includes_switchmap_commands():
     arts = {s.artifact: s.command for s in cisco_backup_commands("catalyst")}
+    assert arts["interfaces"] == "show interface status"
     for name in SWITCHMAP_ARTIFACTS:
         assert name in arts
-        assert arts[name] == SWITCHMAP_COMMANDS[name]
+        assert arts[name] == IOS_SWITCHMAP_COMMANDS[name]
     assert "cdp" not in arts
     assert "lldp" not in arts
 
@@ -42,6 +45,15 @@ def test_cisco_nexus_backup_includes_switchmap_neighbors():
     arts = {s.artifact: s.command for s in cisco_backup_commands("nexus")}
     for name in SWITCHMAP_ARTIFACTS:
         assert name in arts
+    assert arts["interfaces_description"] == NEXUS_INTERFACES_DESCRIPTION
+    assert (
+        arts["interfaces_description"]
+        != IOS_SWITCHMAP_COMMANDS["interfaces_description"]
+    )
+    for name in SWITCHMAP_ARTIFACTS:
+        if name == "interfaces_description":
+            continue
+        assert arts[name] == IOS_SWITCHMAP_COMMANDS[name]
     assert "stack_info" not in [s.artifact for s in cisco_backup_commands("nexus")]
 
 

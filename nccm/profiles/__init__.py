@@ -95,6 +95,14 @@ def cisco_running_config_command(model: str | None) -> str:
     return "show running-config view full"
 
 
+def cisco_interfaces_description_command(model: str | None) -> str:
+    """NX-OS uses singular 'interface'; IOS/XE uses 'interfaces'."""
+    m = (model or "").strip().lower()
+    if m == "nexus":
+        return "show interface description"
+    return "show interfaces description"
+
+
 def version_command(vendor: str) -> str:
     v = normalize_vendor(vendor)
     if v == "cisco":
@@ -106,10 +114,14 @@ def version_command(vendor: str) -> str:
     raise ValueError(vendor)
 
 
-def _cisco_switchmap_commands(mode: str) -> list[CommandSpec]:
+def _cisco_switchmap_commands(mode: str, model: str | None = None) -> list[CommandSpec]:
     """CLI outputs required by SwitchDraw / SwitchMap (Phase 1 collector)."""
     return [
-        CommandSpec("interfaces_description", "show interfaces description", mode),
+        CommandSpec(
+            "interfaces_description",
+            cisco_interfaces_description_command(model),
+            mode,
+        ),
         CommandSpec("ip_interface_brief", "show ip interface brief", mode),
         CommandSpec("vlan_brief", "show vlan brief", mode),
         CommandSpec("cdp_neighbors", "show cdp neighbors detail", mode, timeout=180),
@@ -121,7 +133,7 @@ def cisco_backup_commands(model: str | None) -> list[CommandSpec]:
     m = (model or "").strip().lower()
     mode = "login"
     cfg_cmd = cisco_running_config_command(m)
-    switchmap = _cisco_switchmap_commands(mode)
+    switchmap = _cisco_switchmap_commands(mode, m)
     if m == "nexus":
         return [
             CommandSpec("version_info", "show version", mode),

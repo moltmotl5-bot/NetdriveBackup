@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -71,6 +71,7 @@ NAV = [
     ("inventory", "設備總表與版控", "/inventory"),
     ("neighbors", "CDP/LLDP 鄰居", "/neighbors"),
     ("interfaces", "Interface Map", "/interfaces"),
+    ("switchmap", "SwitchMap", "/switchmap"),
     ("schedules", "排程備份", "/schedules"),
 ]
 ADMIN_NAV = [
@@ -1313,3 +1314,108 @@ async def interfaces_detail_partial(
         "partials/interfaces_detail.html",
         _ctx(request, "interfaces", device_id=device_id, iface=iface),
     )
+
+
+@app.get("/switchmap", response_class=HTMLResponse)
+async def switchmap_page(
+    request: Request,
+    user: str = Depends(current_user),
+    q: str = "",
+    site: str = "",
+    vendor: str = "",
+    device_id: str = "",
+    snapshot_ts: str = "",
+):
+    from nccm.inventory.neighbors import neighbor_device_rows
+    from nccm.profiles import normalize_vendor
+    from nccm.storage.index_db import list_sites, list_vendors
+    from nccm.switchmap.device import switchmap_context_for_device
+
+    rows, _ = neighbor_device_rows(query=q, site=site, vendor=vendor or "cisco")
+    rows = [r for r in rows if normalize_vendor(r["vendor"]) == "cisco"]
+    sites = list_sites()
+    vendors = list_vendors()
+    snapshot_versions: list[str] = []
+    if device_id:
+        ctx = switchmap_context_for_device(device_id, snapshot_ts=snapshot_ts)
+        snapshot_versions = list(ctx.versions)
+        snapshot_ts = ctx.snapshot_ts or snapshot_ts
+
+    return templates.TemplateResponse(
+        request,
+        "switchmap.html",
+        _ctx(
+            request,
+            "switchmap",
+            rows=rows,
+            sites=sites,
+            vendors=vendors,
+            q=q,
+            site_filter=site,
+            vendor_filter=vendor,
+            device_id=device_id,
+            snapshot_ts=snapshot_ts,
+            snapshot_versions=snapshot_versions,
+        ),
+    )
+
+
+@app.get("/switchmap/partial/snapshots", response_class=HTMLResponse)
+async def switchmap_snapshots_partial(
+    request: Request,
+    user: str = Depends(current_user),
+    device_id: str = "",
+):
+    import html as html_module
+
+    from nccm.switchmap.device import switchmap_context_for_device
+
+    ctx = switchmap_context_for_device(device_id) if device_id else None
+    options = []
+    if ctx and ctx.versions:
+        for v in ctx.versions:
+            sel = " selected" if v == ctx.snapshot_ts else ""
+            ev = html_module.escape(v, quote=True)
+            options.append(f'<option value="{ev}"{sel}>{html_module.escape(v)}</option>')
+    html = "".join(options) if options else '<option value="">尚無快照</option>'
+    return HTMLResponse(html)
+
+
+@app.get("/switchmap/devices/{device_id}/log", response_class=PlainTextResponse)
+async def switchmap_device_log(
+    request: Request,
+    device_id: str,
+    user: str = Depends(current_user),
+    snapshot_ts: str = "",
+):
+    from nccm.switchmap.device import switchmap_context_for_device
+
+    ctx = switchmap_context_for_device(device_id, snapshot_ts=snapshot_ts)
+    if ctx.error:
+        raise HTTPException(status_code=404, detail=ctx.error)
+    if not ctx.log_result:
+        raise HTTPException(status_code=404, detail="無法建立 log")
+    result = ctx.log_result
+    headers = {}
+    if result.missing_artifacts:
+        headers["X-Switchmap-Missing"] = ",".join(result.missing_artifacts)
+    if result.warnings:
+        headers["X-Switchmap-Warnings"] = "; ".join(result.warnings)[:500]
+    return PlainTextResponse(result.log_text, media_type="text/plain; charset=utf-8", headers=headers)
+
+
+@app.get("/switchmap/api/vlan-colors")
+async def switchmap_vlan_colors_api(
+    request: Request,
+    user: str = Depends(current_user),
+    site: str = "",
+    vlan_ids: str = "",
+):
+    from nccm.switchmap.vlan_colors import assign_vlan_colors
+
+    ids = [x.strip() for x in (vlan_ids or "").split(",") if x.strip()]
+    try:
+        colors = assign_vlan_colors(site, ids)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+    return {"site": site or "_default", "colors": colors}

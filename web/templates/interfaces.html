@@ -38,6 +38,9 @@
                  hx-target="#if-detail"
                  hx-swap="innerHTML"
                  hx-push-url="true">檢視</a>
+              {% if r.vendor | lower == 'cisco' %}
+              · <a href="/switchmap?device_id={{ r.device_id | urlencode }}">SwitchMap</a>
+              {% endif %}
             </td>
           </tr>
           {% else %}

@@ -62,7 +62,7 @@ NCCM 透過 **SSH** 登入設備，依廠牌執行一組 **show／display** 指�
 | 型號／版本 | `show version` |
 | 設定 | Nexus：`show running-config`；其餘 IOS 類：`show running-config view full` |
 | Stack | `show switch`（非 Nexus 時） |
-| 介面／鄰居／SwitchMap | `show interface status`、`show interfaces description`、`show ip interface brief`、`show vlan brief`、`show cdp neighbors detail`、`show lldp neighbors detail` |
+| 介面／鄰居／SwitchMap | `show interface status`、IOS/XE：`show interfaces description`／Nexus：`show interface description`、`show ip interface brief`、`show vlan brief`、`show cdp neighbors detail`、`show lldp neighbors detail` |
 
 **最低權限建議：** 可 SSH 登入，且上述 **exec 層 show** 不被拒。實務上常使用 **privilege 15 唯讀** 或自訂 **view／role** 僅含上述指令（勿給 `configure terminal`）。若 `show running-config view full` 被拒，備份 SSE log 的 `[config]` 會失敗—請放寬該帳號的 show 權限或改用符合政策的唯讀 role。
 

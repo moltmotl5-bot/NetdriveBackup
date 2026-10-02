@@ -1,0 +1,154 @@
+/* SwitchMap faceplate preview — scoped; portal chrome comes from nccm.css */
+
+.switchmap-page .switchmap-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-top: 1rem;
+}
+
+.switchmap-page .switchmap-picker label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  min-width: 12rem;
+}
+
+.switchmap-page .switchmap-picker select {
+  width: auto;
+  min-width: 220px;
+  margin-top: 0;
+}
+
+.switchmap-page .filters button.btn-secondary,
+.switchmap-page .switchmap-picker button.btn-primary,
+.switchmap-page .switchmap-picker button.btn-secondary {
+  width: auto;
+  margin-top: 0;
+}
+
+.switchmap-page .status {
+  margin-top: 0.75rem;
+  color: var(--ok);
+  font-size: 0.9rem;
+}
+
+.switchmap-page .error-banner {
+  color: var(--bad);
+  margin-top: 0.75rem;
+}
+
+.switchmap-page #switchmap-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.switchmap-page .summary-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: #121a24;
+}
+
+.switchmap-page .summary-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.switchmap-page .summary-card ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.switchmap-page .vlan-legend {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.switchmap-page .vlan-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.switchmap-page .device-preview {
+  margin-bottom: 1.5rem;
+}
+
+.switchmap-page .module-block {
+  margin-bottom: 1.25rem;
+}
+
+.switchmap-page .module-block h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.switchmap-page .row-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0.35rem;
+}
+
+.switchmap-page .port-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.switchmap-page .port-box {
+  display: flex;
+  width: 128px;
+  min-height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+.switchmap-page .port-vlan-cell {
+  flex: 1.2;
+  padding: 6px;
+}
+
+.switchmap-page .port-status-cell {
+  flex: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  font-weight: 600;
+  text-align: center;
+  word-break: break-word;
+}
+
+.switchmap-page .port-name {
+  font-weight: 700;
+}
+
+.switchmap-page .port-vlan {
+  opacity: 0.95;
+  word-break: break-all;
+}
+
+.switchmap-page .switchmap-footer {
+  margin-top: 1.5rem;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .switchmap-page .port-box {
+    width: calc(50% - 0.5rem);
+  }
+}
