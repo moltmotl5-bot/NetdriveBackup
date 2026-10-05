@@ -18,7 +18,10 @@ LINK_SPACING = 22
 FANOUT_SPACING = 18
 LABEL_SLOT_PX = 16
 LABEL_STUB_PAD = 12
-LABEL_COLUMN_GAP = 17
+LABEL_COLUMN_GAP = 18
+MIN_TWO_LABEL_STUB = 58
+MIN_COLUMN_PAIR_STUB = 36
+LABEL_CLEARANCE = 4
 
 # Longest match first (TenGig* before Ethernet).
 _IFACE_PREFIXES = tuple(
@@ -126,7 +129,7 @@ def _fanout_channel_by_edge(
         by_src[e.source_id].append(e)
         by_tgt[e.target_id].append(e)
 
-    def _slot_offset(sorted_edges: list[TopologyEdge], pick_xy) -> None:
+    def _slot_offset(sorted_edges: list[TopologyEdge]) -> None:
         n = len(sorted_edges)
         if n <= 1:
             return
@@ -141,7 +144,7 @@ def _fanout_channel_by_edge(
                 e.edge_id,
             )
         )
-        _slot_offset(elist, None)
+        _slot_offset(elist)
     for elist in by_tgt.values():
         elist.sort(
             key=lambda e: (
@@ -150,7 +153,7 @@ def _fanout_channel_by_edge(
                 e.edge_id,
             )
         )
-        _slot_offset(elist, None)
+        _slot_offset(elist)
     return channel
 
 
@@ -233,12 +236,77 @@ def _same_segment(a: _Seg, b: _Seg) -> bool:
     return a.key == b.key and a.p1 == b.p1 and a.p2 == b.p2
 
 
+def _label_stack_extent(lab: _LabelSpec) -> float:
+    """Vertical span of a port capsule on the canvas (rotated labels use text width)."""
+    w = max(26, len(lab.text) * 4.6)
+    return w if lab.rotate else 10
+
+
+def _required_stub_length(label_count: int, *, max_text_len: int = 12) -> float:
+    if label_count >= 2:
+        extent = max(26, max_text_len * 4.6)
+        # Same-segment spread uses t=(i+1)/(n+1); need Δt >= stacked extents on the wire.
+        spread_gap_t = 1.0 / (label_count + 1)
+        by_extent = (2 * extent + LABEL_CLEARANCE) / max(spread_gap_t, 0.25)
+        return max(
+            MIN_TWO_LABEL_STUB,
+            by_extent,
+            label_count * LABEL_COLUMN_GAP + LABEL_STUB_PAD + 8,
+        )
+    return LABEL_COLUMN_GAP + LABEL_STUB_PAD
+
+
+def _extend_column_pair_stubs(
+    coords: list[tuple[float, float]], segs: list[_Seg], n_labels: int
+) -> list[tuple[float, float]]:
+    """Two ports on one vertical column (lower + upper stub), e.g. DS under H2."""
+    v_idxs = [i for i, s in enumerate(segs) if s.kind == "V"]
+    if n_labels < 2 or len(v_idxs) < 2:
+        return coords
+    pts = [list(p) for p in coords]
+
+    def _lengthen_stub(seg_idx: int, need_len: float) -> None:
+        seg = segs[seg_idx]
+        extra = max(0.0, need_len - seg.length)
+        if extra <= 0:
+            return
+        i = seg_idx
+        x1, y1 = pts[i]
+        x2, y2 = pts[i + 1]
+        dy = y2 - y1
+        if abs(dy) < 1:
+            return
+        sign = 1 if dy > 0 else -1
+        if seg_idx == 0:
+            pts[i + 1][1] = y2 + sign * extra
+            for j in range(i + 2, len(pts)):
+                if abs(pts[j][0] - pts[i + 1][0]) < 0.5 or abs(pts[j][1] - y2) < 0.5:
+                    pts[j][1] = pts[i + 1][1]
+        elif seg_idx == len(segs) - 1:
+            pts[i][1] = y1 - sign * extra
+            if i > 0 and abs(pts[i - 1][1] - y1) < 0.5:
+                pts[i - 1][1] = pts[i][1]
+        else:
+            pts[i + 1][1] = y2 + sign * extra
+
+    per_stub = max(MIN_COLUMN_PAIR_STUB, _required_stub_length(2) * 0.55)
+    for vi in v_idxs:
+        _lengthen_stub(vi, per_stub)
+
+    return [tuple(p) for p in pts]
+
+
 def _extend_coords_for_labels(
     coords: list[tuple[float, float]],
     segs: list[_Seg],
     label_count_by_idx: dict[int, int],
+    *,
+    column_pair: bool = False,
+    column_label_count: int = 0,
 ) -> list[tuple[float, float]]:
     """Lengthen vertical stubs so port labels fit along the wire without stacking."""
+    if column_pair and column_label_count >= 2:
+        return _extend_column_pair_stubs(coords, segs, column_label_count)
     if not label_count_by_idx:
         return coords
     pts = [list(p) for p in coords]
@@ -248,7 +316,7 @@ def _extend_coords_for_labels(
         seg = segs[seg_idx]
         if seg.kind != "V":
             continue
-        need_len = n * LABEL_SLOT_PX + LABEL_STUB_PAD
+        need_len = _required_stub_length(n)
         extra = max(0.0, need_len - seg.length)
         if extra <= 0:
             continue
@@ -277,32 +345,56 @@ def _extend_coords_for_labels(
 
 def _label_plan(
     segs: list[_Seg], local: str, remote: str
-) -> tuple[dict[int, int], list[tuple[int, str, float]]]:
-    """Return per-segment label counts and (seg_index, text, t) placements."""
+) -> tuple[dict[int, int], list[tuple[int, str, float]], bool, int]:
+    """Return counts, placements, column_pair flag, labels on shared vertical column."""
     counts: dict[int, int] = defaultdict(int)
     placements: list[tuple[int, str, float]] = []
+    column_pair = False
+    column_labels = 0
     src = _pick_source_segment(segs)
     tgt = _pick_target_segment(segs)
     if not local and not remote:
-        return counts, placements
+        return counts, placements, column_pair, column_labels
     if src and tgt and _same_segment(src, tgt):
         idx = segs.index(src)
         n = int(bool(local)) + int(bool(remote))
         counts[idx] = n
+        column_labels = n
         if local:
-            placements.append((idx, local, 1 / (n + 1)))
+            placements.append((idx, local, 0.2 if n >= 2 else 0.5))
         if remote:
-            placements.append((idx, remote, n / (n + 1)))
-        return counts, placements
+            placements.append((idx, remote, 0.8 if n >= 2 else 0.5))
+        return counts, placements, column_pair, column_labels
+    if (
+        local
+        and remote
+        and src
+        and tgt
+        and src.kind == "V"
+        and tgt.kind == "V"
+        and _vertical_column((src.p1[0] + src.p2[0]) / 2)
+        == _vertical_column((tgt.p1[0] + tgt.p2[0]) / 2)
+    ):
+        column_pair = True
+        column_labels = 2
+        sidx = segs.index(src)
+        tidx = segs.index(tgt)
+        counts[sidx] = 1
+        counts[tidx] = 1
+        placements.append((sidx, local, 0.18))
+        placements.append((tidx, remote, 0.82))
+        return counts, placements, column_pair, column_labels
     if local and src:
         idx = segs.index(src)
         counts[idx] += 1
-        placements.append((idx, local, 0.38))
+        column_labels += 1
+        placements.append((idx, local, 0.32))
     if remote and tgt:
         idx = segs.index(tgt)
         counts[idx] += 1
-        placements.append((idx, remote, 0.62))
-    return counts, placements
+        column_labels += 1
+        placements.append((idx, remote, 0.68))
+    return counts, placements, column_pair, column_labels
 
 
 def _spread_segment_labels(labels: list[_LabelSpec]) -> None:
@@ -316,12 +408,23 @@ def _spread_segment_labels(labels: list[_LabelSpec]) -> None:
             continue
         group.sort(key=lambda l: (l.y, l.x))
         n = len(group)
+        seg = group[0].seg
+        if not seg or seg.length < 8:
+            continue
+        if n == 2 and seg.kind == "V" and all(l.rotate == -90 for l in group):
+            e0 = _label_stack_extent(group[0])
+            e1 = _label_stack_extent(group[1])
+            half = (e0 + e1) / (2 * seg.length) + LABEL_CLEARANCE / seg.length
+            half = min(max(half, 0.22), 0.38)
+            ts = (0.5 - half, 0.5 + half)
+            for lab, t in zip(group, ts):
+                lab.slot_t = t
+                lab.x, lab.y = _point_on_segment(seg, t)
+            continue
         for i, lab in enumerate(group):
-            if not lab.seg:
-                continue
             t = (i + 1) / (n + 1)
             lab.slot_t = t
-            x, y = _point_on_segment(lab.seg, t)
+            x, y = _point_on_segment(seg, t)
             lab.x, lab.y = x, y
 
 
@@ -336,9 +439,11 @@ def _nudge_vertical_column_labels(labels: list[_LabelSpec]) -> None:
             continue
         group.sort(key=lambda l: l.y)
         for i in range(1, len(group)):
+            need = (_label_stack_extent(group[i - 1]) + _label_stack_extent(group[i])) / 2
+            need += LABEL_CLEARANCE
             gap = group[i].y - group[i - 1].y
-            if gap < LABEL_COLUMN_GAP:
-                group[i].y = group[i - 1].y + LABEL_COLUMN_GAP
+            if gap < need:
+                group[i].y = group[i - 1].y + need
 
 
 def _global_vertical_label_counts(
@@ -427,19 +532,25 @@ def render_topology_svg(
         local = _abbrev_ifname(e.local_interface)
         remote = _abbrev_ifname(e.remote_interface)
         segs = _segments_from_coords(coords)
-        counts, placements = _label_plan(segs, local, remote)
+        counts, placements, column_pair, column_labels = _label_plan(segs, local, remote)
         plan_for_global.append((dict(counts), segs))
-        prep.append((e, coords, counts, placements))
+        prep.append((e, coords, counts, placements, column_pair, column_labels))
 
     global_col = _global_vertical_label_counts(plan_for_global)
 
     all_labels: list[_LabelSpec] = []
     draw_queue: list[tuple[TopologyEdge, list[tuple[float, float]]]] = []
 
-    for e, coords, counts, placements in prep:
+    for e, coords, counts, placements, column_pair, column_labels in prep:
         segs = _segments_from_coords(coords)
         merged = _merge_vertical_counts(counts, segs, global_col)
-        coords = _extend_coords_for_labels(coords, segs, merged)
+        coords = _extend_coords_for_labels(
+            coords,
+            segs,
+            merged,
+            column_pair=column_pair,
+            column_label_count=column_labels,
+        )
         draw_queue.append((e, coords))
         all_labels.extend(_labels_from_plan(e, coords, placements))
 
