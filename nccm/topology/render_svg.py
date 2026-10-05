@@ -15,6 +15,8 @@ ROLE_STYLES = {
 }
 
 LINK_SPACING = 22
+LABEL_SLOT_PX = 15
+LABEL_STUB_PAD = 10
 
 # Longest match first (TenGig* before Ethernet).
 _IFACE_PREFIXES = tuple(
@@ -177,6 +179,82 @@ def _label_on_wire(
     )
 
 
+def _same_segment(a: _Seg, b: _Seg) -> bool:
+    return a.key == b.key and a.p1 == b.p1 and a.p2 == b.p2
+
+
+def _extend_coords_for_labels(
+    coords: list[tuple[float, float]],
+    segs: list[_Seg],
+    label_count_by_idx: dict[int, int],
+) -> list[tuple[float, float]]:
+    """Lengthen vertical stubs so port labels fit along the wire without stacking."""
+    if not label_count_by_idx:
+        return coords
+    pts = [list(p) for p in coords]
+    for seg_idx, n in sorted(label_count_by_idx.items()):
+        if n <= 0 or seg_idx >= len(segs):
+            continue
+        seg = segs[seg_idx]
+        if seg.kind != "V":
+            continue
+        need_len = n * LABEL_SLOT_PX + LABEL_STUB_PAD
+        extra = max(0.0, need_len - seg.length)
+        if extra <= 0:
+            continue
+        i = seg_idx
+        x1, y1 = pts[i]
+        x2, y2 = pts[i + 1]
+        dy = y2 - y1
+        if abs(dy) < 1:
+            continue
+        sign = 1 if dy > 0 else -1
+        if seg_idx == 0:
+            pts[i + 1][1] = y2 + sign * extra
+            for j in range(i + 2, len(pts)):
+                if abs(pts[j][0] - pts[i + 1][0]) < 0.5:
+                    pts[j][1] = pts[i + 1][1]
+                elif abs(pts[j][1] - y2) < 0.5:
+                    pts[j][1] = pts[i + 1][1]
+        elif seg_idx == len(segs) - 1:
+            pts[i][1] = y1 - sign * extra
+            if i > 0 and abs(pts[i - 1][1] - y1) < 0.5:
+                pts[i - 1][1] = pts[i][1]
+        else:
+            pts[i + 1][1] = y2 + sign * extra
+    return [tuple(p) for p in pts]
+
+
+def _label_plan(
+    segs: list[_Seg], local: str, remote: str
+) -> tuple[dict[int, int], list[tuple[int, str, float]]]:
+    """Return per-segment label counts and (seg_index, text, t) placements."""
+    counts: dict[int, int] = defaultdict(int)
+    placements: list[tuple[int, str, float]] = []
+    src = _pick_source_segment(segs)
+    tgt = _pick_target_segment(segs)
+    if not local and not remote:
+        return counts, placements
+    if src and tgt and _same_segment(src, tgt):
+        idx = segs.index(src)
+        n = int(bool(local)) + int(bool(remote))
+        counts[idx] = n
+        if local:
+            placements.append((idx, local, 1 / (n + 1)))
+        if remote:
+            placements.append((idx, remote, n / (n + 1)))
+        return counts, placements
+    if local and src:
+        idx = segs.index(src)
+        counts[idx] += 1
+        placements.append((idx, local, 0.38))
+    if remote and tgt:
+        idx = segs.index(tgt)
+        counts[idx] += 1
+        placements.append((idx, remote, 0.62))
+    return counts, placements
+
+
 def _spread_segment_labels(labels: list[_LabelSpec]) -> None:
     """Place labels along the wire (vary t) when they share the same segment."""
     buckets: dict[tuple, list[_LabelSpec]] = defaultdict(list)
@@ -197,22 +275,17 @@ def _spread_segment_labels(labels: list[_LabelSpec]) -> None:
             lab.x, lab.y = x, y
 
 
-def _collect_edge_labels(e: TopologyEdge, coords: list[tuple[float, float]]) -> list[_LabelSpec]:
-    local = _abbrev_ifname(e.local_interface)
-    remote = _abbrev_ifname(e.remote_interface)
-    if not local and not remote:
-        return []
+def _labels_from_plan(
+    e: TopologyEdge,
+    coords: list[tuple[float, float]],
+    placements: list[tuple[int, str, float]],
+) -> list[_LabelSpec]:
     segs = _segments_from_coords(coords)
     out: list[_LabelSpec] = []
-    src_seg = _pick_source_segment(segs)
-    tgt_seg = _pick_target_segment(segs)
-    if local and src_seg:
-        lab = _label_on_wire(src_seg, local, e.color, t=0.42)
-        if lab:
-            out.append(lab)
-    if remote and tgt_seg:
-        # Keep core/dist port names on the vertical stub, not the shared horizontal bus.
-        lab = _label_on_wire(tgt_seg, remote, e.color, t=0.58)
+    for seg_idx, text, t in placements:
+        if not text or seg_idx >= len(segs):
+            continue
+        lab = _label_on_wire(segs[seg_idx], text, e.color, t=t)
         if lab:
             out.append(lab)
     return out
@@ -237,6 +310,7 @@ def render_topology_svg(
     ]
 
     all_labels: list[_LabelSpec] = []
+    draw_queue: list[tuple[TopologyEdge, list[tuple[float, float]]]] = []
 
     for e in edges:
         if e.source_id not in positions or e.target_id not in positions:
@@ -247,15 +321,23 @@ def render_topology_svg(
         coords = _orthogonal_path_coords(
             start, end, e.pair_index, pair_count=max(1, e.pair_count)
         )
+        local = _abbrev_ifname(e.local_interface)
+        remote = _abbrev_ifname(e.remote_interface)
+        segs = _segments_from_coords(coords)
+        counts, placements = _label_plan(segs, local, remote)
+        coords = _extend_coords_for_labels(coords, segs, dict(counts))
+        draw_queue.append((e, coords))
+        all_labels.extend(_labels_from_plan(e, coords, placements))
+
+    _spread_segment_labels(all_labels)
+
+    for e, coords in draw_queue:
         pts = _orthogonal_path_str(coords)
         dash = "" if not e.target_id.startswith("hn:") else ""
         parts.append(
             f'<polyline points="{pts}" fill="none" stroke="{e.color}" '
             f'stroke-width="2" stroke-linejoin="round" {dash}/>'
         )
-        all_labels.extend(_collect_edge_labels(e, coords))
-
-    _spread_segment_labels(all_labels)
 
     for n in nodes:
         if n.node_id not in positions:
