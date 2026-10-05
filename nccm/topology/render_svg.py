@@ -14,6 +14,8 @@ ROLE_STYLES = {
     "stub": ("#f1f5f9", "#94a3b8", "#64748b"),
 }
 
+LINK_SPACING = 22
+
 # Longest match first (TenGig* before Ethernet).
 _IFACE_PREFIXES = tuple(
     sorted(
@@ -31,12 +33,35 @@ _IFACE_PREFIXES = tuple(
 
 
 @dataclass
+class _Seg:
+    p1: tuple[float, float]
+    p2: tuple[float, float]
+
+    @property
+    def key(self) -> tuple:
+        return _segment_key(self.p1, self.p2)
+
+    @property
+    def kind(self) -> str:
+        return self.key[0]
+
+    @property
+    def length(self) -> float:
+        x1, y1 = self.p1
+        x2, y2 = self.p2
+        return abs(x2 - x1) + abs(y2 - y1)
+
+
+@dataclass
 class _LabelSpec:
     text: str
     x: float
     y: float
     color: str
     segment_key: tuple
+    rotate: int = 0
+    seg: _Seg | None = None
+    slot_t: float = 0.5
 
 
 def _cell_anchor(
@@ -65,11 +90,15 @@ def _abbrev_ifname(name: str) -> str:
 
 
 def _orthogonal_path_coords(
-    start: tuple[float, float], end: tuple[float, float], pair_index: int
+    start: tuple[float, float],
+    end: tuple[float, float],
+    pair_index: int,
+    pair_count: int = 1,
 ) -> list[tuple[float, float]]:
     x1, y1 = start
     x2, y2 = end
-    offset = pair_index * 12
+    center = (max(1, pair_count) - 1) / 2.0
+    offset = (pair_index - center) * LINK_SPACING
     if abs(x2 - x1) >= abs(y2 - y1):
         mid_x = (x1 + x2) / 2 + offset
         return [(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)]
@@ -91,87 +120,81 @@ def _segment_key(p1: tuple[float, float], p2: tuple[float, float]) -> tuple:
     return ("V", x, round(min(y1, y2)), round(max(y1, y2)))
 
 
-def _perpendicular_offset(
-    p1: tuple[float, float], p2: tuple[float, float], distance: float, side: int
-) -> tuple[float, float]:
-    x1, y1 = p1
-    x2, y2 = p2
-    if abs(x2 - x1) >= abs(y2 - y1):
-        return (0.0, -side * distance)
-    return (side * distance, 0.0)
+def _segments_from_coords(coords: list[tuple[float, float]]) -> list[_Seg]:
+    segs: list[_Seg] = []
+    for i in range(len(coords) - 1):
+        seg = _Seg(coords[i], coords[i + 1])
+        if seg.length >= 6:
+            segs.append(seg)
+    return segs
 
 
-def _label_on_segment(
-    p1: tuple[float, float],
-    p2: tuple[float, float],
+def _pick_source_segment(segs: list[_Seg]) -> _Seg | None:
+    if not segs:
+        return None
+    verticals = [s for s in segs if s.kind == "V"]
+    if verticals:
+        return verticals[0]
+    return segs[0]
+
+
+def _pick_target_segment(segs: list[_Seg]) -> _Seg | None:
+    """Prefer vertical drop into core/dist; avoid crowded horizontal trunks."""
+    if not segs:
+        return None
+    verticals = [s for s in segs if s.kind == "V"]
+    if verticals:
+        return verticals[-1]
+    return segs[-1]
+
+
+def _point_on_segment(seg: _Seg, t: float) -> tuple[float, float]:
+    x1, y1 = seg.p1
+    x2, y2 = seg.p2
+    return (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
+
+
+def _label_on_wire(
+    seg: _Seg,
     text: str,
     color: str,
     *,
-    pair_index: int,
-    end: str,
+    t: float = 0.5,
 ) -> _LabelSpec | None:
-    if not text:
+    if not text or seg.length < 8:
         return None
-    x1, y1 = p1
-    x2, y2 = p2
-    seg_len = abs(x2 - x1) + abs(y2 - y1)
-    if seg_len < 8:
-        return None
-    t = 0.35 if end == "source" else 0.65
-    mx = x1 + (x2 - x1) * t
-    my = y1 + (y2 - y1) * t
-    side = 1 if pair_index % 2 == 0 else -1
-    if end == "target":
-        side = -side
-    dist = 12 + pair_index * 3
-    ox, oy = _perpendicular_offset(p1, p2, dist, side)
+    x, y = _point_on_segment(seg, t)
+    rotate = -90 if seg.kind == "V" else 0
     return _LabelSpec(
         text=text,
-        x=mx + ox,
-        y=my + oy,
+        x=x,
+        y=y,
         color=color,
-        segment_key=_segment_key(p1, p2),
+        segment_key=seg.key,
+        rotate=rotate,
+        seg=seg,
+        slot_t=t,
     )
 
 
 def _spread_segment_labels(labels: list[_LabelSpec]) -> None:
-    """Spread labels that share the same orthogonal segment to avoid overlap."""
+    """Place labels along the wire (vary t) when they share the same segment."""
     buckets: dict[tuple, list[_LabelSpec]] = defaultdict(list)
     for lab in labels:
         buckets[lab.segment_key].append(lab)
 
-    for key, group in buckets.items():
+    for group in buckets.values():
         if len(group) <= 1:
             continue
-        kind = key[0]
         group.sort(key=lambda l: (l.x, l.y))
         n = len(group)
-        spacing = 13
         for i, lab in enumerate(group):
-            offset_index = i - (n - 1) / 2
-            if kind == "H":
-                lab.y += offset_index * spacing
-            else:
-                lab.x += offset_index * spacing
-
-
-def _resolve_grid_collisions(labels: list[_LabelSpec]) -> None:
-    cell = 12
-    seen: dict[tuple[int, int], int] = {}
-    for lab in labels:
-        for attempt in range(10):
-            gx = int(round(lab.x / cell))
-            gy = int(round(lab.y / cell))
-            hits = seen.get((gx, gy), 0)
-            if hits == 0:
-                seen[(gx, gy)] = 1
-                break
-            bump = (attempt + 1) * cell * (1 if attempt % 2 == 0 else -1)
-            if lab.segment_key[0] == "H":
-                lab.y += bump
-            else:
-                lab.x += bump
-            seen[(gx, gy)] = hits + 1
+            if not lab.seg:
+                continue
+            t = (i + 1) / (n + 1)
+            lab.slot_t = t
+            x, y = _point_on_segment(lab.seg, t)
+            lab.x, lab.y = x, y
 
 
 def _collect_edge_labels(e: TopologyEdge, coords: list[tuple[float, float]]) -> list[_LabelSpec]:
@@ -179,27 +202,17 @@ def _collect_edge_labels(e: TopologyEdge, coords: list[tuple[float, float]]) -> 
     remote = _abbrev_ifname(e.remote_interface)
     if not local and not remote:
         return []
+    segs = _segments_from_coords(coords)
     out: list[_LabelSpec] = []
-    if len(coords) >= 2:
-        lab = _label_on_segment(
-            coords[0],
-            coords[1],
-            local,
-            e.color,
-            pair_index=e.pair_index,
-            end="source",
-        )
+    src_seg = _pick_source_segment(segs)
+    tgt_seg = _pick_target_segment(segs)
+    if local and src_seg:
+        lab = _label_on_wire(src_seg, local, e.color, t=0.42)
         if lab:
             out.append(lab)
-    if len(coords) >= 2:
-        lab = _label_on_segment(
-            coords[-2],
-            coords[-1],
-            remote,
-            e.color,
-            pair_index=e.pair_index,
-            end="target",
-        )
+    if remote and tgt_seg:
+        # Keep core/dist port names on the vertical stub, not the shared horizontal bus.
+        lab = _label_on_wire(tgt_seg, remote, e.color, t=0.58)
         if lab:
             out.append(lab)
     return out
@@ -231,7 +244,9 @@ def render_topology_svg(
         sx, sy = positions[e.source_id]
         tx, ty = positions[e.target_id]
         start, end = _cell_anchor(sx, sy, tx, ty)
-        coords = _orthogonal_path_coords(start, end, e.pair_index)
+        coords = _orthogonal_path_coords(
+            start, end, e.pair_index, pair_count=max(1, e.pair_count)
+        )
         pts = _orthogonal_path_str(coords)
         dash = "" if not e.target_id.startswith("hn:") else ""
         parts.append(
@@ -241,7 +256,6 @@ def render_topology_svg(
         all_labels.extend(_collect_edge_labels(e, coords))
 
     _spread_segment_labels(all_labels)
-    _resolve_grid_collisions(all_labels)
 
     for n in nodes:
         if n.node_id not in positions:
@@ -263,15 +277,16 @@ def render_topology_svg(
         )
 
     for lab in all_labels:
-        w = max(28, len(lab.text) * 4.8)
-        h = 11
+        w = max(26, len(lab.text) * 4.6)
+        h = 10
+        rot = f' transform="rotate({lab.rotate} {lab.x:.1f} {lab.y:.1f})"' if lab.rotate else ""
         rx = lab.x - w / 2
         ry = lab.y - h / 2
         parts.append(
-            f'<g class="topo-edge-label">'
+            f'<g class="topo-edge-label"{rot}>'
             f'<rect x="{rx:.1f}" y="{ry:.1f}" width="{w:.1f}" height="{h:.1f}" '
-            f'rx="2" fill="#0b1018" fill-opacity="0.88" stroke="{lab.color}" '
-            f'stroke-width="0.5"/>'
+            f'rx="2" fill="#0b1018" fill-opacity="0.92" stroke="{lab.color}" '
+            f'stroke-width="0.75"/>'
             f'<text x="{lab.x:.1f}" y="{lab.y:.1f}" text-anchor="middle" '
             f'dominant-baseline="middle" fill="{lab.color}">'
             f"{_esc(_truncate(lab.text, 22))}</text></g>"

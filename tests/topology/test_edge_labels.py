@@ -46,3 +46,4 @@ def test_svg_split_port_labels_not_on_single_arrow():
     assert "Gi1/0/1" in svg
     assert "Te1/0/48" in svg
     assert "↔" not in svg
+    assert "rotate(-90" in svg  # vertical segment label on wire
