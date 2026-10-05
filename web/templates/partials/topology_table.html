@@ -1,0 +1,34 @@
+<div class="topo-table-scroll">
+  <table class="inv-table">
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th>本端設備</th>
+        <th>本端介面</th>
+        <th>協定</th>
+        <th>鄰居設備</th>
+        <th>鄰居介面</th>
+        <th>Platform / Model</th>
+        <th>連線類型</th>
+        <th>已入庫</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in neighbor_table %}
+      <tr>
+        <td>{{ r.site }}</td>
+        <td>{{ r.local_device }}</td>
+        <td>{{ r.local_interface }}</td>
+        <td>{{ r.protocol }}</td>
+        <td>{{ r.remote_hostname }}</td>
+        <td>{{ r.remote_port }}</td>
+        <td>{{ r.platform_model or r.platform_raw or '—' }}</td>
+        <td>{{ r.cable_type }}</td>
+        <td>{% if r.in_inventory %}是{% else %}否{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">無資料</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

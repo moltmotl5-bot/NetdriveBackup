@@ -24,6 +24,24 @@ class NeighborRecord:
     remote_hostname: str
     remote_port: str
     cable_type: str = "unknown"
+    platform_raw: str = ""
+    capabilities: str = ""
+
+
+def normalize_platform_model(platform_raw: str) -> str:
+    """Short model key for aggregation labels (e.g. WS-C2960X-48 -> C2960X)."""
+    raw = (platform_raw or "").strip()
+    if not raw:
+        return ""
+    m = re.search(r"(WS-C\d+[A-Z0-9-]*)", raw, re.I)
+    if m:
+        sku = m.group(1).upper()
+        short = re.sub(r"^WS-C", "C", sku, flags=re.I)
+        return re.sub(r"-\d+.*$", "", short)
+    m = re.search(r"\b([A-Z]{0,3}\d{3,5}[A-Z0-9-]{2,})\b", raw, re.I)
+    if m:
+        return m.group(1).upper()
+    return raw[:48]
 
 
 def make_device_key(site: str, ip: str, hostname: str, port: int | None = None) -> str:
@@ -152,6 +170,8 @@ def _parse_show_cdp_neighbors_detail(text: str, local_device: str) -> list[Neigh
     records: list[NeighborRecord] = []
     seen: set[tuple[str, str, str]] = set()
     current_remote = ""
+    current_platform = ""
+    current_capabilities = ""
     for line in text.replace("\r", "").split("\n"):
         stripped = line.strip()
         if not stripped:
@@ -159,6 +179,17 @@ def _parse_show_cdp_neighbors_detail(text: str, local_device: str) -> list[Neigh
         m_dev = re.match(r"^Device ID:\s*(.+)$", stripped, re.I)
         if m_dev:
             current_remote = _clean_remote_device_id(m_dev.group(1).strip())
+            current_platform = ""
+            current_capabilities = ""
+            continue
+        m_plat = re.match(
+            r"^Platform:\s*(.+?)(?:,\s*Capabilities:\s*(.+))?$",
+            stripped,
+            re.I,
+        )
+        if m_plat:
+            current_platform = m_plat.group(1).strip()
+            current_capabilities = (m_plat.group(2) or "").strip()
             continue
         m_if = re.match(
             r"^Interface:\s*(.+?),\s*Port ID \(outgoing port\):\s*(.+)$",
@@ -178,6 +209,8 @@ def _parse_show_cdp_neighbors_detail(text: str, local_device: str) -> list[Neigh
                     remote_hostname=current_remote,
                     remote_port=remote_port,
                     cable_type=_classify_cable(local_port, remote_port),
+                    platform_raw=current_platform,
+                    capabilities=current_capabilities,
                 )
             )
     return records
@@ -565,6 +598,7 @@ def neighbors_from_backup_snapshot(
                 continue
             seen.add(dedupe_key)
             remote_device_key = _resolve_remote_key(hostname_lookup, rec.remote_hostname)
+            platform_raw = getattr(rec, "platform_raw", "") or ""
             neighbor_rows.append(
                 {
                     "local_interface": rec.local_interface,
@@ -573,6 +607,9 @@ def neighbors_from_backup_snapshot(
                     "remote_port": rec.remote_port,
                     "cable_type": rec.cable_type,
                     "remote_device_key": remote_device_key,
+                    "platform_raw": platform_raw,
+                    "platform_model": normalize_platform_model(platform_raw),
+                    "capabilities": getattr(rec, "capabilities", "") or "",
                 }
             )
 
