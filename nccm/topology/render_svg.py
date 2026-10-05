@@ -15,8 +15,10 @@ ROLE_STYLES = {
 }
 
 LINK_SPACING = 22
-LABEL_SLOT_PX = 15
-LABEL_STUB_PAD = 10
+FANOUT_SPACING = 18
+LABEL_SLOT_PX = 16
+LABEL_STUB_PAD = 12
+LABEL_COLUMN_GAP = 17
 
 # Longest match first (TenGig* before Ethernet).
 _IFACE_PREFIXES = tuple(
@@ -96,16 +98,64 @@ def _orthogonal_path_coords(
     end: tuple[float, float],
     pair_index: int,
     pair_count: int = 1,
+    *,
+    channel_offset: float = 0.0,
 ) -> list[tuple[float, float]]:
     x1, y1 = start
     x2, y2 = end
     center = (max(1, pair_count) - 1) / 2.0
-    offset = (pair_index - center) * LINK_SPACING
+    offset = (pair_index - center) * LINK_SPACING + channel_offset
     if abs(x2 - x1) >= abs(y2 - y1):
         mid_x = (x1 + x2) / 2 + offset
         return [(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)]
     mid_y = (y1 + y2) / 2 + offset
     return [(x1, y1), (x1, mid_y), (x2, mid_y), (x2, y2)]
+
+
+def _fanout_channel_by_edge(
+    edges: list[TopologyEdge],
+    positions: dict[str, tuple[float, float]],
+) -> dict[str, float]:
+    """Spread orthogonal channels for multi-homed nodes (e.g. H2 to several DS)."""
+    channel: dict[str, float] = defaultdict(float)
+    by_src: dict[str, list[TopologyEdge]] = defaultdict(list)
+    by_tgt: dict[str, list[TopologyEdge]] = defaultdict(list)
+    for e in edges:
+        if e.source_id not in positions or e.target_id not in positions:
+            continue
+        by_src[e.source_id].append(e)
+        by_tgt[e.target_id].append(e)
+
+    def _slot_offset(sorted_edges: list[TopologyEdge], pick_xy) -> None:
+        n = len(sorted_edges)
+        if n <= 1:
+            return
+        for i, e in enumerate(sorted_edges):
+            channel[e.edge_id] += (i - (n - 1) / 2.0) * FANOUT_SPACING
+
+    for elist in by_src.values():
+        elist.sort(
+            key=lambda e: (
+                positions[e.target_id][0],
+                positions[e.target_id][1],
+                e.edge_id,
+            )
+        )
+        _slot_offset(elist, None)
+    for elist in by_tgt.values():
+        elist.sort(
+            key=lambda e: (
+                positions[e.source_id][0],
+                positions[e.source_id][1],
+                e.edge_id,
+            )
+        )
+        _slot_offset(elist, None)
+    return channel
+
+
+def _vertical_column(x: float) -> int:
+    return int(round(x / 12.0))
 
 
 def _orthogonal_path_str(coords: list[tuple[float, float]]) -> str:
@@ -264,7 +314,7 @@ def _spread_segment_labels(labels: list[_LabelSpec]) -> None:
     for group in buckets.values():
         if len(group) <= 1:
             continue
-        group.sort(key=lambda l: (l.x, l.y))
+        group.sort(key=lambda l: (l.y, l.x))
         n = len(group)
         for i, lab in enumerate(group):
             if not lab.seg:
@@ -273,6 +323,54 @@ def _spread_segment_labels(labels: list[_LabelSpec]) -> None:
             lab.slot_t = t
             x, y = _point_on_segment(lab.seg, t)
             lab.x, lab.y = x, y
+
+
+def _nudge_vertical_column_labels(labels: list[_LabelSpec]) -> None:
+    """Separate rotated port labels that share the same vertical wire column."""
+    cols: dict[int, list[_LabelSpec]] = defaultdict(list)
+    for lab in labels:
+        if lab.rotate == -90:
+            cols[_vertical_column(lab.x)].append(lab)
+    for group in cols.values():
+        if len(group) <= 1:
+            continue
+        group.sort(key=lambda l: l.y)
+        for i in range(1, len(group)):
+            gap = group[i].y - group[i - 1].y
+            if gap < LABEL_COLUMN_GAP:
+                group[i].y = group[i - 1].y + LABEL_COLUMN_GAP
+
+
+def _global_vertical_label_counts(
+    edge_plans: list[tuple[dict[int, int], list[_Seg]]],
+) -> dict[int, int]:
+    """Count labels per vertical column (x bucket) for stub lengthening."""
+    col_counts: dict[int, int] = defaultdict(int)
+    for counts, segs in edge_plans:
+        for idx, n in counts.items():
+            if idx >= len(segs) or n <= 0:
+                continue
+            seg = segs[idx]
+            if seg.kind != "V":
+                continue
+            col_counts[_vertical_column((seg.p1[0] + seg.p2[0]) / 2)] += n
+    return col_counts
+
+
+def _merge_vertical_counts(
+    local: dict[int, int], segs: list[_Seg], global_col: dict[int, int]
+) -> dict[int, int]:
+    merged = dict(local)
+    for idx, n in list(local.items()):
+        if idx >= len(segs):
+            continue
+        seg = segs[idx]
+        if seg.kind != "V":
+            continue
+        col = _vertical_column((seg.p1[0] + seg.p2[0]) / 2)
+        g = global_col.get(col, n)
+        merged[idx] = max(n, g)
+    return merged
 
 
 def _labels_from_plan(
@@ -309,27 +407,44 @@ def render_topology_svg(
         "paint-order:stroke fill;stroke:#0b1018;stroke-width:2.5px}</style></defs>",
     ]
 
-    all_labels: list[_LabelSpec] = []
-    draw_queue: list[tuple[TopologyEdge, list[tuple[float, float]]]] = []
+    visible = [e for e in edges if e.source_id in positions and e.target_id in positions]
+    channel_by_edge = _fanout_channel_by_edge(visible, positions)
 
-    for e in edges:
-        if e.source_id not in positions or e.target_id not in positions:
-            continue
+    prep: list[tuple[TopologyEdge, list[tuple[float, float]], dict[int, int], list[tuple[int, str, float]]]] = []
+    plan_for_global: list[tuple[dict[int, int], list[_Seg]]] = []
+
+    for e in visible:
         sx, sy = positions[e.source_id]
         tx, ty = positions[e.target_id]
         start, end = _cell_anchor(sx, sy, tx, ty)
         coords = _orthogonal_path_coords(
-            start, end, e.pair_index, pair_count=max(1, e.pair_count)
+            start,
+            end,
+            e.pair_index,
+            pair_count=max(1, e.pair_count),
+            channel_offset=channel_by_edge.get(e.edge_id, 0.0),
         )
         local = _abbrev_ifname(e.local_interface)
         remote = _abbrev_ifname(e.remote_interface)
         segs = _segments_from_coords(coords)
         counts, placements = _label_plan(segs, local, remote)
-        coords = _extend_coords_for_labels(coords, segs, dict(counts))
+        plan_for_global.append((dict(counts), segs))
+        prep.append((e, coords, counts, placements))
+
+    global_col = _global_vertical_label_counts(plan_for_global)
+
+    all_labels: list[_LabelSpec] = []
+    draw_queue: list[tuple[TopologyEdge, list[tuple[float, float]]]] = []
+
+    for e, coords, counts, placements in prep:
+        segs = _segments_from_coords(coords)
+        merged = _merge_vertical_counts(counts, segs, global_col)
+        coords = _extend_coords_for_labels(coords, segs, merged)
         draw_queue.append((e, coords))
         all_labels.extend(_labels_from_plan(e, coords, placements))
 
     _spread_segment_labels(all_labels)
+    _nudge_vertical_column_labels(all_labels)
 
     for e, coords in draw_queue:
         pts = _orthogonal_path_str(coords)
