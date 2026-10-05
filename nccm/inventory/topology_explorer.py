@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # UI / product version shown beside the Portal page title (semver-ish, independent of NCCM v3).
-TOPOLOGY_EXPLORER_VERSION = "0.3.4"
+TOPOLOGY_EXPLORER_VERSION = "0.3.6"
 
 from nccm.inventory.neighbors import (
     build_hostname_lookup,
@@ -14,7 +14,12 @@ from nccm.inventory.neighbors import (
 from nccm.storage.index_db import list_inventory_display, list_sites
 from nccm.topology.aggregate import apply_access_aggregation, attach_remote_platform
 from nccm.topology.layout_tree import canvas_size, tree_layout
-from nccm.topology.model import TopologyEdge, TopologyNode, build_topology_graph
+from nccm.topology.model import (
+    TopologyEdge,
+    TopologyNode,
+    build_topology_graph,
+    merge_stub_with_inventory_nodes,
+)
 from nccm.topology.render_svg import render_topology_svg
 from nccm.topology.roles import infer_roles
 
@@ -76,6 +81,7 @@ def build_explorer_view(
 ) -> ExplorerView:
     devices, neighbors_by_key, table = _collect_site_data(site)
     physical_nodes, edges = build_topology_graph(devices, neighbors_by_key)
+    physical_nodes, edges = merge_stub_with_inventory_nodes(physical_nodes, edges)
     attach_remote_platform(physical_nodes, edges, neighbors_by_key)
     out_deg: dict[str, int] = {}
     for e in edges:

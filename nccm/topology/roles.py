@@ -9,7 +9,7 @@ def _name_role(hostname: str) -> NodeRole | None:
     h = (hostname or "").upper()
     if re.search(r"\bCORE\b|^CORE-", h):
         return "core"
-    if re.search(r"\bDIST\b|^DIST-|\bDSW\b", h):
+    if re.search(r"\bDIST\b|^DIST-|\bDSW\b|^DS-SW|\bDS_SW", h):
         return "dist"
     if re.search(r"\bACC\b|^ACC-|\bACCESS\b|\bASW\b", h):
         return "access"

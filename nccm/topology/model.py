@@ -65,6 +65,64 @@ def _pair_key(a: str, b: str) -> tuple[str, str]:
     return (a, b) if a <= b else (b, a)
 
 
+def _host_alias_keys(name: str) -> set[str]:
+    s = (name or "").strip()
+    if not s:
+        return set()
+    short = s.split(".")[0].lower()
+    return {s.lower(), short}
+
+
+def merge_stub_with_inventory_nodes(
+    nodes: list[TopologyNode],
+    edges: list[TopologyEdge],
+) -> tuple[list[TopologyNode], list[TopologyEdge]]:
+    """Point hn:* stub edges at inventory physical nodes when hostnames match."""
+    physical_by_host: dict[str, str] = {}
+    for n in nodes:
+        if n.node_kind != "physical" or n.node_id.startswith("hn:"):
+            continue
+        for key in _host_alias_keys(n.hostname or n.label):
+            physical_by_host.setdefault(key, n.node_id)
+
+    remap: dict[str, str] = {}
+    for n in nodes:
+        if not n.node_id.startswith("hn:"):
+            continue
+        host = (n.hostname or n.label or n.node_id[3:]).strip()
+        for key in _host_alias_keys(host):
+            if key in physical_by_host:
+                remap[n.node_id] = physical_by_host[key]
+                break
+
+    if not remap:
+        return nodes, edges
+
+    kept_nodes = [n for n in nodes if n.node_id not in remap]
+    new_edges: list[TopologyEdge] = []
+    for e in edges:
+        src = remap.get(e.source_id, e.source_id)
+        tgt = remap.get(e.target_id, e.target_id)
+        if src == tgt:
+            continue
+        new_edges.append(
+            TopologyEdge(
+                edge_id=e.edge_id,
+                source_id=src,
+                target_id=tgt,
+                local_interface=e.local_interface,
+                remote_interface=e.remote_interface,
+                protocol=e.protocol,
+                cable_type=e.cable_type,
+                color=e.color,
+                pair_index=e.pair_index,
+                pair_count=e.pair_count,
+                underlying_row_ids=e.underlying_row_ids,
+            )
+        )
+    return kept_nodes, new_edges
+
+
 def build_topology_graph(
     devices: list[dict[str, Any]],
     neighbors_by_key: dict[str, list[dict[str, Any]]],
