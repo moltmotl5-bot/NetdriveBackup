@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # UI / product version shown beside the Portal page title (semver-ish, independent of NCCM v3).
-TOPOLOGY_EXPLORER_VERSION = "0.2"
+TOPOLOGY_EXPLORER_VERSION = "0.3"
 
 from nccm.inventory.neighbors import (
     build_hostname_lookup,

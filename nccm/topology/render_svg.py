@@ -27,6 +27,54 @@ def _cell_anchor(
     return start, end
 
 
+def _abbrev_ifname(name: str) -> str:
+    s = (name or "").strip()
+    if not s:
+        return ""
+    pairs = (
+        ("TenGigabitEthernet", "Te"),
+        ("GigabitEthernet", "Gi"),
+        ("FastEthernet", "Fa"),
+        ("Ethernet", "Eth"),
+        ("TenGigE", "Te"),
+        ("GigE", "Gi"),
+    )
+    for full, short in pairs:
+        if s.lower().startswith(full.lower()):
+            return short + s[len(full) :]
+    return s
+
+
+def _edge_port_label(local: str, remote: str) -> str:
+    loc = _abbrev_ifname(local)
+    rem = _abbrev_ifname(remote)
+    if loc and rem:
+        return f"{loc} ↔ {rem}"
+    return loc or rem
+
+
+def _polyline_midpoint(points: str) -> tuple[float, float] | None:
+    tokens = points.replace(",", " ").split()
+    coords: list[tuple[float, float]] = []
+    for i in range(0, len(tokens) - 1, 2):
+        try:
+            coords.append((float(tokens[i]), float(tokens[i + 1])))
+        except (ValueError, IndexError):
+            continue
+    if len(coords) < 2:
+        return None
+    best_len = -1.0
+    mid: tuple[float, float] = coords[0]
+    for i in range(len(coords) - 1):
+        x1, y1 = coords[i]
+        x2, y2 = coords[i + 1]
+        seg_len = abs(x2 - x1) + abs(y2 - y1)
+        if seg_len > best_len:
+            best_len = seg_len
+            mid = ((x1 + x2) / 2, (y1 + y2) / 2)
+    return mid
+
+
 def _orthogonal_path(
     start: tuple[float, float], end: tuple[float, float], pair_index: int
 ) -> str:
@@ -54,7 +102,10 @@ def render_topology_svg(
     parts: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" '
         f'width="{width:.0f}" height="{height:.0f}" role="img" aria-label="CDP LLDP topology">',
-        "<defs><style>.topo-node{cursor:pointer}</style></defs>",
+        "<defs><style>.topo-node{cursor:pointer}.topo-edge-label{"
+        "font-family:system-ui,sans-serif;font-size:9px;opacity:0;"
+        "pointer-events:none;paint-order:stroke fill;stroke:#0b1018;stroke-width:3px}"
+        "svg.topo-labels-visible .topo-edge-label{opacity:1}</style></defs>",
     ]
 
     for e in edges:
@@ -69,6 +120,16 @@ def render_topology_svg(
             f'<polyline points="{pts}" fill="none" stroke="{e.color}" '
             f'stroke-width="2" stroke-linejoin="round" {dash}/>'
         )
+        port_label = _edge_port_label(e.local_interface, e.remote_interface)
+        if port_label:
+            mid = _polyline_midpoint(pts)
+            if mid:
+                mx, my = mid
+                parts.append(
+                    f'<text class="topo-edge-label" x="{mx:.1f}" y="{my:.1f}" '
+                    f'text-anchor="middle" dominant-baseline="middle" fill="{e.color}">'
+                    f"{_esc(_truncate(port_label, 28))}</text>"
+                )
 
     for n in nodes:
         if n.node_id not in positions:

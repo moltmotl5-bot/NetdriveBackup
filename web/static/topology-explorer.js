@@ -70,11 +70,22 @@
     return Math.min(maxScale, Math.max(minScale, s));
   }
 
+  function updateEdgeLabels() {
+    var svg = inner && inner.querySelector("svg");
+    if (!svg) return;
+    if (scale >= 1) {
+      svg.classList.add("topo-labels-visible");
+    } else {
+      svg.classList.remove("topo-labels-visible");
+    }
+  }
+
   function applyTransform() {
     if (!inner) return;
     inner.style.transform =
       "translate(" + tx + "px, " + ty + "px) scale(" + scale + ")";
     if (label) label.textContent = Math.round(scale * 100) + "%";
+    updateEdgeLabels();
   }
 
   function zoomBy(delta, anchorX, anchorY) {
