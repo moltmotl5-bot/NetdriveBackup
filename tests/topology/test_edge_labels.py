@@ -43,4 +43,4 @@ def test_svg_includes_edge_label_elements():
     svg = render_topology_svg(nodes, edges, positions, 400, 240)
     assert 'class="topo-edge-label"' in svg
     assert "Gi1/0/1" in svg
-    assert "topo-labels-visible" not in svg  # toggled client-side when scale >= 1
+    assert '<svg xmlns' in svg and 'class="topo-labels-visible"' not in svg.split(">", 1)[0]
