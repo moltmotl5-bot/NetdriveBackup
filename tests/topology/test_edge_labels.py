@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from nccm.topology.model import TopologyEdge, TopologyNode
-from nccm.topology.render_svg import _edge_port_label, render_topology_svg
+from nccm.topology.render_svg import _abbrev_ifname, render_topology_svg
 
 
-def test_edge_port_label_abbrev():
-    assert "Gi1/0/1" in _edge_port_label("GigabitEthernet1/0/1", "TenGigabitEthernet1/0/2")
-    assert "↔" in _edge_port_label("GigabitEthernet1/0/1", "TenGigabitEthernet1/0/2")
+def test_abbrev_longest_prefix():
+    assert _abbrev_ifname("TenGigabitEthernet1/0/1") == "Te1/0/1"
+    assert _abbrev_ifname("Ethernet1/10") == "Eth1/10"
+    assert "Te" == _abbrev_ifname("TenGigabitEthernet1/0/1")[:2]
 
 
-def test_svg_includes_edge_label_elements():
+def test_svg_split_port_labels_not_on_single_arrow():
     nodes = [
         TopologyNode(
             node_id="a",
@@ -24,7 +25,7 @@ def test_svg_includes_edge_label_elements():
             node_kind="physical",
             label="B",
             site="HQ",
-            role="access",
+            role="core",
             device_key="b",
         ),
     ]
@@ -34,13 +35,14 @@ def test_svg_includes_edge_label_elements():
             source_id="a",
             target_id="b",
             local_interface="GigabitEthernet1/0/1",
-            remote_interface="GigabitEthernet1/0/48",
+            remote_interface="TenGigabitEthernet1/0/48",
             protocol="CDP",
             color="#6366f1",
         )
     ]
-    positions = {"a": (0.0, 0.0), "b": (200.0, 120.0)}
+    positions = {"a": (0.0, 120.0), "b": (200.0, 0.0)}
     svg = render_topology_svg(nodes, edges, positions, 400, 240)
-    assert 'class="topo-edge-label"' in svg
+    assert svg.count('class="topo-edge-label"') == 2
     assert "Gi1/0/1" in svg
-    assert '<svg xmlns' in svg and 'class="topo-labels-visible"' not in svg.split(">", 1)[0]
+    assert "Te1/0/48" in svg
+    assert "↔" not in svg
